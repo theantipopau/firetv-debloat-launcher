@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/img/logo.jpg" alt="Fire TV Debloat Launcher" width="320"></p>
+
 # Fire TV Debloat Launcher
 
 A clean, fast, ad-free home screen for **Amazon Fire TV**, plus a reversible debloat script. No ads, no sponsored rows, no
