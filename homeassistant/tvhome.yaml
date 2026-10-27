@@ -1,0 +1,142 @@
+# tv-home x Home Assistant (optional). Drop this file in /config/packages/tvhome.yaml and make sure
+# configuration.yaml has:
+#   homeassistant:
+#     packages: !include_dir_named packages
+# Then copy homeassistant/tvhome_keep.py to /config/tvhome/tvhome_keep.py, check config, restart HA once.
+# Search this file for "CHANGE" and edit those lines. Docs: docs/HOME-ASSISTANT.md
+
+shell_command:
+  # Writes the info-panel JSON the launcher reads at http://<ha>:8123/local/tvhome.json
+  write_tvhome: "sh -c 'echo {{ payload }} | base64 -d > /config/www/tvhome.json'"
+  # Builds the "keep watching" cards from Plex (needs plex_token in secrets.yaml). Optional Netflix card via the helper below.
+  tvhome_keep: "sh -c 'python3 /config/tvhome/tvhome_keep.py {{ states(\"input_text.tv_netflix_card\") | base64_encode if states(\"input_text.tv_netflix_card\") not in [\"\", \"unknown\", \"unavailable\"] else \"\" }}'"
+
+input_text:
+  tv_netflix_card:
+    name: "TV home: Netflix card (Title|Season line|Netflix title id)"
+    max: 255
+
+script:
+  tv_alert:
+    alias: "TV alert card"
+    description: "Slide-in card (top right) on every Fire TV that is on. kind: doorbell | motion | warn | info. brand: google | tuya | empty."
+    fields:
+      title: {description: "Heading", example: "Doorbell"}
+      text: {description: "Second line", example: "Someone is at the front door"}
+      kind: {description: "doorbell | motion | warn | info", example: "doorbell"}
+      brand: {description: "google | tuya | empty (logo files are not bundled in the public build)", example: ""}
+      seconds: {description: "How long it stays", example: 10}
+    variables:
+      tvs:   # CHANGE: your Fire TV media_player entities (Android Debug Bridge integration)
+        - media_player.living_room_fire_tv
+        - media_player.bedroom_fire_tv
+      t: "{{ (title | default('Home')) | replace(\"'\", '’') }}"
+      x: "{{ (text | default('')) | replace(\"'\", '’') }}"
+    sequence:
+      - repeat:
+          for_each: "{{ tvs }}"
+          sequence:
+            - if:
+                - condition: template
+                  value_template: "{{ states(repeat.item) not in ['off', 'standby', 'unavailable', 'unknown'] }}"
+              then:
+                - action: androidtv.adb_command
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    command: >-
+                      am broadcast -n com.mihir.tvhome/.AlertReceiver
+                      --es title '{{ t }}' --es text '{{ x }}'
+                      --es kind '{{ kind | default('info') }}' --es brand '{{ brand | default('') }}'
+                      --ei seconds {{ seconds | default(8) | int }}
+
+  tv_sleep_timer:
+    alias: "TV sleep timer"
+    mode: restart
+    fields:
+      tv: {description: "Fire TV entity", example: "media_player.living_room_fire_tv"}
+      minutes: {description: "Minutes until off", example: 30}
+    sequence:
+      - delay:
+          minutes: "{{ minutes | default(30) | int }}"
+      - action: media_player.turn_off
+        target:
+          entity_id: "{{ tv }}"
+
+automation:
+  - id: tvhome_snapshot
+    alias: "TV home: info panel snapshot"
+    mode: single
+    triggers:
+      - trigger: time_pattern
+        seconds: "/15"
+      - trigger: homeassistant
+        event: start
+    actions:
+      - variables:
+          # CHANGE the entity ids on the right to yours. Leave a value empty ("") to hide that line on the TV.
+          snap:
+            temp: "{{ state_attr('weather.home', 'temperature') | float(0) | round(0) | int }}"
+            feels: "{{ state_attr('weather.home', 'apparent_temperature') | float(0) | round(0) | int }}"
+            condition: "{{ states('weather.home') | replace('partlycloudy', 'partly cloudy') | replace('-', ' ') }}"
+            rain: ""                                  # e.g. a template sensor: "Dry right now"
+            solar: "{{ states('sensor.solar_power') | float(0) if states('sensor.solar_power') not in ['unknown', 'unavailable'] else '' }}"      # kW; "" hides the energy row
+            battery: "{{ states('sensor.battery_soc') | float(0) | round(0) | int }}"                                                           # %
+            house: "{{ states('sensor.house_power') }}"                                                                                         # kW
+            inside: "{{ states('sensor.living_room_temperature') | float(0) | round(1) }}"
+            ac: ""                                    # e.g. "cool", "heat" or "off"; "" hides it
+            bins: ""                                  # e.g. "General bins - out tonight"
+            next: ""                                  # e.g. "Next: 6:30pm Football training"
+      - action: shell_command.write_tvhome
+        data:
+          payload: "{{ snap | tojson | base64_encode }}"
+
+  - id: tvhome_keep_refresh
+    alias: "TV home: keep-watching cards (Plex)"
+    mode: single
+    triggers:
+      - trigger: time_pattern
+        minutes: "/10"
+      - trigger: homeassistant
+        event: start
+    actions:
+      - action: shell_command.tvhome_keep
+
+  - id: tvhome_nightly_reboot
+    alias: "Fire TVs: nightly reboot at 4am"
+    triggers:
+      - trigger: time
+        at: "04:00:00"
+    actions:
+      - repeat:
+          for_each:    # CHANGE: your Fire TV entities
+            - media_player.living_room_fire_tv
+            - media_player.bedroom_fire_tv
+          sequence:
+            - if:
+                - condition: template
+                  value_template: "{{ states(repeat.item) not in ['unavailable', 'unknown'] }}"
+              then:
+                - action: androidtv.adb_command
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    command: reboot
+
+  # Example: doorbell card. Change the trigger entity, then remove "initial_state: false".
+  - id: tvhome_doorbell_example
+    alias: "Doorbell: card on TVs that are on (example)"
+    initial_state: false
+    triggers:
+      - trigger: state
+        entity_id: event.front_door_chime      # CHANGE
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.to_state.state not in ['unavailable', 'unknown'] }}"
+    actions:
+      - action: script.tv_alert
+        data:
+          title: "Doorbell pushed"
+          text: "Someone is at the front door"
+          kind: doorbell
+          seconds: 10

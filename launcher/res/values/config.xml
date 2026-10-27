@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Launcher settings. Edit, then rebuild (python launcher/build_win.py, or launcher/build-and-install.sh).
+  Package names on your TV:  adb shell pm list packages -3
+  To keep personal settings out of git, copy this file to launcher/profiles/<name>/config.xml
+  and build with:  python launcher/build_win.py <name>
+-->
+<resources>
+    <!-- Main row, left to right (up to 8). Apps that are not installed are skipped.
+         Everything else appears in the apps list below. You can also reorder on the TV:
+         hold OK on an app and choose Move left / Move right / Add to main row. -->
+    <string-array name="dock_apps">
+        <item>com.netflix.ninja</item>
+        <item>com.amazon.firebat</item>
+        <item>com.amazon.firetv.youtube</item>
+        <item>com.disney.disneyplus</item>
+        <item>com.plexapp.android</item>
+        <item>org.xbmc.kodi</item>
+        <item>com.spotify.tv.android</item>
+    </string-array>
+
+    <!-- Never shown as tiles: system helpers. -->
+    <string-array name="hidden_apps">
+        <item>com.amazon.tv.launcher</item>
+        <item>com.amazon.tv.csapp</item>
+        <item>com.amazon.tv.settings.v2</item>
+        <item>com.esaba.downloader</item>
+        <item>com.uptodown.installer</item>
+    </string-array>
+
+    <!-- Optional extras. Leave empty to switch them off. -->
+    <string name="live_tv_package" translatable="false"></string>
+    <string name="input_picker_package" translatable="false"></string>
+
+    <!-- Home Assistant (optional): JSON files served from HA's /config/www. Empty = no info panel / no keep-watching row.
+         See docs/HOME-ASSISTANT.md. Example: http://homeassistant.local:8123/local/tvhome.json -->
+    <string name="ha_json_url" translatable="false"></string>
+    <string name="keep_json_url" translatable="false"></string>
+
+    <!-- Greeting shows "Good evening, <family_name>"; the date line ends with <device_name>. Both optional. -->
+    <string name="family_name" translatable="false"></string>
+    <string name="device_name" translatable="false"></string>
+    <string name="home_service_desc">Opens the Home launcher when Home is pressed.</string>
+
+    <!-- Tiles per row in the apps list. -->
+    <integer name="columns">5</integer>
+</resources>

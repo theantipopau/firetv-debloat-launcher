@@ -1,0 +1,33 @@
+# Private to your machine / your TV
+tools/venv/
+tools/adbkey/
+tools/.tv_host
+launcher/debug.keystore
+backup/
+shots/
+
+# Build output
+launcher/build/
+.DS_Store
+__pycache__/
+toolchain/
+launcher/build/
+launcher/debug.keystore
+shot*.png
+disabled-before.txt
+tvhome.json
+launcher/out/
+
+# Personal profiles, screenshots, scratch
+# your own profiles (personal settings) stay local
+launcher/profiles/*/
+launcher/out/
+/*.png
+/patch_*.py
+/make_json.py
+/restructure.py
+/tvhome_keep.json
+
+/*.json
+/disabled-before.txt
+/shot*.png

@@ -1,0 +1,39 @@
+# TCL Google TV (device G07), Android 11, build RP1A.200622.001
+# Apply: tools/disable.sh examples/tcl-google-tv-g07/debloat.txt   Undo: tools/restore.sh <same file>
+# Everything is DISABLED for user 0, never uninstalled.
+# Comment out any line for an app you use. Answers here: no Chromecast, no mirroring, no USB media.
+
+# TCL telemetry, accounts and ads
+com.tcl.ttvs                       # TCL core service: BI analytics, Alexa bridge, account sync
+com.tcl.usercenter                 # TCL account / phone binding
+com.tcl.messagebox                 # TCL promo message popups
+com.tcl.esticker                   # on-screen promo stickers
+com.tcl.partnercustomizer          # partner app rows / promos for the stock launcher
+
+# TCL content tabs and channels
+com.tcl.channelplus                # "TCL Channel" app
+com.tcl.waterfall.overseas         # the "TCL" content tab
+com.tcl.tv.tclhome_passive
+
+# TCL background clutter
+com.tcl.guard                      # cleaner / "TV guard"
+com.tcl.notereminder
+com.tcl.hotelmenu                  # hotel mode
+com.tcl.miracast                   # screen mirroring 
+com.tcl.MultiScreenInteraction_TV  # T-Cast
+com.tcl.ui_mediaCenter             # USB media player
+com.tcl.gallery                    # USB photo gallery
+
+# Google extras
+com.google.android.apps.mediashell # Chromecast built-in 
+com.google.android.apps.tv.dreamx  # ambient screensaver with recommendations (falls back to basic)
+com.google.android.videos          # Google TV / Play Movies
+com.google.android.play.games
+com.google.android.feedback
+android.autoinstalls.config.google.gtvpai   # silently installs promoted apps
+
+# Preinstalled apps this household didn't use
+com.hungama.movies.tv
+tv.airtel.xstream.tvapp
+com.internet.tvbrowser
+com.mxtech.videoplayer.television
