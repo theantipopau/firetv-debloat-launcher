@@ -8,7 +8,7 @@ JSON files that HA writes into its public `www` folder, and HA talks to the TV t
 ```
 HA automation --writes--> /config/www/tvhome.json -----> launcher polls every 15 s   (info panel + Home-button cover)
 HA script     --writes--> /config/www/tvhome_keep.json -> launcher polls every 5 min (keep-watching cards)
-HA script     --writes--> /config/www/tvhome_new.json  -> same poll          (rotating "new on Plex" tile)
+HA script     --writes--> /config/www/tvhome_new.json  -> same poll          (rotating live-now / new-on-Plex tile)
 HA scripts    --adb broadcast--> TV ----------------------> alert card over whatever is playing
 ```
 
@@ -43,12 +43,13 @@ Keys (all optional; an empty or missing value hides that row):
 The same file feeds the cover screen shown right after you press Home.
 Update speed is limited by your sensors (cloud inverter integrations often update every 5 minutes; local Modbus/MQTT is much faster).
 
-## 4. Keep watching and new on Plex
+## 4. Keep watching, live now and new on Plex
 Add to `secrets.yaml` (never commit it):
 ```
 plex_token: <your Plex token>
 plex_url: http://<plex-server-ip>:32400
 ha_base_url: http://<ha-ip>:8123
+epg_urls: https://<provider>/epg.xml,https://i.mjh.nz/au/Brisbane/epg.xml    # optional, see "Live now"
 ```
 Set both to an IP, not a hostname: `ha_base_url` becomes the address inside every image URL the TV downloads,
 and Fire OS does not always resolve `homeassistant.local`. The script falls back to `http://localhost:32400` for Plex
@@ -66,8 +67,24 @@ a wide **NEW ON PLEX** banner at the head of the keep-watching row and crossfade
 it holds still while focused, so OK always opens what you can see. It spans two card widths, so the row shows one resume
 card beside it (five when the banner is off). Point it at
 `http://<ha-ip>:8123/local/tvhome_new.json`. Optional env: `PLEX_NEW_LIBS` (comma-separated section names; default every
-movie/show section) and `PLEX_NEW_COUNT` (default `8`). The list only downloads artwork again when a title is added or
-removed, so a quiet library costs a couple of API calls per run.
+movie/show section), `PLEX_NEW_MOVIES` and `PLEX_NEW_EPISODES`. The list only downloads artwork again when a title is
+added or removed, so a quiet library costs a couple of API calls per run.
+
+### Live now
+Put the XMLTV guides (the same URLs TiviMate uses) in `epg_urls`, comma separated, and the head of the tile becomes
+what is on right now: live sport first, then one film. Each card gets a red-dot **LIVE ON TIVIMATE** chip and a
+"channel · until 21:35" caption; OK opens TiviMate, at whatever channel it was last on — Android does not let another
+app deep-link into TiviMate's player. A card carries its end time, so the TV drops it once the programme has finished
+rather than waiting for the next ten-minute refresh. If the guide has no still for a programme, the channel logo is
+shown contained on the card instead of being cropped to fill it.
+
+What counts: sport categories (cricket, rugby, football/AFL, golf, racing, the US leagues) with a live tag, a "v" fixture
+or a named sport, plus films in a Movie category. Replays, classics, highlights, countdowns and studio shows are
+dropped, as are 24/7 filler channels, shopping and the empty "Stan Sport Event 12" placeholders. The same match on a
+simulcast channel appears once. `LIVE_COUNT` sets how many live cards are mixed in (default `4`).
+
+The guides are cached in `/config/.tvhome_epg/` and downloaded again only when the server says they changed; the iptv4u
+guide is 11 MB, so that matters. Point `EPG_URLS` at a local file to try a guide before committing to it.
 
 | setting | default | what it does |
 |---|---|---|
@@ -77,6 +94,8 @@ removed, so a quiet library costs a couple of API calls per run.
 | `PLEX_NEW_MOVIES` | `5` | film cards (released this year or last only) |
 | `PLEX_NEW_EPISODES` | `5` | episode cards, one per series |
 | `PLEX_NEW_DAYS` | `60` | an episode counts as new if it aired inside this many days |
+| `LIVE_COUNT` | `4` | live cards mixed in ahead of the new-on-Plex ones |
+| `EPG_URLS` | `epg_urls` secret | guide URLs, if you would rather set them in the shell command |
 
 ## 5. Alerts over any app
 ```

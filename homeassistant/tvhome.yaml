@@ -8,7 +8,8 @@
 shell_command:
   # Writes the info-panel JSON the launcher reads at http://<ha>:8123/local/tvhome.json
   write_tvhome: "sh -c 'echo {{ payload }} | base64 -d > /config/www/tvhome.json'"
-  # Builds the "keep watching" cards from Plex (needs plex_token in secrets.yaml). Optional Netflix card via the helper below.
+  # Builds the "keep watching" cards from Plex (needs plex_token in secrets.yaml) and the rotating tile:
+  # live now from epg_urls, then new on Plex. Optional Netflix card via the helper below.
   tvhome_keep: "sh -c 'python3 /config/tvhome/tvhome_keep.py {{ states(\"input_text.tv_netflix_card\") | base64_encode if states(\"input_text.tv_netflix_card\") not in [\"\", \"unknown\", \"unavailable\"] else \"\" }}'"
 
 input_text:

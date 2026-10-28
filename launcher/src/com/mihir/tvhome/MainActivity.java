@@ -183,6 +183,7 @@ public class MainActivity extends Activity {
     protected void onResume() {
         HomeKeyService.coverGone();
         super.onResume();
+        getSharedPreferences("tvhome", 0).edit().putBoolean("foreground", true).apply();   // read by BootReceiver
         kickIdle();
         IntentFilter tf = new IntentFilter(Intent.ACTION_TIME_TICK);
         tf.addAction(Intent.ACTION_TIME_CHANGED);
@@ -215,6 +216,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
+        getSharedPreferences("tvhome", 0).edit().putBoolean("foreground", false).apply();
         handler.removeCallbacks(rotateWallpaper);
         handler.removeCallbacks(haPoll);
         handler.removeCallbacks(newTick);
@@ -555,12 +557,25 @@ public class MainActivity extends Activity {
             final String body = Net.text(url, 4000, 4000, Net.MAX_JSON_BYTES);
             if (body == null) return;
             try {
-                final org.json.JSONArray items = new JSONObject(body).optJSONArray("items");
-                if (items == null || items.length() == 0) { runOnUiThread(this::hideNewTile); return; }
+                // A live card carries the end of its programme: the feed is written every ten minutes, so
+                // drop anything that has finished rather than claim it is on now.
+                final org.json.JSONArray all = new JSONObject(body).optJSONArray("items");
+                final org.json.JSONArray items = new org.json.JSONArray();
+                final long now = System.currentTimeMillis() / 1000L;
+                if (all != null) for (int i = 0; i < all.length(); i++) {
+                    JSONObject it = all.optJSONObject(i);
+                    if (it == null) continue;
+                    long until = it.optLong("until", 0);
+                    if (until > 0 && until <= now) continue;
+                    items.put(it);
+                }
+                if (items.length() == 0) { runOnUiThread(this::hideNewTile); return; }
                 StringBuilder sig = new StringBuilder();
                 for (int i = 0; i < items.length(); i++) {
                     JSONObject it = items.optJSONObject(i);
-                    if (it != null) sig.append(it.optString("uri", "")).append('|').append(it.optString("image", "")).append('|');
+                    if (it != null) sig.append(it.optString("title", "")).append('|')
+                            .append(it.optString("image", "")).append('|')
+                            .append(it.optLong("until", 0)).append('|');
                 }
                 final String sigNow = sig.toString();
                 // Same list as the one already on screen: leave it alone. Rebuilding would restart the
@@ -658,16 +673,6 @@ public class MainActivity extends Activity {
         }
         card.addView(stack, new FrameLayout.LayoutParams(-1, -1));
 
-        TextView chip = text(9.5f, "sans-serif-medium", 0xFFF2C14E);
-        chip.setText("NEW ON PLEX");
-        chip.setLetterSpacing(0.18f);
-        GradientDrawable pill = new GradientDrawable();
-        pill.setCornerRadius(dp(5));
-        pill.setColor(0xCC000000);
-        chip.setBackground(pill);
-        chip.setPadding(dp(8), dp(4), dp(8), dp(4));
-        card.addView(chip, lp(-2, -2, Gravity.TOP | Gravity.START, dp(10), dp(10), 0, 0));
-
         box.addView(card, new LinearLayout.LayoutParams(-1, -2));
 
         newCaption = text(10.5f, "sans-serif", 0xD9FFFFFF);
@@ -709,12 +714,23 @@ public class MainActivity extends Activity {
         return box;
     }
 
-    /** One title: still, shade and its logo (or the name when Plex has no logo for it). */
+    /** One title: still, shade, its logo (or the name) and the chip that says where it came from. */
     private View newLayer(JSONObject it, Bitmap bm, Bitmap logo) {
         FrameLayout layer = new FrameLayout(this);
+        boolean live = "live".equals(it.optString("kind"));
+        // The chip belongs to the frame, not the tile: the banner rotates between live and new-on-Plex.
+        if (live) layer.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                new int[]{darken(0xFFD93A32, 0.55f), 0xFF14161C}));
         if (bm != null) {
             ImageView iv = new ImageView(this);
-            iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            // A programme still fills the card. A channel logo (the guide had no still) is contained instead,
+            // so a 3:1 or square mark is not cropped into a random slice of itself.
+            boolean contain = it.optInt("artfit", 0) == 1;
+            iv.setScaleType(contain ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER_CROP);
+            if (contain) {
+                iv.setPadding(dp(26), dp(20), dp(26), dp(20));
+                iv.setAlpha(0.94f);
+            }
             iv.setImageBitmap(bm);
             layer.addView(iv, new FrameLayout.LayoutParams(-1, -1));
         }
@@ -740,6 +756,21 @@ public class MainActivity extends Activity {
             cap.setText(it.optString("title", ""));
             layer.addView(cap, capLp);
         }
+        TextView chip = text(9.5f, "sans-serif-medium", live ? 0xFFF7F7F7 : 0xFFF2C14E);
+        SpannableStringBuilder label = new SpannableStringBuilder();
+        if (live) {
+            label.append("\u25CF ");
+            label.setSpan(new ForegroundColorSpan(0xFFFF453A), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        label.append(live ? "LIVE ON TIVIMATE" : "NEW ON PLEX");   // both name the app they open
+        chip.setText(label);
+        chip.setLetterSpacing(0.18f);
+        GradientDrawable pill = new GradientDrawable();
+        pill.setCornerRadius(dp(5));
+        pill.setColor(0xCC000000);
+        chip.setBackground(pill);
+        chip.setPadding(dp(8), dp(4), dp(8), dp(4));
+        layer.addView(chip, lp(-2, -2, Gravity.TOP | Gravity.START, dp(10), dp(10), 0, 0));
         return layer;
     }
 
@@ -747,9 +778,10 @@ public class MainActivity extends Activity {
         if (newCaption == null || newCur >= newItems.size()) return;
         JSONObject it = newItems.get(newCur);
         // Title only: at this width the season line pushed it into an ellipsis, and the chip already says
-        // it is new. The artwork carries the rest.
+        // it is new. The artwork carries the rest. A live card swaps the title for its channel and end time.
         SpannableStringBuilder meta = new SpannableStringBuilder();
-        coloured(meta, it.optString("title", ""), 0xF2FFFFFF);
+        String caption = it.optString("caption", "");
+        coloured(meta, caption.isEmpty() ? it.optString("title", "") : caption, 0xF2FFFFFF);
         setSpan(newCaption, meta);
         newCaption.animate().cancel();
         newCaption.setAlpha(0f);
@@ -760,7 +792,8 @@ public class MainActivity extends Activity {
         handler.removeCallbacks(newTick);
         // Focus is the pause: a flag could survive a row rebuild and stall the tile for good.
         if (newLayers.size() < 2 || (newTile != null && newTile.isFocused())) return;
-        int next = (newCur + 1) % newLayers.size();
+        int next = nextFrame();
+        if (next < 0) return;
         View in = newLayers.get(next), out = newLayers.get(newCur);
         in.animate().cancel();
         out.animate().cancel();
@@ -770,6 +803,21 @@ public class MainActivity extends Activity {
         newCur = next;
         updateNewCaption();
         handler.postDelayed(newTick, NEW_EVERY_MS);
+    }
+
+    /** The next frame that has not finished; -1 when every live programme in the list has ended. */
+    private int nextFrame() {
+        int n = newLayers.size();
+        for (int i = 1; i < n; i++) {   // never returns newCur: re-animating the same frame flashes it
+            int cand = (newCur + i) % n;
+            if (!expired(newItems.get(cand))) return cand;
+        }
+        return -1;
+    }
+
+    private boolean expired(JSONObject it) {
+        long until = it.optLong("until", 0);
+        return until > 0 && until <= System.currentTimeMillis() / 1000L;
     }
 
     private void startNewRotation() {

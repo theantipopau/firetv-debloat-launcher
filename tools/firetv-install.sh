@@ -22,6 +22,8 @@ case ":$CUR:" in
 esac
 $A shell settings put secure accessibility_enabled 1
 $A shell settings put secure screensaver_components $PKG/.ClockDream || true
+# Select it as the home activity where Fire OS allows it (the accessibility service covers the rest).
+$A shell cmd package set-home-activity $PKG/.MainActivity >/dev/null 2>&1 || true
 $A shell am start -n $PKG/.MainActivity
 # Android turns a package's accessibility services off when that package is updated, and Fire OS only binds them
 # again at boot. Without this the next Home press goes to Amazon's launcher instead of ours.

@@ -6,9 +6,10 @@ Not affiliated with Amazon. Everything here is reversible; nothing is uninstalle
 
 ## What you get
 - Clean home: greeting, clock, wallpaper slideshow (slow zoom, time-of-day tint), app dock plus an apps list.
-- **Home button works**: Fire OS will not let a third-party app own Home, so an accessibility service catches
-  it. Android holds back other apps for about 5 seconds after Home is pressed, so a cover screen (greeting, clock, loading bar)
-  is shown meanwhile and the launcher fades in.
+- **Home button works, and a reboot comes back here.** Fire OS starts its own launcher at boot even when this
+  one is selected as home, so the app takes the screen back a few seconds after boot. An accessibility service
+  catches the Home key; Android holds other apps back for about 5 seconds after Home is pressed, so a cover screen
+  (greeting, clock, loading bar) is shown meanwhile and the launcher fades in.
 - **Hold OK on an app**: move left/right, add to / remove from the main row, hide, app info, uninstall.
   Long-press the Settings pill to reset the row and bring back hidden apps. Recently opened apps float to the front of the list.
 - **Settings and Wi-Fi pills** open Amazon's own full-screen pages. Wi-Fi/Ethernet pill with icon and link speed.
@@ -28,7 +29,8 @@ Not affiliated with Amazon. Everything here is reversible; nothing is uninstalle
    tools/firetv-install.sh <tv-ip> launcher/out/tvhome.apk
    ```
    Accept the "Allow USB debugging" prompt on the TV the first time. The script installs, grants the
-   permissions the launcher needs, switches on the Home-button service and reboots the TV.
+   permissions the launcher needs, selects it as the home activity, switches on the Home-button service and
+   reboots the TV.
 5. If you install an updated APK another way (`adb install -r`), reboot the TV afterwards: Android turns an app's
    accessibility services off when the app is updated, and Fire OS only attaches them again at boot. Without the
    reboot the next Home press goes to Amazon's launcher.

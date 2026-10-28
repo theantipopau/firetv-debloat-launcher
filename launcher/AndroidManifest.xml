@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.mihir.tvhome"
-    android:versionCode="4"
-    android:versionName="1.2">
+    android:versionCode="5"
+    android:versionName="1.3">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Granted over ADB so the Home-key service can re-enable itself if Android drops it. -->
@@ -11,6 +11,8 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Fire OS boots Amazon's launcher, so the app takes the screen back after boot. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Android 11 only reveals the Wi-Fi name to apps holding location; granted over ADB at install. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
@@ -63,6 +65,12 @@
             android:name=".AlertReceiver"
             android:exported="true"
             android:permission="android.permission.DUMP" />
+        <receiver android:name=".BootReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
         <!-- Android turns our accessibility service off when this package is updated; this puts it back. -->
         <receiver android:name=".UpdateReceiver" android:exported="false">
             <intent-filter>

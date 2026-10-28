@@ -30,7 +30,7 @@ Other Fire OS 7 devices will probably work. Not tested on Fire OS 8 / Vega OS de
   senders can trigger one, so an app installed on the TV cannot spoof a card.
 - **Debloat script** (reversible): disables Amazon shopping, ad-ID and content-recognition packages, limits ad tracking, speeds up animations.
 - Optional Home Assistant link: weather / solar / battery / bins panel, Plex "keep watching" cards, a rotating
-  "new on Plex" tile, sleep timer, doorbell card.
+  tile of what is live now (sport and films) and new on Plex, sleep timer, doorbell card.
   Plus [prompts for Claude, Codex or any AI agent](docs/AI-PROMPTS.md) that do the setup for you.
 
 ## Quick start

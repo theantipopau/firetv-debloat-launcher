@@ -3,6 +3,32 @@
 All notable changes to the Fire TV Debloat Launcher. Versions match `versionName` in
 [`launcher/AndroidManifest.xml`](launcher/AndroidManifest.xml).
 
+## 1.3 — 2026-10-29
+
+### Added
+- **Live now in the rotating tile.** `tvhome_keep.py` reads the XMLTV guides named by `epg_urls` in
+  `secrets.yaml` (or `EPG_URLS`), and puts what is on right now in front of the new-on-Plex cards: live sport
+  first — cricket, rugby, football/AFL, racing and the US leagues all match — then one film when one is airing.
+  Each card carries a red-dot **LIVE ON TIVIMATE** chip and a "channel · until 21:35" caption, and opens TiviMate.
+  With no programme still in the guide, the channel logo fills the card, contained instead of cropped.
+  Simulcasts collapse to a single card; replays, studio shows, 24/7 filler channels and empty "Stan Sport
+  Event 12" placeholders are dropped. Every card knows when it ends, so the TV stops offering a programme once
+  it has finished instead of waiting for the next refresh.
+- The tile now reads "live now, then new on Plex". With no guide configured, or nothing live, it behaves exactly
+  as it did in 1.2.
+- Guides are cached in `/config/.tvhome_epg/` and downloaded again only when the server reports a change — the
+  iptv4u guide on its own is 11 MB, which is worth not fetching every ten minutes.
+
+### Fixed
+- **A reboot landed on Amazon's home.** Fire OS launches its own launcher at boot even when another home is
+  installed and selected, so the app now takes the screen back nine seconds after boot, and checks once more at
+  26 seconds in case Amazon came back after it. `tools/firetv-install.sh` also selects it as the home activity
+  (`cmd package set-home-activity`), so the system has a preferred home as well as the accessibility service.
+
+### Changed
+- Artwork is reused between runs, and a single failed image is retried on the next run without re-downloading
+  the ones that worked.
+
 ## 1.2 — 2026-10-28
 
 ### Added
