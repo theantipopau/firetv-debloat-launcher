@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.mihir.tvhome"
-    android:versionCode="1"
-    android:versionName="1.0">
+    android:versionCode="2"
+    android:versionName="1.1">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Granted over ADB so the Home-key service can re-enable itself if Android drops it. -->
@@ -56,7 +56,13 @@
             android:excludeFromRecents="true"
             android:screenOrientation="landscape"
             android:theme="@android:style/Theme.NoTitleBar.Fullscreen" />
-        <receiver android:name=".AlertReceiver" android:exported="true" />
+        <!-- Alert cards. The permission gates the sender: only the TV's shell (ADB, which is what Home Assistant
+             uses) and system apps hold DUMP, so an installed app cannot spoof cards. If none of your senders fit
+             that, delete android:permission (any app can then trigger cards). -->
+        <receiver
+            android:name=".AlertReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP" />
         <service
             android:name=".ClockDream"
             android:exported="true"

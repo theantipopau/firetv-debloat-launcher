@@ -6,6 +6,9 @@
     tv.py --batch < cmds.txt                 one command per line, same connection
     tv.py --pull /sdcard/x.png x.png
     tv.py --push-b64 local.apk /data/local/tmp/x.apk   chunked base64 upload with md5 check
+
+Under Git Bash, run with MSYS_NO_PATHCONV=1 for the --push-b64/--pull arguments: otherwise the
+shell rewrites /data/... into a Windows path and the upload lands nowhere.
     tv.py --shot out.png                     screenshot from the TV
 """
 import base64
@@ -39,15 +42,23 @@ def connect():
     return dev
 
 
-def push_b64(dev, local, remote, chunk=48_000):
+def push_b64(dev, local, remote, chunk=20_000):
+    """Upload over the shell in base64 chunks. 20k per write, because larger echo/printf
+    payloads were arriving truncated (which left an old file in place and let a later
+    `pm install` quietly install the previous build). Size and md5 are both checked here."""
     data = open(local, "rb").read()
     enc = base64.b64encode(data).decode()
     tmp = remote + ".b64"
-    dev.shell(f"rm -f {tmp} {remote}")
+    dev.shell(f"rm -f {tmp} {remote}", read_timeout_s=60)
     for i in range(0, len(enc), chunk):
-        dev.shell(f"echo -n '{enc[i:i + chunk]}' >> {tmp}")
-    dev.shell(f"base64 -d {tmp} > {remote} && rm -f {tmp}")
-    remote_md5 = dev.shell(f"md5sum {remote}").split()[0]
+        out = dev.shell(f"printf '%s' '{enc[i:i + chunk]}' >> {tmp}", read_timeout_s=60)
+        if out.strip():
+            sys.exit(f"upload failed at byte {i}: {out.strip()[:200]}")
+    size = dev.shell(f"wc -c < {tmp}", read_timeout_s=60).strip()
+    if size != str(len(enc)):
+        sys.exit(f"upload incomplete: {size} of {len(enc)} base64 bytes")
+    dev.shell(f"base64 -d {tmp} > {remote} && rm -f {tmp}", read_timeout_s=180)
+    remote_md5 = dev.shell(f"md5sum {remote}", read_timeout_s=60).split()[0]
     local_md5 = hashlib.md5(data).hexdigest()
     if remote_md5 != local_md5:
         sys.exit(f"md5 mismatch: {remote_md5} != {local_md5}")

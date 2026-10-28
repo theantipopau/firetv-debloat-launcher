@@ -24,6 +24,7 @@ import android.media.tv.TvInputInfo;
 import android.media.tv.TvInputManager;
 import android.net.wifi.WifiManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -46,10 +47,6 @@ import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.TextView;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import org.json.JSONObject;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -105,6 +102,12 @@ public class MainActivity extends Activity {
     private TextView greeting, clock, ampm, date, title, wifiPill, appsLabel;
     private int glowColor = 0xFF3A3A3A;
     private ValueAnimator glowAnim;
+    private ValueAnimator scrollGlide;
+    private boolean haShown, keepShown;
+    /** Last glow colour, so the Home-key cover can light its dock the same way (same process). */
+    static volatile int glowNow = 0xFF3A3A3A;
+    /** The photo on screen right now, so the cover borrows it instead of decoding (and showing) an older one. */
+    static volatile Bitmap currentWall;
     private int lastFocusedId = View.NO_ID;
     private boolean firstShow = true;
     private int packageSeq;
@@ -112,6 +115,7 @@ public class MainActivity extends Activity {
 
     // ---- Home Assistant snapshot panel (JSON written by an HA automation, polled over the LAN)
     static volatile long suppressRedirectUntil;
+    private static final int KEEP_W_DP = 156;   // slim strip: the row reads as secondary to the app title
     private LinearLayout keepRow;
     private final List<View> keepCards = new ArrayList<>();
     private LinearLayout haPanel;
@@ -187,7 +191,7 @@ public class MainActivity extends Activity {
         }
         View last = lastFocusedId == View.NO_ID ? null : findViewById(lastFocusedId);
         if (last == null && !dockCards.isEmpty()) last = dockCards.get(0);
-        if (last != null) last.requestFocus();
+        focusNow(last);
         // Catch installs/removals that happened while another app was in front.
         if (getPackageManager().getChangedPackages(packageSeq) != null) buildApps();
         if (firstShow) { firstShow = false; playEntrance(); }
@@ -203,6 +207,7 @@ public class MainActivity extends Activity {
         handler.removeCallbacks(haPoll);
         handler.removeCallbacks(idle);
         unregisterReceiver(tick);
+        if (scrollGlide != null) scrollGlide.cancel();
         if (inputsPopup != null) inputsPopup.dismiss();
     }
 
@@ -218,7 +223,7 @@ public class MainActivity extends Activity {
         // Home pressed while already home: jump back to the first dock app.
         if (inputsPopup != null) inputsPopup.dismiss();
         if (!dockCards.isEmpty()) dockCards.get(0).requestFocus();
-        scroll.smoothScrollTo(0, 0);
+        glideTo(0);
     }
 
     @Override
@@ -289,7 +294,7 @@ public class MainActivity extends Activity {
         title.setShadowLayer(dp(18), 0, 0, 0x66000000);
         title.setSingleLine(true);
         bottom.addView(title, new LinearLayout.LayoutParams(-2, -2));
-        ((LinearLayout.LayoutParams) title.getLayoutParams()).setMargins(dp(8), 0, 0, dp(14));
+        ((LinearLayout.LayoutParams) title.getLayoutParams()).setMargins(0, 0, 0, dp(14));
 
         dockRow = new LinearLayout(this);
         dockRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -302,6 +307,7 @@ public class MainActivity extends Activity {
         band.setColor(0x1FFFFFFF);
         band.setStroke(dp(1), 0x14FFFFFF);
         dockRow.setBackground(band);
+        dockRow.setElevation(dp(12));   // lifts the tray off the photo instead of pasting it on
         bottom.addView(dockRow, new LinearLayout.LayoutParams(-1, -2));
 
         appsLabel = text(11, "sans-serif-medium", 0x99FFFFFF);
@@ -337,11 +343,30 @@ public class MainActivity extends Activity {
     private void ensureHomeService() {
         if (HomeKeyService.running) return;
         try {
-            String cn = getPackageName() + "/" + HomeKeyService.class.getName();
+            ComponentName me = new ComponentName(this, HomeKeyService.class);
+            String cur = Settings.Secure.getString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+            String list = withService(cur, me);
+            // Same clear-then-set as before, so the accessibility manager re-reads the list and rebinds. Only the
+            // value changed: it now keeps whatever else is enabled instead of replacing it with ours alone.
             Settings.Secure.putString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, "");
-            Settings.Secure.putString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, cn);
+            Settings.Secure.putString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, list);
             Settings.Secure.putInt(getContentResolver(), Settings.Secure.ACCESSIBILITY_ENABLED, 1);
         } catch (SecurityException ignored) { }
+    }
+
+    /** The accessibility list is "pkg/cls:pkg/cls:…". Ours goes on the end; anything else stays enabled.
+     *  Entries may be written in either long or short form, so both are recognised. */
+    private static String withService(String list, ComponentName comp) {
+        String longForm = comp.flattenToString();
+        String shortForm = comp.flattenToShortString();
+        if (list == null) return longForm;
+        String cur = list.trim();
+        if (cur.isEmpty()) return longForm;
+        for (String s : cur.split(":")) {
+            String entry = s.trim();
+            if (entry.equals(longForm) || entry.equals(shortForm)) return cur;   // already listed
+        }
+        return cur + ":" + longForm;
     }
 
     // ---------------------------------------------------------------- keep watching
@@ -352,7 +377,7 @@ public class MainActivity extends Activity {
         keepRow.setClipChildren(false);
         keepRow.setClipToPadding(false);
         keepRow.setVisibility(View.GONE);
-        keepRow.setPadding(dp(8), 0, 0, dp(16));
+        keepRow.setPadding(0, 0, 0, dp(14));
         return keepRow;
     }
 
@@ -360,31 +385,17 @@ public class MainActivity extends Activity {
         final String url = getString(R.string.keep_json_url);
         if (url.isEmpty()) return;
         new Thread(() -> {
+            final String body = Net.text(url, 4000, 4000, Net.MAX_JSON_BYTES);
+            if (body == null) return;
             try {
-                HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
-                c.setConnectTimeout(4000);
-                c.setReadTimeout(4000);
-                StringBuilder sb = new StringBuilder();
-                try (BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream(), "UTF-8"))) {
-                    String line;
-                    while ((line = r.readLine()) != null) sb.append(line);
-                }
-                final org.json.JSONArray items = new JSONObject(sb.toString()).optJSONArray("items");
+                final org.json.JSONArray items = new JSONObject(body).optJSONArray("items");
                 final List<Bitmap> imgs = new ArrayList<>();
                 final List<Bitmap> logos = new ArrayList<>();
                 if (items != null) for (int i = 0; i < items.length(); i++) {
-                    Bitmap bm = null;
                     String img = items.getJSONObject(i).optString("image", "");
-                    if (!img.isEmpty()) {
-                        try (java.io.InputStream in = new URL(img).openStream()) { bm = BitmapFactory.decodeStream(in); } catch (Exception ignored) { }
-                    }
-                    imgs.add(bm);
-                    Bitmap lg = null;
+                    imgs.add(img.isEmpty() ? null : Net.image(img, 4000, 4000, 1, Net.MAX_PANEL_PIXELS));
                     String logo = items.getJSONObject(i).optString("logo", "");
-                    if (!logo.isEmpty()) {
-                        try (java.io.InputStream in = new URL(logo).openStream()) { lg = BitmapFactory.decodeStream(in); } catch (Exception ignored) { }
-                    }
-                    logos.add(lg);
+                    logos.add(logo.isEmpty() ? null : Net.image(logo, 4000, 4000, 1, Net.MAX_PANEL_PIXELS));
                 }
                 runOnUiThread(() -> showKeep(items, imgs, logos));
             } catch (Exception ignored) { }
@@ -395,15 +406,26 @@ public class MainActivity extends Activity {
         if (items == null || items.length() == 0) { keepRow.setVisibility(View.GONE); return; }
         keepRow.removeAllViews();
         keepCards.clear();
-        for (int i = 0; i < items.length(); i++) {
+        // The row does not scroll, so extra cards would run off the edge under the weather panel.
+        int shown = Math.min(items.length(), 5);
+        for (int i = 0; i < shown; i++) {
             JSONObject it = items.optJSONObject(i);
             if (it != null) {
                 View kc = keepCard(it, imgs.get(i), logos.get(i));
                 keepCards.add(kc);
-                keepRow.addView(kc, llp(dp(200), dp(62), 0, 0, dp(12), 0));
+                keepRow.addView(kc, llp(dp(KEEP_W_DP), -2, 0, 0, dp(10), 0));
             }
         }
-        keepRow.setVisibility(View.VISIBLE);
+        if (keepRow.getVisibility() != View.VISIBLE) {
+            keepRow.setVisibility(View.VISIBLE);
+            if (!keepShown) {
+                keepShown = true;
+                keepRow.setAlpha(0f);
+                keepRow.setTranslationY(dp(10));
+                keepRow.animate().alpha(1f).translationY(0)
+                        .setInterpolator(new DecelerateInterpolator(2f)).setDuration(260).start();
+            }
+        }
         rewireKeep();
     }
 
@@ -411,13 +433,25 @@ public class MainActivity extends Activity {
         final String pkg = it.optString("pkg", "");
         final String uri = it.optString("uri", "");
         final int accent = pkg.contains("netflix") ? 0xFFE50914 : pkg.contains("tvplayer") ? 0xFF2E9BFF : 0xFFE5A00D;
-        FrameLayout card = new FrameLayout(this);
-        card.setId(View.generateViewId());
-        card.setFocusable(true);
-        card.setClickable(true);
+        // Still on top, caption underneath. The old 62dp card had to stack the label, the show logo and
+        // the episode line inside the artwork, where they overlapped; the caption needs its own room.
+        final int cardW = dp(KEEP_W_DP);   // the bar and the logo are measured from this, so they cannot drift
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setClipChildren(false);
+        box.setClipToPadding(false);
+        // The whole tile is the focus target, so the caption below is part of it and the D-pad ids the
+        // rewireKeep() table hands out (this view) still resolve.
+        box.setId(View.generateViewId());
+        box.setFocusable(true);
+        box.setClickable(true);
+
+        FrameLayout card = new AspectFrame(this);   // 16:9: the stills are 16:9, and a 3:1 crop decapitates them
+        card.setFocusable(false);
+        card.setClickable(false);
         card.setClipToOutline(true);
         card.setOutlineProvider(new ViewOutlineProvider() {
-            @Override public void getOutline(View v, Outline o) { o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), dp(16)); }
+            @Override public void getOutline(View v, Outline o) { o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), dp(12)); }
         });
         GradientDrawable base = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{darken(accent, 0.55f), 0xFF14161C});
         card.setBackground(base);
@@ -425,67 +459,93 @@ public class MainActivity extends Activity {
             ImageView iv = new ImageView(this);
             iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
             iv.setImageBitmap(bm);
-            iv.setAlpha(0.78f);
             card.addView(iv, new FrameLayout.LayoutParams(-1, -1));
         }
-        View shade = new View(this);
-        shade.setBackground(new GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, new int[]{0xD9000000, 0x80000000, 0x33000000}));
+        View shade = new View(this);   // the logo and the progress bar sit on this, not on bare artwork
+        shade.setBackground(new GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP,
+                new int[]{0xC9000000, 0x66000000, 0x00000000}));
         card.addView(shade, new FrameLayout.LayoutParams(-1, -1));
 
-        LinearLayout col = new LinearLayout(this);
-        col.setOrientation(LinearLayout.VERTICAL);
-        col.setGravity(Gravity.BOTTOM);
-        col.setPadding(dp(12), dp(6), dp(12), dp(8));
-        TextView app = text(8, "sans-serif-medium", accent);
-        app.setText(("KEEP WATCHING  \u00B7  " + it.optString("app", "")).toUpperCase(Locale.getDefault()));
-        app.setLetterSpacing(0.12f);
-        TextView ttl = text(12, "sans-serif-medium", Color.WHITE);
-        ttl.setSingleLine(true);
-        ttl.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        ttl.setText(it.optString("title", ""));
-        TextView sub = text(9, "sans-serif", 0xE6FFFFFF);
-        sub.setSingleLine(true);
-        sub.setText(it.optString("sub", ""));
-        col.addView(app);
+        double prog = it.optDouble("progress", 0);
+        if (prog > 0) {   // inset from the corners so a straight bar does not fight the rounding
+            FrameLayout track = new FrameLayout(this);
+            View groove = new View(this);
+            GradientDrawable gg = new GradientDrawable();
+            gg.setCornerRadius(dp(2f));
+            gg.setColor(0x4DFFFFFF);
+            groove.setBackground(gg);
+            track.addView(groove, new FrameLayout.LayoutParams(-1, dp(3)));
+            View bar = new View(this);
+            GradientDrawable fb = new GradientDrawable();
+            fb.setCornerRadius(dp(2f));
+            fb.setColor(accent);
+            bar.setBackground(fb);
+            track.addView(bar, new FrameLayout.LayoutParams(
+                    Math.max(dp(6), (int) ((cardW - dp(18)) * Math.min(1.0, prog))), dp(3)));
+            card.addView(track, lp(-1, dp(3), Gravity.BOTTOM, dp(9), 0, dp(9), dp(7)));
+        }
+
+        // Inside the card: the show's own logo. Plex and Netflix hand one over as a transparent PNG,
+        // and it is the whole point of the artwork - our text only stands in when there is none.
+        FrameLayout.LayoutParams capLp = new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.START);
+        capLp.setMargins(dp(10), 0, dp(10), dp(11));   // clears the progress bar
         if (logo != null) {
             ImageView lv = new ImageView(this);
             lv.setImageBitmap(logo);
             lv.setAdjustViewBounds(true);
             lv.setScaleType(ImageView.ScaleType.FIT_START);
-            lv.setMaxHeight(dp(22));
-            lv.setMaxWidth(dp(130));
+            lv.setMaxHeight(dp(19));
+            lv.setMaxWidth(dp(120));
             lv.setContentDescription(it.optString("title", ""));
-            col.addView(lv, llp(-2, -2, 0, dp(3), 0, 0));
+            card.addView(lv, capLp);
         } else {
-            col.addView(ttl, llp(-2, -2, 0, dp(2), 0, 0));
+            TextView cap = text(11.5f, "sans-serif-medium", Color.WHITE);
+            cap.setSingleLine(true);
+            cap.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            cap.setText(it.optString("title", ""));
+            card.addView(cap, capLp);
         }
-        col.addView(sub, llp(-2, -2, 0, dp(1), 0, 0));
-        card.addView(col, new FrameLayout.LayoutParams(-1, -1));
 
-        double prog = it.optDouble("progress", 0);
-        if (prog > 0) {
-            View bar = new View(this);
-            bar.setBackgroundColor(accent);
-            card.addView(bar, new FrameLayout.LayoutParams((int) (dp(200) * Math.min(1.0, prog)), dp(3), Gravity.BOTTOM | Gravity.START));
+        box.addView(card, new LinearLayout.LayoutParams(-1, -2));
+
+        SpannableStringBuilder meta = new SpannableStringBuilder();
+        String appName = it.optString("app", "").toUpperCase(Locale.getDefault());
+        if (!appName.isEmpty()) coloured(meta, appName, accent);
+        String subText = it.optString("sub", "");
+        if (!subText.isEmpty()) {
+            if (meta.length() > 0) coloured(meta, "   \u00B7   ", 0x99FFFFFF);
+            coloured(meta, subText, 0xD9FFFFFF);
         }
+        TextView sub = text(9f, "sans-serif", 0xD9FFFFFF);
+        setSpan(sub, meta);   // collapses to GONE when there is neither an app nor an episode line
+        sub.setSingleLine(true);
+        sub.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        sub.setShadowLayer(dp(3), 0, dp(1), 0xCC000000);   // this line does sit on the photo; a wide blur smears 9sp type
+        box.addView(sub, llp(-1, -2, 0, dp(6), 0, 0));
 
         GradientDrawable ring = new GradientDrawable();
-        ring.setCornerRadius(dp(16));
+        ring.setCornerRadius(dp(12));
         ring.setStroke(dp(2), 0x00FFFFFF);
         card.setForeground(ring);
-        card.setOnFocusChangeListener((v, has) -> {
+        card.setElevation(dp(4));
+        box.setOnFocusChangeListener((v, has) -> {
             ring.setStroke(dp(2), has ? 0xFFFFFFFF : 0x00FFFFFF);
-            v.animate().scaleX(has ? 1.05f : 1f).scaleY(has ? 1.05f : 1f).setDuration(180).start();
+            card.animate().scaleX(has ? 1.05f : 1f).scaleY(has ? 1.05f : 1f)
+                    .translationZ(has ? dp(14) : 0)
+                    .setInterpolator(has ? new OvershootInterpolator(1.5f) : new DecelerateInterpolator())
+                    .setDuration(has ? 240 : 180).start();
         });
-        card.setOnClickListener(v -> {
+        box.setOnClickListener(v -> {
+            pressDip(card, 1.05f);
             if (!uri.isEmpty()) {
                 Intent i = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(uri));
                 if (!pkg.isEmpty()) i.setPackage(pkg);
                 if (launch(i)) return;
             }
-            if (!pkg.isEmpty()) openPackage(pkg);
+            if (!pkg.isEmpty() && openPackage(pkg)) return;
+            pressUndo(card, 1.05f);
         });
-        return card;
+        return box;
     }
 
     // ---------------------------------------------------------------- full-screen settings
@@ -590,6 +650,7 @@ public class MainActivity extends Activity {
         bg.setColor(0x73000000);
         bg.setStroke(dp(1), 0x26FFFFFF);
         haPanel.setBackground(bg);
+        haPanel.setElevation(dp(10));
         haPanel.setVisibility(View.GONE);
         haBig = text(40, "sans-serif-thin", Color.WHITE);
         haSub = text(10, "sans-serif-medium", 0xCCFFFFFF);
@@ -609,17 +670,11 @@ public class MainActivity extends Activity {
         final String url = getString(R.string.ha_json_url);
         if (url.isEmpty()) return;
         new Thread(() -> {
+            final String body = Net.text(url, 4000, 4000, Net.MAX_JSON_BYTES);
+            if (body == null) return;
             try {
-                HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
-                c.setConnectTimeout(4000);
-                c.setReadTimeout(4000);
-                StringBuilder sb = new StringBuilder();
-                try (BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream(), "UTF-8"))) {
-                    String line;
-                    while ((line = r.readLine()) != null) sb.append(line);
-                }
-                final JSONObject j = new JSONObject(sb.toString());
-                getSharedPreferences("launcher", MODE_PRIVATE).edit().putString("ha_json", sb.toString()).apply();   // for the Home-key cover
+                final JSONObject j = new JSONObject(body);
+                getSharedPreferences("launcher", MODE_PRIVATE).edit().putString("ha_json", body).apply();   // for the Home-key cover
                 runOnUiThread(() -> showHa(j));
             } catch (Exception ignored) { }
         }).start();
@@ -694,7 +749,16 @@ public class MainActivity extends Activity {
         if (!inside.isEmpty()) coloured(in, "\uD83C\uDF21\uFE0F  " + inside + "\u00B0 inside" + (ac.isEmpty() ? "" : "     \u2744\uFE0F AC " + ac), 0xFF9FE8FF);
         setSpan(haL5, in);
 
-        haPanel.setVisibility(View.VISIBLE);
+        if (haPanel.getVisibility() != View.VISIBLE) {
+            haPanel.setVisibility(View.VISIBLE);
+            if (!haShown) {   // settle in on the first refresh only; later ones are just new numbers
+                haShown = true;
+                haPanel.setAlpha(0f);
+                haPanel.setTranslationY(dp(8));
+                haPanel.animate().alpha(1f).translationY(0)
+                        .setInterpolator(new DecelerateInterpolator(2f)).setDuration(240).start();
+            }
+        }
     }
 
     private View buildHeader() {
@@ -781,7 +845,7 @@ public class MainActivity extends Activity {
             ((TextView) v).setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(has ? 0xFF111111 : 0xE6FFFFFF));
             v.animate().scaleX(has ? 1.08f : 1f).scaleY(has ? 1.08f : 1f)
                     .setInterpolator(new OvershootInterpolator(2f)).setDuration(220).start();
-            if (has) { lastFocusedId = v.getId(); scroll.smoothScrollTo(0, 0); fadeGlow(1f); }
+            if (has) { lastFocusedId = v.getId(); glideTo(0); fadeGlow(1f); }
         });
         return p;
     }
@@ -854,8 +918,7 @@ public class MainActivity extends Activity {
 
         if (!dock.isEmpty()) { title.setText(dock.get(0).label); setGlow(dock.get(0).color); }
         View last = lastFocusedId == View.NO_ID ? null : findViewById(lastFocusedId);
-        if (last != null) last.requestFocus();
-        else if (!dockCards.isEmpty()) dockCards.get(0).requestFocus();
+        focusNow(last != null ? last : (dockCards.isEmpty() ? null : dockCards.get(0)));
     }
 
     /** A 16:9 card with the app's banner; the name shows under it while focused. */
@@ -933,10 +996,15 @@ public class MainActivity extends Activity {
 
         card.setLongClickable(true);
         card.setOnLongClickListener(v -> { showAppMenu(v, app); return true; });
-        card.setOnClickListener(v -> { getSharedPreferences("launches", MODE_PRIVATE).edit().putLong(app.pkg, System.currentTimeMillis()).apply(); launch(new Intent(Intent.ACTION_MAIN)
-                .addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
-                .setComponent(app.component)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)); });
+        card.setOnClickListener(v -> {
+            pressDip(v, inDock ? 1.12f : 1.1f);
+            getSharedPreferences("launches", MODE_PRIVATE).edit().putLong(app.pkg, System.currentTimeMillis()).apply();
+            boolean opened = launch(new Intent(Intent.ACTION_MAIN)
+                    .addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
+                    .setComponent(app.component)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED));
+            if (!opened) pressUndo(v, inDock ? 1.12f : 1.1f);
+        });
         card.setOnFocusChangeListener((v, has) -> {
             float s = has ? (inDock ? 1.12f : 1.1f) : 1f;
             v.animate().scaleX(s).scaleY(s).translationZ(has ? dp(14) : 0)
@@ -947,11 +1015,15 @@ public class MainActivity extends Activity {
             if (!has) return;
             lastFocusedId = v.getId();
             if (inDock) {
-                title.setText(app.label);
-                title.animate().alpha(1f).setDuration(200).start();
+                // Moving along the row swaps the name instantly; a short fade over the new one softens the jump
+                if (!app.label.contentEquals(title.getText())) {
+                    title.setText(app.label);
+                    title.setAlpha(0.35f);
+                }
+                title.animate().alpha(1f).setDuration(220).start();
                 animateGlow(app.color);
                 fadeGlow(1f);
-                scroll.smoothScrollTo(0, 0);
+                glideTo(0);
             } else {
                 fadeGlow(0.35f);
                 title.animate().alpha(0f).setDuration(200).start();
@@ -1012,6 +1084,10 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void focusNow(View v) {
+        if (v != null) v.requestFocus();
+    }
+
     private void scrollToRow(View tileBox) {
         View row = (View) tileBox.getParent();
         int y = grid.getTop() + row.getTop();
@@ -1021,8 +1097,40 @@ public class MainActivity extends Activity {
         int target = grid.indexOfChild(row) == 0
                 ? hero.getTop() + band.getTop() + dockRow.getTop() - dp(22)
                 : y - (int) (screenH * 0.42f);
+        glideTo(target);
+    }
+
+    /** ScrollView.smoothScrollTo runs a fixed ~250 ms whatever the distance, so a five-row jump reads as a
+     *  teleport. This scales the duration with the distance travelled (220 ms for one row, capped at 430)
+     *  and eases out; a second call mid-glide continues from where the scroll actually is. */
+    private void glideTo(int y) {
         int max = Math.max(0, content.getHeight() - scroll.getHeight());
-        scroll.smoothScrollTo(0, Math.max(0, Math.min(target, max)));
+        int target = Math.max(0, Math.min(y, max));
+        int from = scroll.getScrollY();
+        if (target == from) return;
+        if (scrollGlide != null) scrollGlide.cancel();
+        View firstRow = grid.getChildCount() > 0 ? grid.getChildAt(0) : null;
+        int rowPx = firstRow != null && firstRow.getHeight() > 0 ? firstRow.getHeight() : dp(150);
+        int rows = Math.max(1, Math.round(Math.abs(target - from) / (float) rowPx));
+        ValueAnimator a = ValueAnimator.ofInt(from, target);
+        a.setDuration(Math.min(430L, 220L + 55L * (rows - 1)));
+        a.setInterpolator(new DecelerateInterpolator(1.8f));
+        a.addUpdateListener(anim -> scroll.scrollTo(0, (int) anim.getAnimatedValue()));
+        scrollGlide = a;
+        a.start();
+    }
+
+    /** Half a press before the launch. The gap between OK and the app's first frame is a few hundred ms,
+     *  and without this the remote gets no acknowledgement at all in that time. */
+    private void pressDip(View v, float base) {
+        v.animate().scaleX(base * 0.94f).scaleY(base * 0.94f).setDuration(90)
+                .setInterpolator(new DecelerateInterpolator()).start();
+    }
+
+    /** Only if nothing opened: the tile would otherwise stay slightly small until focus moves. */
+    private void pressUndo(View v, float base) {
+        v.animate().scaleX(base).scaleY(base).setDuration(160)
+                .setInterpolator(new DecelerateInterpolator()).start();
     }
 
     // ---------------------------------------------------------------- inputs
@@ -1078,10 +1186,10 @@ public class MainActivity extends Activity {
             getSharedPreferences("launcher", MODE_PRIVATE).edit().putStringSet("hidden", h).apply();
             buildApps();
         }));
-        rows.add(inputRow("App info", () -> launch(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + app.pkg)))));
+        rows.add(inputRow("App info", () -> openAppPage(app.pkg)));
         try {
             if ((getPackageManager().getApplicationInfo(app.pkg, 0).flags & android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0)
-                rows.add(inputRow("Uninstall", () -> launch(new Intent(Intent.ACTION_DELETE, Uri.parse("package:" + app.pkg)))));
+                rows.add(inputRow("Uninstall", () -> uninstall(app.pkg)));
         } catch (PackageManager.NameNotFoundException ignored) { }
         for (TextView r : rows) {
             r.setOnClickListener(v -> { pw.dismiss(); ((Runnable) v.getTag()).run(); });
@@ -1106,6 +1214,21 @@ public class MainActivity extends Activity {
         if (y + list.getMeasuredHeight() > screenH - dp(16)) y = Math.max(dp(8), loc[1] - list.getMeasuredHeight() - dp(6));
         pw.showAtLocation(anchor, Gravity.TOP | Gravity.START, Math.max(dp(8), loc[0]), y);
         rows.get(0).requestFocus();
+    }
+
+    /** Amazon's app page carries the only Uninstall that works: Fire OS accepts ACTION_DELETE from a
+     *  third-party caller and then drops it, so the installer never appears. On other devices the
+     *  normal uninstall dialog is used, with the app page as the fallback. */
+    private void uninstall(String pkg) {
+        if (!"Amazon".equalsIgnoreCase(Build.MANUFACTURER)
+                && launch(new Intent(Intent.ACTION_DELETE, Uri.parse("package:" + pkg)))) return;
+        android.widget.Toast.makeText(this, "Press Uninstall on this screen", android.widget.Toast.LENGTH_LONG).show();
+        openAppPage(pkg);
+    }
+
+    private void openAppPage(String pkg) {
+        if (!launch(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + pkg))))
+            openFullSettings();
     }
 
     private boolean hasPassthroughInputs() {
@@ -1238,6 +1361,7 @@ public class MainActivity extends Activity {
 
     private void setGlow(int color) {
         glowColor = color;
+        glowNow = color;
         GradientDrawable g = new GradientDrawable();
         g.setGradientType(GradientDrawable.RADIAL_GRADIENT);
         g.setGradientCenter(0.5f, 0.78f);
@@ -1300,6 +1424,7 @@ public class MainActivity extends Activity {
         root.removeView(wallFront);
         root.addView(wallFront, 1, new FrameLayout.LayoutParams(-1, -1));
         wallFront.setImageBitmap(bm);
+        currentWall = bm;
         wallFront.setAlpha(0f);
         wallFront.setScaleX(1f);
         wallFront.setScaleY(1f);
@@ -1412,10 +1537,10 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void openPackage(String pkg) {
+    private boolean openPackage(String pkg) {
         Intent i = getPackageManager().getLeanbackLaunchIntentForPackage(pkg);
         if (i == null) i = getPackageManager().getLaunchIntentForPackage(pkg);
-        if (i != null) launch(i);
+        return i != null && launch(i);
     }
 
     private TextView text(float sp, String family, int color) {
@@ -1453,6 +1578,28 @@ public class MainActivity extends Activity {
     @Override
     public boolean dispatchKeyEvent(KeyEvent e) {
         kickIdle();
+        // The dock <-> keep-watching hop is routed here rather than by nextFocusUpId: the framework's
+        // focus search kept falling back to the top bar even with the ids set correctly.
+        if (e.getAction() == KeyEvent.ACTION_DOWN && !keepCards.isEmpty() && !dockCards.isEmpty()) {
+            int i = dockCards.indexOf(getCurrentFocus());
+            if (i >= 0 && e.getKeyCode() == KeyEvent.KEYCODE_DPAD_UP) {
+                keepCards.get(Math.min(keepCards.size() - 1, i * keepCards.size() / dockCards.size())).requestFocus();
+                return true;
+            }
+            int k = keepCards.indexOf(getCurrentFocus());
+            if (k >= 0) {
+                if (e.getKeyCode() == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    dockCards.get(Math.min(dockCards.size() - 1, k * dockCards.size() / keepCards.size())).requestFocus();
+                    return true;
+                }
+                if (e.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT || e.getKeyCode() == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    int to = Math.max(0, Math.min(keepCards.size() - 1,
+                            k + (e.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1)));
+                    if (to != k) keepCards.get(to).requestFocus();
+                    return true;   // the ends of the row hold, they don't fall through to another row
+                }
+            }
+        }
         if (e.getKeyCode() == KeyEvent.KEYCODE_SETTINGS && e.getAction() == KeyEvent.ACTION_UP) { openFullSettings(); return true; }
         return super.dispatchKeyEvent(e);
     }

@@ -9,9 +9,9 @@ import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
-import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.provider.Settings;
 import android.util.Log;
 import android.util.TypedValue;
@@ -25,8 +25,6 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
 
 /**
  * Pops a small card over whatever is playing (top right). Trigger, e.g. from Home Assistant over ADB:
@@ -34,43 +32,86 @@ import java.net.URL;
  *     --es kind doorbell --es brand google --es image http://host/snapshot.jpg --ei seconds 8
  * kind: doorbell | motion | warn | info.  brand: google | tuya | (none).  Needs "Display over other apps":
  *   appops set com.mihir.tvhome SYSTEM_ALERT_WINDOW allow
+ *
+ * Only the TV's shell (ADB, which is how Home Assistant sends this) and system apps can trigger a card: the
+ * receiver declares android.permission.DUMP in AndroidManifest.xml, which a normal installed app does not hold,
+ * so apps on the TV cannot paint fake alerts. If you have a sender that is neither the shell nor a system app,
+ * remove that attribute from the manifest (and accept that any app can then spoof cards).
+ * Payloads are also rate-limited, and snapshot downloads and decoded image sizes are capped, so a rogue or a
+ * broken integration cannot exhaust memory or flood the screen with cards.
  */
 public class AlertReceiver extends BroadcastReceiver {
     private static final Handler UI = new Handler(Looper.getMainLooper());
     private static View current;
     private static WindowManager currentWm;
 
+    /** Snapshots decode at the old fixed inSampleSize=2 and are only sampled further above this many pixels;
+     *  the download itself is capped in Net. */
+    private static final long MAX_IMAGE_PIXELS = 4_000_000L;
+    private static final int MAX_URL = 2048, MAX_TITLE = 120, MAX_TEXT = 300;
+    /** Alerts cost a thread and a bitmap: a burst of 6 is fine, after that one every 2 seconds. */
+    private static final double BURST = 6;
+    private static final long REFILL_MS = 2000;
+    private static final Object GATE = new Object();
+    private static double tokens = BURST;
+    private static long tokenStamp;
+
     @Override
     public void onReceive(Context ctx, Intent in) {
         final Context app = ctx.getApplicationContext();
         if (!Settings.canDrawOverlays(app)) { Log.w("TvHome", "alert: no overlay permission"); return; }
-        final String title = nz(in.getStringExtra("title"), "Home");
-        final String text = nz(in.getStringExtra("text"), "");
+        if (!allowed()) { Log.w("TvHome", "alert: rate limited, dropping"); return; }
+        final String title = cap(nz(in.getStringExtra("title"), "Home"), MAX_TITLE);
+        final String text = cap(nz(in.getStringExtra("text"), ""), MAX_TEXT);
         final String kind = nz(in.getStringExtra("kind"), "info");
-        final String brand = nz(in.getStringExtra("brand"), "");
-        final String image = nz(in.getStringExtra("image"), "");
+        final String brand = safeBrand(nz(in.getStringExtra("brand"), ""));
+        final String image = cap(nz(in.getStringExtra("image"), ""), MAX_URL);
         final int secs = Math.max(3, Math.min(30, in.getIntExtra("seconds", 8)));
         final PendingResult pr = goAsync();
         new Thread(() -> {
-            Bitmap snap = image.isEmpty() ? null : fetch(image);
-            Bitmap logo = brand.isEmpty() ? null : asset(app, "brands/" + brand + ".png");
-            UI.post(() -> { try { show(app, title, text, kind, brand, logo, snap, secs); } finally { pr.finish(); } });
+            Bitmap snap = null, logo = null;
+            try {
+                snap = image.isEmpty() ? null : fetch(image);
+                logo = brand.isEmpty() ? null : asset(app, "brands/" + brand + ".png");
+            } catch (Throwable t) {
+                Log.w("TvHome", "alert payload dropped: " + t);   // never let a bad image kill the launcher process
+            }
+            final Bitmap fSnap = snap, fLogo = logo;
+            try {
+                UI.post(() -> {
+                    try { show(app, title, text, kind, brand, fLogo, fSnap, secs); }
+                    catch (Throwable t) { Log.w("TvHome", "alert show failed: " + t); }
+                    finally { pr.finish(); }
+                });
+            } catch (Throwable t) { pr.finish(); }
         }).start();
     }
 
     private static String nz(String s, String d) { return s == null || s.isEmpty() ? d : s; }
 
+    private static String cap(String s, int max) { return s.length() <= max ? s : s.substring(0, max); }
+
+    /** Brand is only ever turned into assets/brands/<brand>.png, so keep it to plain filename characters. */
+    private static String safeBrand(String b) { return b.length() <= 32 && b.matches("[A-Za-z0-9._-]+") ? b : ""; }
+
+    /** Token bucket. Normal use (a few alerts a minute) never notices; a flood gets dropped instead of drawn. */
+    private static boolean allowed() {
+        synchronized (GATE) {
+            long now = SystemClock.elapsedRealtime();
+            if (tokenStamp == 0) tokenStamp = now;
+            tokens = Math.min(BURST, tokens + (now - tokenStamp) / (double) REFILL_MS);
+            tokenStamp = now;
+            if (tokens < 1) return false;
+            tokens -= 1;
+            return true;
+        }
+    }
+
+    /** http(s) only, capped download and bounded decode (see Net); null means "card without a snapshot". */
     private static Bitmap fetch(String url) {
-        try {
-            HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
-            c.setConnectTimeout(2500);
-            c.setReadTimeout(3500);
-            try (InputStream is = c.getInputStream()) {
-                BitmapFactory.Options o = new BitmapFactory.Options();
-                o.inSampleSize = 2;
-                return BitmapFactory.decodeStream(is, null, o);
-            }
-        } catch (Exception e) { return null; }
+        Bitmap b = Net.image(url, 2500, 3500, 2, MAX_IMAGE_PIXELS);
+        if (b == null) Log.w("TvHome", "alert: snapshot unusable, showing the card without it");
+        return b;
     }
 
     private static Bitmap asset(Context c, String name) {

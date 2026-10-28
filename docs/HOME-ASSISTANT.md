@@ -61,6 +61,11 @@ data: {title: "Doorbell pushed", text: "Someone is at the front door", kind: doo
 `kind`: `doorbell` (red), `motion` (amber), `warn`, `info`. It shows on every Fire TV that is on, top right, with a countdown bar.
 The launcher needs the "display over other apps" permission (the install script grants it:
 `adb shell appops set com.mihir.tvhome SYSTEM_ALERT_WINDOW allow`). Use it for doorbells, bins, finished washing, timers.
+Only the TV's shell (ADB, which is what the command above uses) and system apps can send a card: the receiver in
+`launcher/AndroidManifest.xml` requires `android.permission.DUMP`, which an ordinary installed app does not hold, so nothing
+on the TV can spoof a card. If you have a sender that is not the shell and stops working, remove that attribute and rebuild.
+Snapshots are downloaded with a size cap and shrunk to a sane resolution, and cards are rate-limited, so a stuck
+integration cannot flood the screen or exhaust the TV's memory.
 Brand badges (`brand: google`) need logo files you add yourself under `launcher/profiles/<name>/assets/brands/<brand>.png`.
 
 ## 6. Other helpers
@@ -74,3 +79,4 @@ Brand badges (`brand: google`) need logo files you add yourself under `launcher/
   need `sh -c '...'` to use pipes.
 - Cards not updating: run `shell_command.tvhome_keep` from Developer tools > Actions and read the response.
 - Alerts do nothing: the TV must be on and ADB connected (`media_player` not `unavailable`); check the overlay permission.
+  The broadcast must come from the TV's shell (see section 5) — an app on the TV cannot send cards.

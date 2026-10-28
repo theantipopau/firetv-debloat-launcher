@@ -2,9 +2,12 @@
 """Download free wallpapers into launcher/assets/wallpapers and record credits.
 
 Source (free, no account or API key). Add your own .jpg files to the folder too; anything 1920x1080 or larger works:
-  nasa  NASA Image and Video Library (public domain)        - space, Earth from orbit
+  nasa  NASA Image and Video Library (public domain)        - space, Earth from orbit (opt-in)
 
-Usage: python tools/fetch_wallpapers.py [--nasa 8] [--out launcher/assets/wallpapers]
+The shipped set is nature and art only; --nasa defaults to 0 so running this does not bring space
+imagery back. Pass --nasa N if you want it.
+
+Usage: python tools/fetch_wallpapers.py [--nasa N] [--out launcher/assets/wallpapers]
 Then rebuild the APK. Delete any picture you do not like before building.
 """
 import argparse, json, os, re, sys, urllib.parse, urllib.request
@@ -65,7 +68,7 @@ def nasa(out, n):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--nasa", type=int, default=8)
+    ap.add_argument("--nasa", type=int, default=0)
     ap.add_argument("--out", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "launcher", "assets", "wallpapers"))
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)

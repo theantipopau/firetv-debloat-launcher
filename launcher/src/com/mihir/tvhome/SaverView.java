@@ -16,8 +16,6 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
@@ -126,16 +124,10 @@ public class SaverView extends FrameLayout {
     /** Same JSON the home panel reads: temp, condition, next. */
     private void fetchInfo() {
         new Thread(() -> {
+            final String body = Net.text(getContext().getString(R.string.ha_json_url), 2500, 3500, Net.MAX_JSON_BYTES);
+            if (body == null) return;
             try {
-                HttpURLConnection c = (HttpURLConnection) new URL(getContext().getString(R.string.ha_json_url)).openConnection();
-                c.setConnectTimeout(2500);
-                c.setReadTimeout(3500);
-                StringBuilder sb = new StringBuilder();
-                try (InputStream is = c.getInputStream()) {
-                    byte[] b = new byte[4096];
-                    for (int n; (n = is.read(b)) > 0; ) sb.append(new String(b, 0, n, "UTF-8"));
-                }
-                org.json.JSONObject j = new org.json.JSONObject(sb.toString());
+                org.json.JSONObject j = new org.json.JSONObject(body);
                 String s = j.optString("temp", "--") + "°" + (j.has("condition") ? "  ·  " + j.optString("condition") : "");
                 String next = j.optString("next", "");
                 final String line = next.isEmpty() ? s : s + "\n" + next;

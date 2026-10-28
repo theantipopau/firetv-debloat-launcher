@@ -5,6 +5,8 @@
 A clean, fast, ad-free home screen for **Amazon Fire TV**, plus a reversible debloat script. No ads, no sponsored rows, no
 account, no cloud. Works on its own; [Home Assistant](docs/HOME-ASSISTANT.md) is optional.
 
+Current release: **v1.1** — see the [changelog](CHANGELOG.md).
+
 ![Home screen](docs/img/home.jpg)
 
 | Alert cards over any app | While Home is opening | Screensaver |
@@ -24,7 +26,8 @@ Other Fire OS 7 devices will probably work. Not tested on Fire OS 8 / Vega OS de
 - Hold OK on any app to move it, add it to the main row, hide it, open its info or uninstall it. No rebuild needed.
 - Settings and Wi-Fi/Ethernet pills open Amazon's own full-screen pages; **Inputs** pill on devices with HDMI in (Cube).
 - Screensaver (big clock over a drifting wallpaper) instead of Amazon's ad-supported one.
-- Alert cards over whatever is playing: doorbell, bins, timers (`am broadcast`, or from Home Assistant).
+- Alert cards over whatever is playing: doorbell, bins, timers (`am broadcast`, or from Home Assistant). Only shell/ADB
+  senders can trigger one, so an app installed on the TV cannot spoof a card.
 - **Debloat script** (reversible): disables Amazon shopping, ad-ID and content-recognition packages, limits ad tracking, speeds up animations.
 - Optional Home Assistant link: weather / solar / battery / bins panel, Plex "keep watching" cards, sleep timer, doorbell card.
   Plus [prompts for Claude, Codex or any AI agent](docs/AI-PROMPTS.md) that do the setup for you.
@@ -53,4 +56,4 @@ Ad hosts to block in Pi-hole / AdGuard: [docs/DEBLOAT.md](docs/DEBLOAT.md).
 MIT. Forked from [mihirgupta0900/tv-home](https://github.com/mihirgupta0900/tv-home) (Android TV launcher, original README in
 [docs/UPSTREAM-README.md](docs/UPSTREAM-README.md)). Fire TV port, Home-key service, cover screen, alerts, screensaver, debloat tools and
 Home Assistant integration added here. App tiles use each app's own banner from your device. Wallpapers: see
-[`launcher/WALLPAPER-CREDITS.md`](launcher/WALLPAPER-CREDITS.md) (Wikimedia Commons CC BY-SA, NASA public domain).
+[`launcher/WALLPAPER-CREDITS.md`](launcher/WALLPAPER-CREDITS.md) (Wikimedia Commons: nature photos CC BY-SA, paintings public domain).
