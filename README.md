@@ -5,7 +5,7 @@
 A clean, fast, ad-free home screen for **Amazon Fire TV**, plus a reversible debloat script. No ads, no sponsored rows, no
 account, no cloud. Works on its own; [Home Assistant](docs/HOME-ASSISTANT.md) is optional.
 
-Current release: **v1.1** — see the [changelog](CHANGELOG.md).
+Current release: **v1.2** — see the [changelog](CHANGELOG.md).
 
 ![Home screen](docs/img/home.jpg)
 
@@ -29,7 +29,8 @@ Other Fire OS 7 devices will probably work. Not tested on Fire OS 8 / Vega OS de
 - Alert cards over whatever is playing: doorbell, bins, timers (`am broadcast`, or from Home Assistant). Only shell/ADB
   senders can trigger one, so an app installed on the TV cannot spoof a card.
 - **Debloat script** (reversible): disables Amazon shopping, ad-ID and content-recognition packages, limits ad tracking, speeds up animations.
-- Optional Home Assistant link: weather / solar / battery / bins panel, Plex "keep watching" cards, sleep timer, doorbell card.
+- Optional Home Assistant link: weather / solar / battery / bins panel, Plex "keep watching" cards, a rotating
+  "new on Plex" tile, sleep timer, doorbell card.
   Plus [prompts for Claude, Codex or any AI agent](docs/AI-PROMPTS.md) that do the setup for you.
 
 ## Quick start

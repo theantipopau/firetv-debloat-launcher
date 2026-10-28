@@ -116,8 +116,19 @@ public class MainActivity extends Activity {
     // ---- Home Assistant snapshot panel (JSON written by an HA automation, polled over the LAN)
     static volatile long suppressRedirectUntil;
     private static final int KEEP_W_DP = 156;   // slim strip: the row reads as secondary to the app title
+    private static final int NEW_W_DP = KEEP_W_DP * 2 + 10;   // the new-media banner spans two slots
+    private static final long NEW_EVERY_MS = 7000;
     private LinearLayout keepRow;
     private final List<View> keepCards = new ArrayList<>();
+    // Rotating "new on Plex" tile: the first card in the keep row. Its layers are the individual
+    // titles, crossfaded in place, so the focus target never moves while the artwork changes.
+    private View newTile;
+    private final List<View> newLayers = new ArrayList<>();
+    private final List<JSONObject> newItems = new ArrayList<>();
+    private TextView newCaption;
+    private int newCur;
+    private String newSig = "";
+    private final Runnable newTick = this::advanceNew;
     private LinearLayout haPanel;
     private TextView haBig, haSub, haL1, haL2, haL3, haL4, haL5;
     private FrameLayout settingsPage;
@@ -131,7 +142,7 @@ public class MainActivity extends Activity {
     private String familyName, deviceName;
     private int pollN;
     private final Runnable haPoll = new Runnable() {
-        @Override public void run() { fetchHa(); if (pollN++ % 20 == 0) fetchKeep(); handler.postDelayed(this, 15000); }
+        @Override public void run() { fetchHa(); if (pollN++ % 20 == 0) { fetchKeep(); fetchNew(); } handler.postDelayed(this, 15000); }
     };
 
     private final BroadcastReceiver tick = new BroadcastReceiver() {
@@ -184,6 +195,7 @@ public class MainActivity extends Activity {
         handler.postDelayed(this::ensureHomeService, 4000);
         handler.removeCallbacks(haPoll);
         handler.post(haPoll);
+        startNewRotation();
         if (pendingFocusPkg != null) {   // keep the cursor on an app we just moved
             for (View c : dockCards) if (((App) c.getTag()).pkg.equals(pendingFocusPkg)) lastFocusedId = c.getId();
             for (View c : gridCards) if (((App) c.getTag()).pkg.equals(pendingFocusPkg)) lastFocusedId = c.getId();
@@ -205,6 +217,7 @@ public class MainActivity extends Activity {
         super.onPause();
         handler.removeCallbacks(rotateWallpaper);
         handler.removeCallbacks(haPoll);
+        handler.removeCallbacks(newTick);
         handler.removeCallbacks(idle);
         unregisterReceiver(tick);
         if (scrollGlide != null) scrollGlide.cancel();
@@ -379,11 +392,18 @@ public class MainActivity extends Activity {
     }
 
     private void showKeep(org.json.JSONArray items, List<Bitmap> imgs, List<Bitmap> logos) {
-        if (items == null || items.length() == 0) { keepRow.setVisibility(View.GONE); return; }
+        boolean hadFocus = newTile != null && newTile.isFocused();
         keepRow.removeAllViews();
         keepCards.clear();
         // The row does not scroll, so extra cards would run off the edge under the weather panel.
-        int shown = Math.min(items.length(), 5);
+        // The new-media tile takes the first slot when it is enabled, leaving room for four cards.
+        if (newTile != null) {
+            keepCards.add(newTile);
+            keepRow.addView(newTile, llp(dp(NEW_W_DP), -2, 0, 0, dp(10), 0));
+            if (hadFocus) newTile.requestFocus();
+        }
+        // A two-slot banner plus one resume card is what fits beside the weather panel.
+        int shown = items == null ? 0 : Math.min(items.length(), newTile == null ? 5 : 1);
         for (int i = 0; i < shown; i++) {
             JSONObject it = items.optJSONObject(i);
             if (it != null) {
@@ -392,6 +412,7 @@ public class MainActivity extends Activity {
                 keepRow.addView(kc, llp(dp(KEEP_W_DP), -2, 0, 0, dp(10), 0));
             }
         }
+        if (keepRow.getChildCount() == 0) { keepRow.setVisibility(View.GONE); return; }
         if (keepRow.getVisibility() != View.VISIBLE) {
             keepRow.setVisibility(View.VISIBLE);
             if (!keepShown) {
@@ -403,6 +424,7 @@ public class MainActivity extends Activity {
             }
         }
         rewireKeep();
+        startNewRotation();   // the rebuild detaches and re-adds the tile; make sure its timer survived
     }
 
     private View keepCard(JSONObject it, Bitmap bm, Bitmap logo) {
@@ -522,6 +544,238 @@ public class MainActivity extends Activity {
             pressUndo(card, 1.05f);
         });
         return box;
+    }
+
+    // ---------------------------------------------------------------- new on Plex (rotating tile)
+
+    private void fetchNew() {
+        final String url = getString(R.string.new_json_url);
+        if (url.isEmpty()) return;
+        new Thread(() -> {
+            final String body = Net.text(url, 4000, 4000, Net.MAX_JSON_BYTES);
+            if (body == null) return;
+            try {
+                final org.json.JSONArray items = new JSONObject(body).optJSONArray("items");
+                if (items == null || items.length() == 0) { runOnUiThread(this::hideNewTile); return; }
+                StringBuilder sig = new StringBuilder();
+                for (int i = 0; i < items.length(); i++) {
+                    JSONObject it = items.optJSONObject(i);
+                    if (it != null) sig.append(it.optString("uri", "")).append('|').append(it.optString("image", "")).append('|');
+                }
+                final String sigNow = sig.toString();
+                // Same list as the one already on screen: leave it alone. Rebuilding would restart the
+                // crossfade every poll and re-download eight stills every five minutes.
+                if (newTile != null && sigNow.equals(newSig)) return;
+                final List<Bitmap> imgs = new ArrayList<>(), logos = new ArrayList<>();
+                for (int i = 0; i < items.length(); i++) {
+                    JSONObject it = items.getJSONObject(i);
+                    String img = it.optString("image", "");
+                    imgs.add(img.isEmpty() ? null : Net.image(img, 4000, 4000, 1, Net.MAX_PANEL_PIXELS));
+                    String logo = it.optString("logo", "");
+                    logos.add(logo.isEmpty() ? null : Net.image(logo, 4000, 4000, 1, Net.MAX_PANEL_PIXELS));
+                }
+                runOnUiThread(() -> showNew(items, imgs, logos, sigNow));
+            } catch (Exception ignored) { }
+        }).start();
+    }
+
+    private void showNew(org.json.JSONArray items, List<Bitmap> imgs, List<Bitmap> logos, String sig) {
+        newSig = sig;
+        newItems.clear();
+        for (int i = 0; i < items.length(); i++) {
+            JSONObject it = items.optJSONObject(i);
+            if (it != null) newItems.add(it);
+        }
+        boolean hadFocus = newTile != null && newTile.isFocused();
+        if (newTile != null) {
+            handler.removeCallbacks(newTick);
+            keepRow.removeView(newTile);
+            keepCards.remove(newTile);
+        }
+        newTile = buildNewTile(imgs, logos);
+        keepRow.addView(newTile, 0, llp(dp(NEW_W_DP), -2, 0, 0, dp(10), 0));
+        keepCards.add(0, newTile);
+        // The two feeds race at startup: if the resume cards got there first they were laid out without the
+        // banner and would now run under the weather panel. One resume card is all that fits beside it.
+        while (keepCards.size() > 2) {
+            View extra = keepCards.remove(keepCards.size() - 1);
+            keepRow.removeView(extra);
+        }
+        if (keepRow.getVisibility() != View.VISIBLE) {
+            keepRow.setVisibility(View.VISIBLE);
+            keepRow.setAlpha(0f);
+            keepRow.setTranslationY(dp(10));
+            keepRow.animate().alpha(1f).translationY(0)
+                    .setInterpolator(new DecelerateInterpolator(2f)).setDuration(260).start();
+        }
+        rewireKeep();
+        startNewRotation();
+        if (hadFocus) newTile.requestFocus();
+    }
+
+    /** Feed emptied (nothing new left, or Plex removed the file): take the tile away, keep the row. */
+    private void hideNewTile() {
+        if (newTile == null) return;
+        handler.removeCallbacks(newTick);
+        keepRow.removeView(newTile);
+        keepCards.remove(newTile);
+        newTile = null;
+        newItems.clear();
+        newLayers.clear();
+        newSig = "";
+        if (keepRow.getChildCount() == 0) keepRow.setVisibility(View.GONE);
+        rewireKeep();
+    }
+
+    private View buildNewTile(List<Bitmap> imgs, List<Bitmap> logos) {
+        final int accent = 0xFFE5A00D;   // Plex orange
+        newLayers.clear();
+        newCur = 0;
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setClipChildren(false);
+        box.setClipToPadding(false);
+        box.setId(View.generateViewId());
+        box.setFocusable(true);
+        box.setClickable(true);
+
+        FrameLayout card = new AspectFrame(this);
+        card.setFocusable(false);
+        card.setClickable(false);
+        card.setClipToOutline(true);
+        card.setOutlineProvider(new ViewOutlineProvider() {
+            @Override public void getOutline(View v, Outline o) { o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), dp(16)); }
+        });
+        card.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{darken(accent, 0.55f), 0xFF14161C}));
+
+        FrameLayout stack = new FrameLayout(this);
+        for (int i = 0; i < newItems.size(); i++) {
+            View layer = newLayer(newItems.get(i), imgs.get(i), logos.get(i));
+            layer.setAlpha(i == 0 ? 1f : 0f);   // only the first frame paints; the rest wait their turn
+            newLayers.add(layer);
+            stack.addView(layer, new FrameLayout.LayoutParams(-1, -1));
+        }
+        card.addView(stack, new FrameLayout.LayoutParams(-1, -1));
+
+        TextView chip = text(9.5f, "sans-serif-medium", 0xFFF2C14E);
+        chip.setText("NEW ON PLEX");
+        chip.setLetterSpacing(0.18f);
+        GradientDrawable pill = new GradientDrawable();
+        pill.setCornerRadius(dp(5));
+        pill.setColor(0xCC000000);
+        chip.setBackground(pill);
+        chip.setPadding(dp(8), dp(4), dp(8), dp(4));
+        card.addView(chip, lp(-2, -2, Gravity.TOP | Gravity.START, dp(10), dp(10), 0, 0));
+
+        box.addView(card, new LinearLayout.LayoutParams(-1, -2));
+
+        newCaption = text(10.5f, "sans-serif", 0xD9FFFFFF);
+        newCaption.setSingleLine(true);
+        newCaption.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        newCaption.setShadowLayer(dp(3), 0, dp(1), 0xCC000000);
+        box.addView(newCaption, llp(-1, -2, 0, dp(6), 0, 0));
+        updateNewCaption();
+
+        GradientDrawable ring = new GradientDrawable();
+        ring.setCornerRadius(dp(16));
+        // A hairline even when idle: the banner reads as a frame, not a fourth resume card.
+        ring.setStroke(dp(1), 0x33FFFFFF);
+        card.setForeground(ring);
+        card.setElevation(dp(6));
+        box.setOnFocusChangeListener((v, has) -> {
+            ring.setStroke(dp(2), has ? 0xFFFFFFFF : 0x33FFFFFF);
+            card.animate().scaleX(has ? 1.05f : 1f).scaleY(has ? 1.05f : 1f)
+                    .translationZ(has ? dp(14) : 0)
+                    .setInterpolator(has ? new OvershootInterpolator(1.5f) : new DecelerateInterpolator())
+                    .setDuration(has ? 240 : 180).start();
+            // Hold the frame while focused: OK must open exactly what is on screen.
+            handler.removeCallbacks(newTick);
+            if (!has) handler.postDelayed(newTick, 1500);
+        });
+        box.setOnClickListener(v -> {
+            if (newCur >= newItems.size()) return;
+            JSONObject it = newItems.get(newCur);
+            pressDip(card, 1.05f);
+            String uri = it.optString("uri", ""), pkg = it.optString("pkg", "");
+            if (!uri.isEmpty()) {
+                Intent i = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(uri));
+                if (!pkg.isEmpty()) i.setPackage(pkg);
+                if (launch(i)) return;
+            }
+            if (!pkg.isEmpty() && openPackage(pkg)) return;
+            pressUndo(card, 1.05f);
+        });
+        return box;
+    }
+
+    /** One title: still, shade and its logo (or the name when Plex has no logo for it). */
+    private View newLayer(JSONObject it, Bitmap bm, Bitmap logo) {
+        FrameLayout layer = new FrameLayout(this);
+        if (bm != null) {
+            ImageView iv = new ImageView(this);
+            iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            iv.setImageBitmap(bm);
+            layer.addView(iv, new FrameLayout.LayoutParams(-1, -1));
+        }
+        View shade = new View(this);
+        shade.setBackground(new GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP,
+                new int[]{0xC9000000, 0x66000000, 0x00000000}));
+        layer.addView(shade, new FrameLayout.LayoutParams(-1, -1));
+        FrameLayout.LayoutParams capLp = new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.START);
+        capLp.setMargins(dp(10), 0, dp(10), dp(11));
+        if (logo != null) {
+            ImageView lv = new ImageView(this);
+            lv.setImageBitmap(logo);
+            lv.setAdjustViewBounds(true);
+            lv.setScaleType(ImageView.ScaleType.FIT_START);
+            lv.setMaxHeight(dp(30));
+            lv.setMaxWidth(dp(200));
+            lv.setContentDescription(it.optString("title", ""));
+            layer.addView(lv, capLp);
+        } else {
+            TextView cap = text(11.5f, "sans-serif-medium", Color.WHITE);
+            cap.setSingleLine(true);
+            cap.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            cap.setText(it.optString("title", ""));
+            layer.addView(cap, capLp);
+        }
+        return layer;
+    }
+
+    private void updateNewCaption() {
+        if (newCaption == null || newCur >= newItems.size()) return;
+        JSONObject it = newItems.get(newCur);
+        // Title only: at this width the season line pushed it into an ellipsis, and the chip already says
+        // it is new. The artwork carries the rest.
+        SpannableStringBuilder meta = new SpannableStringBuilder();
+        coloured(meta, it.optString("title", ""), 0xF2FFFFFF);
+        setSpan(newCaption, meta);
+        newCaption.animate().cancel();
+        newCaption.setAlpha(0f);
+        newCaption.animate().alpha(1f).setDuration(240).start();
+    }
+
+    private void advanceNew() {
+        handler.removeCallbacks(newTick);
+        // Focus is the pause: a flag could survive a row rebuild and stall the tile for good.
+        if (newLayers.size() < 2 || (newTile != null && newTile.isFocused())) return;
+        int next = (newCur + 1) % newLayers.size();
+        View in = newLayers.get(next), out = newLayers.get(newCur);
+        in.animate().cancel();
+        out.animate().cancel();
+        in.setAlpha(0f);
+        in.animate().alpha(1f).setDuration(420).start();
+        out.animate().alpha(0f).setDuration(420).start();
+        newCur = next;
+        updateNewCaption();
+        handler.postDelayed(newTick, NEW_EVERY_MS);
+    }
+
+    private void startNewRotation() {
+        handler.removeCallbacks(newTick);
+        if (newLayers.size() > 1 && (newTile == null || !newTile.isFocused()))
+            handler.postDelayed(newTick, NEW_EVERY_MS);
     }
 
     // ---------------------------------------------------------------- full-screen settings

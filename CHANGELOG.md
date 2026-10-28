@@ -3,6 +3,30 @@
 All notable changes to the Fire TV Debloat Launcher. Versions match `versionName` in
 [`launcher/AndroidManifest.xml`](launcher/AndroidManifest.xml).
 
+## 1.2 — 2026-10-28
+
+### Added
+- **A rotating "new on Plex" banner.** With `new_json_url` set, the keep-watching row opens with a two-slot wide card —
+  hairline frame, larger logo, "NEW ON PLEX" chip — that crossfades through the newest movies and episodes in your Plex
+  libraries every seven seconds. It holds still while focused, so OK always opens what is on screen, and titles the row
+  is already showing are skipped rather than duplicated next to themselves.
+- `tvhome_keep.py` now writes `tvhome_new.json` on the same run: five recent film releases (this year or last) plus
+  five episodes that aired in the past 60 days, one card per series. Old titles being imported or backfilled are
+  filtered out by release/air date, so the tile shows what is actually new rather than what Plex scanned last.
+  `PLEX_NEW_MOVIES`, `PLEX_NEW_EPISODES`, `PLEX_NEW_DAYS` and `PLEX_NEW_LIBS` tune it. Artwork only downloads again
+  when the list changes, so a quiet library costs a couple of API calls per run.
+
+### Fixed
+- `tvhome_keep.py` warns when `plex_url` or `ha_base_url` is missing from `secrets.yaml` instead of quietly falling
+  back to `localhost:32400` / `homeassistant.local:8123` — the second one produced cards with titles but no artwork,
+  because Fire OS could not resolve that name for the images.
+- The two feeds race at startup; if the resume cards arrived first they kept their full count and slid under the
+  weather panel once the banner appeared. The row is now trimmed to one resume card when the banner is present.
+
+### Changed
+- The keep row shows one resume card beside the banner: a two-slot card plus one 16:9 card is what fits in front of the
+  weather panel. Without `new_json_url` the row is unchanged (up to five resume cards).
+
 ## 1.1.1 — 2026-10-28
 
 ### Fixed

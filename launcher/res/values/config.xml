@@ -36,6 +36,9 @@
          See docs/HOME-ASSISTANT.md. Example: http://homeassistant.local:8123/local/tvhome.json -->
     <string name="ha_json_url" translatable="false"></string>
     <string name="keep_json_url" translatable="false"></string>
+    <!-- Rotating "new on Plex" tile, written by the same script as tvhome_keep.json. Empty = no tile.
+         Example: http://homeassistant.local:8123/local/tvhome_new.json -->
+    <string name="new_json_url" translatable="false"></string>
 
     <!-- Greeting shows "Good evening, <family_name>"; the date line ends with <device_name>. Both optional. -->
     <string name="family_name" translatable="false"></string>
