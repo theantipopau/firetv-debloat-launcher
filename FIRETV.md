@@ -5,7 +5,8 @@ A fast, ad-free, Apple TV style home screen for Fire TV, forked from
 Not affiliated with Amazon. Everything here is reversible; nothing is uninstalled.
 
 ## What you get
-- Clean home: greeting, clock, wallpaper slideshow (slow zoom, time-of-day tint), app dock plus an apps list.
+- Clean home: greeting, a large clock, wallpaper slideshow (slow zoom, time-of-day tint), app dock plus an apps list.
+  Inter throughout, frosted panels, and a single focus language of scale, shadow and light rather than borders.
 - **Home button works, and a reboot comes back here.** Fire OS starts its own launcher at boot even when this
   one is selected as home, so the app takes the screen back a few seconds after boot. An accessibility service
   catches the Home key; Android holds other apps back for about 5 seconds after Home is pressed, so a cover screen

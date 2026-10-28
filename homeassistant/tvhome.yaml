@@ -88,6 +88,15 @@ automation:
             ac: ""                                    # e.g. "cool", "heat" or "off"; "" hides it
             bins: ""                                  # e.g. "General bins - out tonight"
             next: ""                                  # e.g. "Next: 6:30pm Football training"
+            next_at: 0                                # optional: epoch seconds of that event, so the TV can say "in 2 h"
+            # Optional but recommended: seconds since each entity last changed. The TV dims a value
+            # to 40% and labels it "updated 42 min ago" once it is older than 15 minutes.
+            ages:
+              temp: "{{ (now() - states.weather.home.last_changed).total_seconds() | int(0) }}"
+              solar: "{{ (now() - states.sensor.solar_power.last_changed).total_seconds() | int(0) }}"
+              battery: "{{ (now() - states.sensor.battery_soc.last_changed).total_seconds() | int(0) }}"
+              house: "{{ (now() - states.sensor.house_power.last_changed).total_seconds() | int(0) }}"
+              inside: "{{ (now() - states.sensor.living_room_temperature.last_changed).total_seconds() | int(0) }}"
       - action: shell_command.write_tvhome
         data:
           payload: "{{ snap | tojson | base64_encode }}"

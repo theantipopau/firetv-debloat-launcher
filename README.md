@@ -29,8 +29,8 @@ Other Fire OS 7 devices will probably work. Not tested on Fire OS 8 / Vega OS de
 - Alert cards over whatever is playing: doorbell, bins, timers (`am broadcast`, or from Home Assistant). Only shell/ADB
   senders can trigger one, so an app installed on the TV cannot spoof a card.
 - **Debloat script** (reversible): disables Amazon shopping, ad-ID and content-recognition packages, limits ad tracking, speeds up animations.
-- Optional Home Assistant link: weather / solar / battery / bins panel, Plex "keep watching" cards, a rotating
-  tile of what is live now (sport and films) and new on Plex, sleep timer, doorbell card.
+- Optional Home Assistant link: a frosted weather / solar / battery / bins panel, and one hero banner that rotates
+  through live sport, what you were watching and new on Plex. Plus a sleep timer and doorbell card.
   Plus [prompts for Claude, Codex or any AI agent](docs/AI-PROMPTS.md) that do the setup for you.
 
 ## Quick start

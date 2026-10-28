@@ -7,8 +7,8 @@ JSON files that HA writes into its public `www` folder, and HA talks to the TV t
 
 ```
 HA automation --writes--> /config/www/tvhome.json -----> launcher polls every 15 s   (info panel + Home-button cover)
-HA script     --writes--> /config/www/tvhome_keep.json -> launcher polls every 5 min (keep-watching cards)
-HA script     --writes--> /config/www/tvhome_new.json  -> same poll          (rotating live-now / new-on-Plex tile)
+HA script     --writes--> /config/www/tvhome_keep.json -> launcher polls every 5 min (continue watching)
+HA script     --writes--> /config/www/tvhome_new.json  -> same poll          (live now + new on Plex)
 HA scripts    --adb broadcast--> TV ----------------------> alert card over whatever is playing
 ```
 
@@ -28,17 +28,21 @@ This gives `media_player.<name>` which the scripts below use. If the TV's IP cha
    `http://<ha-ip>:8123/local/tvhome_new.json`, then rebuild and reinstall.
 
 ## 3. The info panel (`tvhome.json`)
-Keys (all optional; an empty or missing value hides that row):
+Keys (all optional; an empty or missing value hides that tile):
 
 | key | example | shown as |
 |---|---|---|
-| `temp`, `feels` | `22`, `21` | big temperature, "feels" |
-| `condition` | `partly cloudy` | weather emoji and text |
-| `rain` | `Dry right now - 0.0 mm today` | rain line |
-| `solar`, `battery`, `house` | `3.2`, `72`, `1.4` | kW, %, kW |
-| `inside`, `ac` | `24.5`, `cool` | indoor temp, air-con state |
-| `bins` | `General bins - out tonight` | bin line |
-| `next` | `Next: 6:30pm Training` | next calendar event |
+| `temp`, `feels` | `22`, `21` | 72sp temperature, condition and "feels" beside it |
+| `solar`, `battery`, `house` | `3.2`, `72`, `1.4` | top row of tiles: kW (one decimal), %, kW |
+| `inside`, `ac` | `24.5`, `cool` | bottom row: indoor temperature, air-con state |
+| `bins` | `General bins - out tonight` | "General" with `TONIGHT` / `TOMORROW` under it, in the one accent colour |
+| `rain` | `Dry right now - 0.0 mm today` | one line; a dry forecast collapses to "No rain expected" |
+| `next`, `next_at` | `Next: 6:30pm Training`, `1793239200` | one line, bracketed codes removed, "· in 2 h" from `next_at` |
+| `ages` | `{"solar": 2400}` | a value older than 15 minutes dims to 40% and its label becomes `40m ago` |
+
+The panel is a frosted sample of the wallpaper, the values are white, the labels are white at 60%, and exactly one
+accent colour (amber) is used - only where something needs attention (bins due, rain on the way). Values in kW are
+rounded to one decimal place.
 
 The same file feeds the cover screen shown right after you press Home.
 Update speed is limited by your sensors (cloud inverter integrations often update every 5 minutes; local Modbus/MQTT is much faster).
@@ -62,21 +66,31 @@ optional **manual** card is available: put `Title|Season line|netflix-title-id` 
 
 The same run writes `tvhome_new.json`: five recent film releases plus five episodes that aired in the last 60 days, one
 card per series. It is deliberately not just "recently added" — a 1994 film imported this week or an old series being
-backfilled stays out, because the tile is meant to show what is genuinely new. With `new_json_url` set, the launcher puts
-a wide **NEW ON PLEX** banner at the head of the keep-watching row and crossfades through that list every seven seconds;
-it holds still while focused, so OK always opens what you can see. It spans two card widths, so the row shows one resume
-card beside it (five when the banner is off). Point it at
-`http://<ha-ip>:8123/local/tvhome_new.json`. Optional env: `PLEX_NEW_LIBS` (comma-separated section names; default every
-movie/show section), `PLEX_NEW_MOVIES` and `PLEX_NEW_EPISODES`. The list only downloads artwork again when a title is
-added or removed, so a quiet library costs a couple of API calls per run.
+backfilled stays out, because the banner is meant to show what is genuinely new.
+
+### The hero banner
+`new_json_url` and `keep_json_url` feed **one** wide banner above the dock, one title at a time, in this order: live
+sport and films, then what you are part-way through, then what is new on Plex (eight at most, so it comes back round
+in a little over a minute). Each frame carries its artwork, a source chip (`LIVE ON TIVIMATE`, `CONTINUE WATCHING`,
+`NEW ON PLEX`), the title or its clearlogo, and a single meta line - `LIVE · 7AFL · Ends 10:24 AM` or
+`PLEX · S1 · E1 · 13 min left` - with a slim progress bar when there is progress. It crossfades in 600 ms, drifts
+slowly inwards for the whole dwell, changes every nine seconds, and **holds still while focused** so OK always opens
+what you can see. Left/Right on the D-pad steps it by hand; the dots show where you are. Down goes to the dock, Up
+comes back.
+
+Set `new_json_url` to `http://<ha-ip>:8123/local/tvhome_new.json`. Optional env: `PLEX_NEW_LIBS` (comma-separated
+section names; default every movie/show section), `PLEX_NEW_MOVIES` and `PLEX_NEW_EPISODES`. The list only downloads
+artwork again when a title is added or removed, so a quiet library costs a couple of API calls per run.
 
 ### Live now
-Put the XMLTV guides (the same URLs TiviMate uses) in `epg_urls`, comma separated, and the head of the tile becomes
-what is on right now: live sport first, then one film. Each card gets a red-dot **LIVE ON TIVIMATE** chip and a
-"channel · until 21:35" caption; OK opens TiviMate, at whatever channel it was last on — Android does not let another
-app deep-link into TiviMate's player. A card carries its end time, so the TV drops it once the programme has finished
-rather than waiting for the next ten-minute refresh. If the guide has no still for a programme, the channel logo is
-shown contained on the card instead of being cropped to fill it.
+Put the XMLTV guides (the same URLs TiviMate uses) in `epg_urls`, comma separated, and live programmes join the head of
+the banner: live sport first, then one film. Each frame gets a red-dot **LIVE ON TIVIMATE** chip and the meta line
+`LIVE · <channel> · Ends <time>`; OK opens TiviMate, at whatever channel it was last on — Android does not let another
+app deep-link into TiviMate's player. The end time is formatted **on the TV**, from the epoch value in the feed, in the
+device's own time zone and its own 12/24-hour setting (the guide's zone is only used to read the guide, never to display
+a time). A frame carries its end time, so the TV drops it once the programme has finished rather than waiting for the
+next ten-minute refresh. If the guide has no still for a programme, the channel logo is shown contained instead of being
+cropped to fill the space.
 
 What counts: sport categories (cricket, rugby, football/AFL, golf, racing, the US leagues) with a live tag, a "v" fixture
 or a named sport, plus films in a Movie category. Replays, classics, highlights, countdowns and studio shows are
@@ -92,9 +106,9 @@ guide is 11 MB, so that matters. Point `EPG_URLS` at a local file to try a guide
 | `PLEX_COUNT` | `1` | how many episode cards to build |
 | `PLEX_NEW_LIBS` | all movie/show sections | sections that feed the new-on-Plex tile |
 | `PLEX_NEW_MOVIES` | `5` | film cards (released this year or last only) |
-| `PLEX_NEW_EPISODES` | `5` | episode cards, one per series |
+| `PLEX_NEW_EPISODES` | `5` | episode entries, one per series |
 | `PLEX_NEW_DAYS` | `60` | an episode counts as new if it aired inside this many days |
-| `LIVE_COUNT` | `4` | live cards mixed in ahead of the new-on-Plex ones |
+| `LIVE_COUNT` | `4` | live programmes mixed in ahead of the new-on-Plex ones |
 | `EPG_URLS` | `epg_urls` secret | guide URLs, if you would rather set them in the shell command |
 
 ## 5. Alerts over any app

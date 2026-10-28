@@ -26,8 +26,36 @@ All notable changes to the Fire TV Debloat Launcher. Versions match `versionName
   (`cmd package set-home-activity`), so the system has a preferred home as well as the accessibility service.
 
 ### Changed
+- **Inter, in four static weights** (Light, Regular, Medium, SemiBold; SIL OFL, licence in `LICENSES/`). The whole
+  screen now uses one type scale: clock 96sp Light, temperature 72sp Light, headings 28sp SemiBold, body 22sp,
+  captions 18sp, nothing smaller. The clock, temperature and every figure use tabular numerals, so nothing shifts
+  as digits change. Small-caps labels use about half the old letter-spacing.
+- **The Home Assistant panel is a 3-column tile grid** instead of stacked coloured lines: solar, battery and house
+  load; inside, AC and bins. Monochrome line icons (Material Symbols Rounded), white values, 60% white labels, and
+  one accent colour used only for alerts. kW values are rounded to one decimal. Rain collapses to "No rain
+  expected" when there is none. Calendar text loses its bracketed codes and gains relative time ("· in 2 h"). A
+  value whose entity has not changed for 15 minutes dims to 40% and shows how old it is.
+- **Frosted glass instead of a flat black card.** The panel samples a pre-blurred copy of the current wallpaper at
+  its own position, with a 12% hairline and a 24dp radius, and the dock sits on its own gradient. RenderEffect needs
+  API 31 and this build targets 28 (Fire OS 7), so the blur is pre-computed off the main thread; until it exists the
+  panel falls back to 55% black.
+- **One hero banner replaces the tile row.** Live programmes, continue-watching and new-on-Plex now share a single
+  wide banner above the dock, one at a time, with a source chip, the title or its clearlogo, one meta line and dots.
+  It crossfades in 600 ms, drifts slowly inwards, changes every nine seconds, holds still while focused, and steps
+  with Left/Right. Eight frames at most.
+- **Dock focus is light, not a border.** The focused tile scales to 1.08, lifts 4dp with a soft shadow, and takes one
+  sheen sweep in 170 ms; the heavy focus ring and its dark variant for pale icons are gone. Tiles share a 14dp radius.
+- The app-name heading that used to float above the dock is gone; the banner carries the title instead.
+- Wi-Fi reports `Link 720 Mbps` (or just the network name when the driver will not say), so it cannot be mistaken
+  for the broadband speed. Guide end times are formatted on the TV in its own zone and 12/24-hour setting, and use
+  the same format as the clock.
 - Artwork is reused between runs, and a single failed image is retried on the next run without re-downloading
   the ones that worked.
+
+### Added (testing)
+- `tests/run.sh` runs 23 plain-JVM checks over the rules that are easy to get silently wrong: guide times converted
+  from a UK and a New Zealand feed into the TV's zone, 12/24-hour formatting, calendar cleaning, relative times, kW
+  rounding and the staleness threshold. No Gradle, no JUnit: the launcher has neither.
 
 ## 1.2 — 2026-10-28
 

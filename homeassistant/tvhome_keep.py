@@ -397,7 +397,10 @@ def live_cards():
             art = (icon.get("src", "") if icon is not None else "") or ch_icon
             card = {
                 "kind": "live", "app": "TiviMate", "pkg": "ar.tvplayer.tv",
-                "title": title, "caption": "%s \u00b7 until %s" % (channel, datetime.fromtimestamp(stop).strftime("%H:%M")),
+                # The launcher formats "until" itself, in the TV's own zone and 12/24-hour setting;
+                # caption stays as a fallback for older builds.
+                "title": title, "channel": channel,
+                "caption": "%s \u00b7 until %s" % (channel, datetime.fromtimestamp(stop).strftime("%H:%M")),
                 "progress": 0, "uri": "", "_art": art,
                 "_backup": ch_icon if art != ch_icon else "",
                 "_fit": 0 if (icon is not None and icon.get("src")) else 1,
