@@ -3,6 +3,8 @@ package com.mihir.tvhome;
 import android.accessibilityservice.AccessibilityService;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
+import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
@@ -17,6 +19,7 @@ import android.net.wifi.WifiManager;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.provider.Settings;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
@@ -69,6 +72,37 @@ public class HomeKeyService extends AccessibilityService {
     }
 
     @Override public boolean onUnbind(Intent intent) { running = false; instance = null; hideCover(); return super.onUnbind(intent); }
+
+    /** Put our accessibility service back after something turned it off. Android disables a package's
+     *  accessibility services when that package is updated, which silently kills Home interception until the
+     *  user finds the toggle again; this write is the one thing that brings it back (WRITE_SECURE_SETTINGS is
+     *  granted over ADB by the install script). */
+    static void rearm(Context c) {
+        try {
+            ComponentName me = new ComponentName(c, HomeKeyService.class);
+            String cur = Settings.Secure.getString(c.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+            String list = withService(cur, me);
+            // Clear then set: the accessibility manager only re-reads the list when the value actually changes.
+            Settings.Secure.putString(c.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, "");
+            Settings.Secure.putString(c.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, list);
+            Settings.Secure.putInt(c.getContentResolver(), Settings.Secure.ACCESSIBILITY_ENABLED, 1);
+        } catch (SecurityException ignored) { }
+    }
+
+    /** The accessibility list is "pkg/cls:pkg/cls:…". Ours goes on the end; anything else stays enabled.
+     *  Entries may be written in either long or short form, so both are recognised. */
+    private static String withService(String list, ComponentName comp) {
+        String longForm = comp.flattenToString();
+        String shortForm = comp.flattenToShortString();
+        if (list == null) return longForm;
+        String cur = list.trim();
+        if (cur.isEmpty()) return longForm;
+        for (String s : cur.split(":")) {
+            String entry = s.trim();
+            if (entry.equals(longForm) || entry.equals(shortForm)) return cur;   // already listed
+        }
+        return cur + ":" + longForm;
+    }
 
     /** Amazon's launcher is the system Home and cannot be disabled, so bounce it to ours whenever it appears. */
     @Override

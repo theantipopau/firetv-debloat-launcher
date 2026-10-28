@@ -3,6 +3,15 @@
 All notable changes to the Fire TV Debloat Launcher. Versions match `versionName` in
 [`launcher/AndroidManifest.xml`](launcher/AndroidManifest.xml).
 
+## 1.1.1 — 2026-10-28
+
+### Fixed
+- **Home went to Amazon's launcher after an update.** Android turns a package's accessibility services off when that
+  package is updated, and Fire OS only attaches them again at boot, so the first Home press after an update landed on
+  Amazon instead of the cover. `tools/firetv-install.sh` now reboots the TV when it finishes, the app re-arms the
+  service from `MY_PACKAGE_REPLACED` where the system honours it, and the install docs say to reboot after a manual
+  `adb install -r`. Both TVs were restored and verified after this change.
+
 ## 1.1 — 2026-10-28
 
 ### Added

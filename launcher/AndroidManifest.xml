@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.mihir.tvhome"
-    android:versionCode="2"
-    android:versionName="1.1">
+    android:versionCode="3"
+    android:versionName="1.1.1">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Granted over ADB so the Home-key service can re-enable itself if Android drops it. -->
@@ -63,6 +63,12 @@
             android:name=".AlertReceiver"
             android:exported="true"
             android:permission="android.permission.DUMP" />
+        <!-- Android turns our accessibility service off when this package is updated; this puts it back. -->
+        <receiver android:name=".UpdateReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
         <service
             android:name=".ClockDream"
             android:exported="true"

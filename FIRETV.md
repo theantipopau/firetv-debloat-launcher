@@ -28,8 +28,11 @@ Not affiliated with Amazon. Everything here is reversible; nothing is uninstalle
    tools/firetv-install.sh <tv-ip> launcher/out/tvhome.apk
    ```
    Accept the "Allow USB debugging" prompt on the TV the first time. The script installs, grants the
-   permissions the launcher needs, switches on the Home-button service and opens the launcher.
-5. Optional clean-up and speed-ups (reversible): `tools/firetv-tune.sh <tv-ip>`.
+   permissions the launcher needs, switches on the Home-button service and reboots the TV.
+5. If you install an updated APK another way (`adb install -r`), reboot the TV afterwards: Android turns an app's
+   accessibility services off when the app is updated, and Fire OS only attaches them again at boot. Without the
+   reboot the next Home press goes to Amazon's launcher.
+6. Optional clean-up and speed-ups (reversible): `tools/firetv-tune.sh <tv-ip>`.
 
 ## Make it yours
 Edit [`launcher/res/values/config.xml`](launcher/res/values/config.xml) (or, to keep personal settings out of git, copy it to

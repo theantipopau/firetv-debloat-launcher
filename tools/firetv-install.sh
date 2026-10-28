@@ -23,4 +23,8 @@ esac
 $A shell settings put secure accessibility_enabled 1
 $A shell settings put secure screensaver_components $PKG/.ClockDream || true
 $A shell am start -n $PKG/.MainActivity
-echo "Installed. Press Home on the remote to try it. Undo with tools/firetv-undo.sh $TV"
+# Android turns a package's accessibility services off when that package is updated, and Fire OS only binds them
+# again at boot. Without this the next Home press goes to Amazon's launcher instead of ours.
+echo "Rebooting so the Home-key service re-attaches..."
+$A reboot >/dev/null 2>&1 || true
+echo "Installed. Home works once the TV is back (about a minute). Undo with tools/firetv-undo.sh $TV"

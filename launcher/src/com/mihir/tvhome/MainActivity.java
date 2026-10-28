@@ -342,31 +342,7 @@ public class MainActivity extends Activity {
 
     private void ensureHomeService() {
         if (HomeKeyService.running) return;
-        try {
-            ComponentName me = new ComponentName(this, HomeKeyService.class);
-            String cur = Settings.Secure.getString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-            String list = withService(cur, me);
-            // Same clear-then-set as before, so the accessibility manager re-reads the list and rebinds. Only the
-            // value changed: it now keeps whatever else is enabled instead of replacing it with ours alone.
-            Settings.Secure.putString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, "");
-            Settings.Secure.putString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, list);
-            Settings.Secure.putInt(getContentResolver(), Settings.Secure.ACCESSIBILITY_ENABLED, 1);
-        } catch (SecurityException ignored) { }
-    }
-
-    /** The accessibility list is "pkg/cls:pkg/cls:…". Ours goes on the end; anything else stays enabled.
-     *  Entries may be written in either long or short form, so both are recognised. */
-    private static String withService(String list, ComponentName comp) {
-        String longForm = comp.flattenToString();
-        String shortForm = comp.flattenToShortString();
-        if (list == null) return longForm;
-        String cur = list.trim();
-        if (cur.isEmpty()) return longForm;
-        for (String s : cur.split(":")) {
-            String entry = s.trim();
-            if (entry.equals(longForm) || entry.equals(shortForm)) return cur;   // already listed
-        }
-        return cur + ":" + longForm;
+        HomeKeyService.rearm(this);
     }
 
     // ---------------------------------------------------------------- keep watching
