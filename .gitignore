@@ -8,6 +8,7 @@ shots/
 
 # Build output
 launcher/build/
+tests/build/
 .DS_Store
 __pycache__/
 toolchain/
