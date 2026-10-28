@@ -366,7 +366,8 @@ public class HomeKeyService extends AccessibilityService {
                 String s = wm.getConnectionInfo().getSSID();
                 if (s != null && !s.contains("unknown ssid")) name = s.replace("\"", "");
                 if (wm.getConnectionInfo().getNetworkId() == -1) name = "Offline";
-                else if (wm.getConnectionInfo().getLinkSpeed() > 0) name += "  \u00B7  " + wm.getConnectionInfo().getLinkSpeed() + " Mbps";
+                else if (wm.getConnectionInfo().getLinkSpeed() > 0)
+                    name += "  \u00B7  Link " + wm.getConnectionInfo().getLinkSpeed() + " Mbps";
             }
         } catch (SecurityException ignored) { }
         return name;
