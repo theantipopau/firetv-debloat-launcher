@@ -16,10 +16,10 @@
       '<path d="M2 0h5.6l8.8 22.6V0H22v34h-5.2L7.9 10.6V34H2z"/></svg></span>',
 
     prime: '<span class="mark"><svg viewBox="0 0 40 15" aria-hidden="true">' +
-      '<path d="M2 4.6c7.2 6.2 22.2 6.9 32.4 1.3" fill="none" stroke="currentColor" ' +
-      'stroke-width="2.8" stroke-linecap="round"/>' +
-      '<path d="M32.8 2.6 37.4 5.9 32.2 9.2" fill="none" stroke="currentColor" ' +
-      'stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>',
+      '<path d="M2 3.9c8.4 7 23.8 7.4 33.8 1.3" fill="none" stroke="currentColor" ' +
+      'stroke-width="2.5" stroke-linecap="round"/>' +
+      '<path d="M33.6 2.5 37.2 5.0 33.0 8.2" fill="none" stroke="currentColor" ' +
+      'stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>',
 
     youtube: '<span class="mark"><svg viewBox="0 0 34 24" aria-hidden="true">' +
       '<rect x="1.3" y="1.3" width="31.4" height="21.4" rx="6" fill="none" ' +
@@ -285,6 +285,7 @@
       b.setAttribute("aria-label", app.label);
       b.innerHTML = markFor(app);
       b.addEventListener("click", function () { launch(app); });
+      b.addEventListener("focus", function () { spot(b); });
       dock.appendChild(b);
     });
   }
@@ -309,10 +310,20 @@
     return Array.prototype.slice.call(document.querySelectorAll("#dock .tile"));
   }
 
+  /* The TV sets the spotlight from the remote, so do not rely on :focus alone:
+     an inactive browser window can leave :focus unmatched. */
+  function spot(element) {
+    Array.prototype.forEach.call(document.querySelectorAll(".tile.focused"), function (t) {
+      t.className = "tile";
+    });
+    if (element) { element.className = "tile focused"; }
+  }
+
   function focusTile(index) {
     var all = tiles();
     if (!all.length) { return; }
     tileIndex = (index + all.length) % all.length;
+    spot(all[tileIndex]);
     all[tileIndex].focus();
   }
 
@@ -454,6 +465,7 @@
         else { focusTile(i < 0 ? 0 : i + 1); }
       } else if (k === 38) {
         e.preventDefault();
+        spot(null);
         $("allAppsBtn").focus();
       } else if (k === 40) {
         e.preventDefault();

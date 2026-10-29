@@ -42,11 +42,11 @@ All notable changes to the Fire TV Debloat Launcher. Versions match `versionName
   phantom HDMI1, whose player logs "No tune target found") now says so instead of doing nothing.
 
 ### Changed
-- **The card row's gaps are one number.** 14dp between the two cards, 14dp from the row down to the dock's glass
-  - the same gutter the dock keeps between its own tiles - and the cards are 425dp wide to hold the 48dp margins.
-  Focusing a card no longer scales it into the gutter, so the spacing is identical whether a card is highlighted
-  or not: focus is the rim and a lighter glass, in place. (Before: 36dp between the cards, 9dp above the dock, and
-  a focused card grew ~4dp into both.)
+- **The card row's gaps are one number.** 14dp between the two cards and 14dp from the row down to the dock's
+  glass, the same gutter the dock keeps between its own tiles, with the cards at 425dp so both ends still land on
+  the 48dp margin. Focusing a card no longer scales it into the gutter, so the spacing is identical whether a card
+  is highlighted or not: focus is the rim and a lighter glass, in place. (Before: 36dp between the cards, 9dp above
+  the dock, and a focused card grew ~4dp into both.)
 - **The clock follows the TV, and the TV's 12/24-hour setting is the only switch.** 24-hour shows "21:35",
   12-hour "9:35 pm"; the sun times in the sheet and the whole Inputs menu follow the same setting, so there is
   no second preference to keep in sync. On a TV that is set to 12-hour, `adb shell settings put system
