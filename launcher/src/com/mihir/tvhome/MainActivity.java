@@ -112,6 +112,8 @@ public class MainActivity extends Activity {
     /** The dock as drawn, so the cover can paint the same icons without a package lookup. */
     static volatile List<App> dockSnapshot;
     private String netLabel = "Wi-Fi";
+    /** Optional `eth_mbps` from the HA snapshot: only used when the TV cannot read its own rate. */
+    private String haEthMbps = "";
     private String cwSig = "";
     private ValueAnimator scrollGlide;
     private boolean haShown;
@@ -1955,6 +1957,13 @@ public class MainActivity extends Activity {
         JSONObject ages = j.optJSONObject("ages");
         lastHa = j;   // so the battery-sign setting can re-render without waiting for a poll
 
+        // The wired pill may have been waiting for this poll before it could say its speed.
+        String eth = j.optString("eth_mbps", "");
+        if (!eth.equals(haEthMbps)) {
+            haEthMbps = eth;
+            if (isEthernet()) updateWifi();
+        }
+
         applyStatus(j, ages);
 
         haBig.setText(j.optString("temp", "--") + "\u00B0");
@@ -2555,12 +2564,36 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * The wired link's rate. Android has no API for it; the driver publishes it in
-     * /sys/class/net/<iface>/speed, which is the same number Amazon's own network page prints.
-     * Fire OS 7 denies that file to apps as well as to the shell (measured on the Cube: EACCES),
-     * so the pill falls back to plain "Ethernet" there; a firmware that allows the read gets the rate.
+     * The wired link's rate, in Mbps - the number Amazon's own network page prints.
+     *
+     * The driver publishes it in /sys/class/net/<iface>/speed, which Fire OS 7 denies to apps as well
+     * as to the shell (measured on the Cube: EACCES), so the fallback is Android's own view: the
+     * Ethernet network agent carries the negotiated speed as the network's link bandwidth
+     * (100000 Kbps on the Cube's 100 Mbps port), and reading that needs no permission. A firmware
+     * that allows the sysfs read still wins - it is the interface's own number.
      */
-    private static int ethernetMbps() {
+    private int ethernetMbps() {
+        int direct = ethernetMbpsSysfs();
+        if (direct > 0) return direct;
+        try {
+            android.net.ConnectivityManager cm =
+                    (android.net.ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+            if (cm != null) {
+                for (android.net.Network n : cm.getAllNetworks()) {
+                    android.net.NetworkCapabilities nc = cm.getNetworkCapabilities(n);
+                    if (nc == null || !nc.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET))
+                        continue;
+                    int kbps = Math.max(nc.getLinkDownstreamBandwidthKbps(),
+                            nc.getLinkUpstreamBandwidthKbps());
+                    if (kbps > 0) return Math.max(1, Math.round(kbps / 1000f));
+                }
+            }
+        } catch (RuntimeException ignored) { }
+        return 0;
+    }
+
+    /** The interface's own /sys speed, where the firmware lets an app read it. */
+    private static int ethernetMbpsSysfs() {
         try {
             java.util.Enumeration<java.net.NetworkInterface> all = java.net.NetworkInterface.getNetworkInterfaces();
             while (all != null && all.hasMoreElements()) {
@@ -2603,6 +2636,9 @@ public class MainActivity extends Activity {
         android.net.NetworkInfo ni = cm == null ? null : cm.getActiveNetworkInfo();
         if (ni != null && ni.isConnected() && ni.getType() == android.net.ConnectivityManager.TYPE_ETHERNET) {
             int mbps = ethernetMbps();
+            // Optional override from the snapshot for a firmware that reports neither, so a router's
+            // port rate can stand in. The TV's own negotiated rate is the truthful one, so it wins.
+            if (mbps <= 0) mbps = (int) number(haEthMbps, 0);
             setNet(mbps > 0 ? "Ethernet  \u00B7  Link " + mbps + " Mbps" : "Ethernet");
             return;
         }

@@ -43,6 +43,8 @@ Keys (all optional; an empty or missing value hides that tile):
 | `energy_today`, `battery_left` | `46.7`, `8 h 38 m` | one line "46.7 kWh today · 9 h left", the runway rounded to whole hours |
 | `people`, `people_names` | `1`, `Matt` | "Matt is home", "Matt & Caitlyn are home", "1 person home" - hidden when you have no person entities |
 | `plex` | `Chuck - s01e02 - Chuck Versus the Helicopter` | last line: "Plex · Chuck · S01E02", from Tautulli's who-is-watching sensor |
+| `media_title`, `media_artist`, `media_art` | `Do I Wanna Know?`, `Arctic Monkeys · Lounge`, a URL | the now-playing card on the Tizen dashboard; empty hides it |
+| `eth_mbps` | `1000` | the Ethernet pill's link rate, used only when the TV cannot read its own |
 | `ages` | `{"solar": 2400}` | a value older than 15 minutes dims to 40% and its label becomes `40m ago` |
 
 The panel is a frosted sample of the wallpaper, the values are white, the labels are white at 60%, and exactly one
@@ -56,6 +58,15 @@ never say somebody is in when they are not.
 
 The sheet's content must fit a 1080p TV's 540dp of screen: it is measured to nothing if it grows past that, so extra
 values belong in a line rather than in another row of tiles.
+
+The Tizen dashboard ([tizen/](../tizen/README.md)) reads this same file and nothing else, so a sensor you add here
+appears there without a second feed. It draws only what the snapshot carries and removes an element whose key is
+empty — there is no demo data on screen.
+
+The Ethernet pill names the network and its rate ("Ethernet · Link 100 Mbps"). The launcher reads that from the
+network's own link bandwidth, because Fire OS refuses the driver's `/sys/class/net/<iface>/speed` file to apps and to
+the ADB shell alike. `eth_mbps` is an optional stand-in for a firmware that reports nothing at all - a router's port
+rate works - and is ignored while the TV can answer for itself.
 
 The same file feeds the cover screen shown right after you press Home.
 Update speed is limited by your sensors (cloud inverter integrations often update every 5 minutes; local Modbus/MQTT is much faster).

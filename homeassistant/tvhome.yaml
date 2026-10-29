@@ -106,9 +106,23 @@ automation:
             plex: ""
             # With a Tautulli "who is watching" sensor whose attribute value is the title:
             # plex: "{% set n = states('sensor.plex_watching') | int(0) %}{% set a = states.sensor.plex_watching.attributes %}{{ (a.values() | list | first) if n > 0 and a else '' }}"
+            # Optional: the now-playing card on the Tizen dashboard (tizen/). The card
+            # hides itself when media_title is empty, so leaving these blank costs
+            # nothing. media_art is an image URL; entity_picture works. CHANGE the
+            # entity, or comment these in:
+            # media_title: "{{ state_attr('media_player.lounge', 'media_title') | default('', true) }}"
+            # media_artist: "{{ state_attr('media_player.lounge', 'media_artist') | default('', true) }}"
+            # media_art: "{{ state_attr('media_player.lounge', 'entity_picture') | default('', true) }}"
+            media_title: ""
+            media_artist: ""
+            media_art: ""
             bins: ""                                  # e.g. "General bins - out tonight"
             next: ""                                  # e.g. "Next: 6:30pm Football training"
             next_at: 0                                # optional: epoch seconds of that event, so the TV can say "in 2 h"
+            # Optional: the wired pill's "Link 100 Mbps". The TV reads its own negotiated rate from Android,
+            # so this is only consulted when a firmware reports nothing. Point it at a router's port-rate
+            # sensor if you have one; "" keeps the TV's own read.
+            eth_mbps: ""
             # Optional but recommended: seconds since each entity last updated. The TV dims a value
             # to 40% and labels it "42m ago" once it is older than 15 minutes. Use last_updated, not
             # last_changed: a battery only changes at the odd percent, so last_changed can be hours

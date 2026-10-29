@@ -5,6 +5,13 @@ All notable changes to the Fire TV Debloat Launcher. Versions match `versionName
 
 ## 1.4.1 — 2026-10-29
 
+### Added
+- **The wired pill says its link rate.** It reads `Ethernet · Link 100 Mbps` on the Cube, the same way the Wi-Fi pill
+  has always shown its own rate. Fire OS refuses `/sys/class/net/<iface>/speed` to apps and to the ADB shell alike,
+  so the number comes from Android: an Ethernet network carries its negotiated speed as its link bandwidth. A firmware
+  that reports neither can be covered by an optional `eth_mbps` in `tvhome.json`; the TV's own rate wins when it has
+  one.
+
 ### Fixed
 - **A dark channel logo is no longer lost on the glass.** EPG marks are drawn for white pages, and several of the
   guide's (Fox Cricket, Sky Racing, 7AFL) are near-black: the caption samples the mark's own opaque pixels and, when
