@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920, height=1080">
+<title>TV Home</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="stage">
+
+  <div class="wall" id="wallA"></div>
+  <div class="wall" id="wallB"></div>
+  <div class="scrim"></div>
+
+  <header class="hud">
+    <div class="left">
+      <div class="clock" id="clock">1:55</div>
+      <div class="info" id="info"></div>
+      <div class="now" id="now" hidden>
+        <div class="art" id="nowArt"></div>
+        <div class="meta">
+          <div class="t" id="nowTitle"></div>
+          <div class="s" id="nowSub"></div>
+        </div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <button class="nav-btn" id="allAppsBtn" aria-label="All apps">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7.6" height="7.6" rx="2"/><rect x="13.4" y="3" width="7.6" height="7.6" rx="2"/><rect x="3" y="13.4" width="7.6" height="7.6" rx="2"/><rect x="13.4" y="13.4" width="7.6" height="7.6" rx="2"/></svg>
+        <span>All apps</span>
+      </button>
+      <button class="nav-btn" id="settingsBtn" aria-label="Settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94a7.07 7.07 0 0 0 .06-.94 7.07 7.07 0 0 0-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.62l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.03 7.03 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.5.5 0 0 0-.61.22L2.74 8.86a.5.5 0 0 0 .12.62l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.62l1.92 3.32c.13.22.39.3.61.22l2.39-.96c.49.38 1.03.7 1.62.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.48 0 .61-.22l1.92-3.32a.5.5 0 0 0-.12-.62l-2.03-1.58zM12 15.6a3.6 3.6 0 1 1 0-7.2 3.6 3.6 0 0 1 0 7.2z"/></svg>
+        <span>Settings</span>
+      </button>
+    </nav>
+  </header>
+
+  <div class="dock" id="dock"></div>
+
+  <section class="sheet" id="appsSheet">
+    <h2>All apps</h2>
+    <div class="grid" id="appsGrid"></div>
+  </section>
+
+  <section class="sheet" id="settingsSheet">
+    <h2>Settings</h2>
+    <div class="rows">
+      <div class="setting">
+        <div>
+          <div class="setting-t">24-hour clock</div>
+          <div class="setting-s">Show 19:55 instead of 7:55.</div>
+        </div>
+        <button class="switch" id="toggle24" role="switch" aria-checked="false"><span></span></button>
+      </div>
+      <div class="setting">
+        <div>
+          <div class="setting-t">Rotate wallpaper</div>
+          <div class="setting-s">Slow crossfade through the wallpaper set.</div>
+        </div>
+        <button class="switch" id="toggleWall" role="switch" aria-checked="false"><span></span></button>
+      </div>
+      <div class="setting">
+        <div>
+          <div class="setting-t">Data</div>
+          <div class="setting-s" id="dataNote">Loaded from data/dashboard.json.</div>
+        </div>
+        <button class="ghost" id="refreshBtn">Refresh now</button>
+      </div>
+    </div>
+    <div class="hint">Back returns to the home screen.</div>
+  </section>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script src="config.js"></script>
+<script src="dashboard.js"></script>
+</body>
+</html>
