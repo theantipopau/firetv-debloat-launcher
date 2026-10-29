@@ -479,9 +479,9 @@ public class HomeKeyService extends AccessibilityService {
                 // The launcher hands the cursor to the first tile on a cold start, so that tile is
                 // already at 1.08 and lifted. Drawing it flat made the dock jump by 8% on the swap.
                 if (i == 0) {
-                    card.setScaleX(1.08f);
-                    card.setScaleY(1.08f);
-                    card.setTranslationY(-px(d, 4));
+                    card.setScaleX(HomeTheme.DOCK_FOCUS_SCALE);
+                    card.setScaleY(HomeTheme.DOCK_FOCUS_SCALE);
+                    card.setTranslationY(-px(d, HomeTheme.DOCK_FOCUS_LIFT));
                 }
                 LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, 1f);
                 p.setMargins(i == 0 ? 0 : px(d, HomeTheme.DOCK_GAP), 0,
@@ -521,7 +521,8 @@ public class HomeKeyService extends AccessibilityService {
                 p.setMargins(i == 0 ? 0 : px(d, HomeTheme.CW_GAP), 0, 0, 0);
                 row.addView(tile, p);
             }
-            block.addView(row, new LinearLayout.LayoutParams(-1, -2));
+            // The same fixed height the launcher's scroll view uses, or the dock above sits higher.
+            block.addView(row, new LinearLayout.LayoutParams(-1, px(d, HomeTheme.CW_H)));
 
             LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-1, -2);
             bp.topMargin = px(d, HomeTheme.DOCK_TO_CW);

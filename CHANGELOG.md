@@ -3,6 +3,30 @@
 All notable changes to the Fire TV Debloat Launcher. Versions match `versionName` in
 [`launcher/AndroidManifest.xml`](launcher/AndroidManifest.xml).
 
+## 1.3.3 — 2026-10-29
+
+### Fixed
+- **The Home Assistant sheet no longer shows the hero through it.** The tint goes from 90% black to 98% #0E0E10,
+  which also removed the page dots and the dock's tiles that were ghosting through as "tile backgrounds".
+- **The dark strip down the sheet's left edge is gone.** It was `setElevation` on a background without an outline:
+  API 28 draws that shadow as a plain rectangle, straight edges and all. The sheet keeps its hairline instead.
+- **The glance strip has no focus slab.** The 12% white box behind it read as a stray panel over bright art; the
+  4% step is the cue now.
+- **Continue Watching tiles really scale on focus.** The property animator never moved them inside the scroll view;
+  the holder's scale is set directly (measured 368×208 at 1.06 → 390×220 in the screenshot). The Plex badge moved
+  to the top-right at 22dp, the title is 20sp SemiBold, and the floor gradient covers the lower 60% at 85% black.
+- **The cover's dock is the home dock.** The corner clip lived only in `MainActivity`, so the cover's banner tiles
+  were square; it now lives in `AppTile` with the radius, and both read `DOCK_FOCUS_SCALE` / `DOCK_FOCUS_LIFT` from
+  `HomeTheme`. The resume row is pinned to `CW_H` on both sides, which removed a 6px lift of the whole dock.
+- **Live stills no longer show a broadcast title.** The guide's art is a poster with the event name printed in it.
+  Live frames now anchor the image to the bottom (cropping the top band) and the bar sits on a 70% scrim over
+  200dp. Plex art, which has no text, is untouched.
+
+### Changed
+- The panel's stale ages now come from `last_updated` in Home Assistant rather than `last_changed` (deployed); a
+  battery that only moves at the odd percent is no longer dimmed for being quiet. The FoxESS battery entity had not
+  reported for 2.6h at the time of writing, so it still dims — truthfully.
+
 ## 1.3.2 — 2026-10-29
 
 ### Fixed

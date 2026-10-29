@@ -410,11 +410,9 @@ public class MainActivity extends Activity {
         root.addView(haScrim, new FrameLayout.LayoutParams(-1, -1));
         root.addView(buildHaPanel(), lp(dp(HomeTheme.HA_W), -2, Gravity.END | Gravity.CENTER_VERTICAL,
                 0, dp(HomeTheme.HA_MARGIN), dp(HomeTheme.HA_MARGIN), dp(HomeTheme.HA_MARGIN)));
+
         return root;
     }
-
-
-
 
     /** Amazon's own network page; falls back to the generic Wi-Fi intent on other builds. */
     private void openWifiSettings() {
@@ -507,12 +505,23 @@ public class MainActivity extends Activity {
      * The hero copy runs from the top edge to 32dp above the dock. Measured from the laid-out block
      * rather than added up from tile heights, which would need the dock tile's aspect in dp.
      */
+    /**
+     * How tall a hero frame's copy block is: from the top of the screen down to just above the
+     * dock. Frames used to read this from the first copy's layout params, so every frame built
+     * before the first layout measured against the 200dp default and a two-line title climbed
+     * into the top bar.
+     */
+    private int heroCopyHeight() {
+        int top = bottomBlock != null ? bottomBlock.getTop() : 0;
+        return top > dp(120) ? top - dp(HomeTheme.META_TO_DOCK) : dp(200);
+    }
+
     private void fitHeroCopy() {
         if (heroCopy == null || bottomBlock == null) return;
         int top = bottomBlock.getTop();
         if (top <= dp(120)) return;
         FrameLayout.LayoutParams p = (FrameLayout.LayoutParams) heroCopy.getLayoutParams();
-        int h = top - dp(HomeTheme.META_TO_DOCK);
+        int h = heroCopyHeight();
         if (p.height != h) {
             p.height = h;
             heroCopy.setLayoutParams(p);
@@ -622,11 +631,19 @@ public class MainActivity extends Activity {
     private View heroLayer(Feed.Item it, Bitmap bm, Bitmap logo) {
         FrameLayout layer = new FrameLayout(this);
         boolean live = it.live();
+        final int copyH = heroCopyHeight();
+        // A transparent PNG from the guide is a channel mark, not a still: blown up full-bleed it is
+        // just a giant wordmark, so it takes the contained path whatever the feed called it.
+        boolean isMark = it.artfit || (bm != null && bm.hasAlpha());
 
-        if (bm != null && !it.artfit) {
+        if (bm != null && !isMark) {
             ImageView art = new ImageView(this);
-            art.setScaleType(ImageView.ScaleType.CENTER_CROP);
             art.setImageBitmap(bm);
+            // A guide's live still usually has the event name printed across its top band. Centre-
+            // cropping keeps whatever the middle holds, which for a portrait poster still leaves the
+            // wordmark; bottom-anchoring drops the top of the frame instead.
+            if (live) topCrop(art, bm);
+            else art.setScaleType(ImageView.ScaleType.CENTER_CROP);
             layer.setTag(art);   // the one view the slow push animates
             layer.addView(art, new FrameLayout.LayoutParams(-1, -1));
         } else {
@@ -702,8 +719,12 @@ public class MainActivity extends Activity {
                 return ruler.measureText(s);
             });
             if (sp != Typo.HERO) title.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
-            title.setSingleLine(sp >= Typo.HERO);   // the ceiling stays one line; a shrunk one may wrap
-            title.setMaxLines(2);
+            // Two lines only when the copy block is tall enough for them: a wrapped title grows up
+            // from the dock, and at this height the badge ended up on top of the greeting.
+            int room = copyH - dp(HomeTheme.TOP_BAR_TOP + HomeTheme.TOP_BAR_H + 8);
+            boolean twoLines = sp < Typo.HERO && room >= dp(160);
+            title.setSingleLine(!twoLines);
+            title.setMaxLines(twoLines ? 2 : 1);
             title.setEllipsize(android.text.TextUtils.TruncateAt.END);
             title.setText(it.title);
             title.setShadowLayer(dp(12), 0, dp(2), 0xB3000000);
@@ -744,13 +765,28 @@ public class MainActivity extends Activity {
         }
 
         FrameLayout copy = new FrameLayout(this);
-        int copyH = heroCopy != null && heroCopy.getLayoutParams().height > 0
-                ? heroCopy.getLayoutParams().height : dp(200);
         layer.addView(copy, new FrameLayout.LayoutParams(-1, copyH));
         copy.addView(info, lp(-1, -2, Gravity.BOTTOM | Gravity.START,
                 dp(HomeTheme.SAFE), 0, dp(260), 0));
         heroCopies.add(copy);
         return layer;
+    }
+
+    /**
+     * Fill the frame with the image but keep its bottom edge on the view's: the top of the source
+     * (where broadcast artwork prints the event name) is cropped away instead of being shown.
+     */
+    private void topCrop(final ImageView v, final Bitmap bm) {
+        v.setScaleType(ImageView.ScaleType.MATRIX);
+        v.addOnLayoutChangeListener((vv, l, t, r, b, ol, ot, or, ob) -> {
+            int w = r - l, h = b - t;
+            if (w <= 0 || h <= 0 || bm.getWidth() == 0) return;
+            float s = Math.max(w / (float) bm.getWidth(), h / (float) bm.getHeight());
+            android.graphics.Matrix m = new android.graphics.Matrix();
+            m.setScale(s, s);
+            m.postTranslate((w - bm.getWidth() * s) / 2f, h - bm.getHeight() * s);
+            v.setImageMatrix(m);
+        });
     }
 
     /** The one line under the title: when it ends, or what it is. */
@@ -940,7 +976,9 @@ public class MainActivity extends Activity {
         cwRow.setOrientation(LinearLayout.HORIZONTAL);
         cwRow.setClipChildren(false);   // or the focused tile's 1.06 scale is cut back to its slot
         cwScroll.addView(cwRow, new FrameLayout.LayoutParams(-2, -2));
-        cwBlock.addView(cwScroll, llp(-1, -2, 0, 0, 0, 0));
+        // Exactly the tile height: a scroll view measures a few dp taller than its content, and that
+        // was enough to lift the whole dock above the cover's copy of this row.
+        cwBlock.addView(cwScroll, llp(-1, dp(HomeTheme.CW_H), 0, 0, 0, 0));
         return cwBlock;
     }
 
@@ -1059,24 +1097,26 @@ public class MainActivity extends Activity {
             ImageView mark = new ImageView(this);
             mark.setImageDrawable(plex);
             mark.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            badge.addView(mark, new FrameLayout.LayoutParams(dp(18), dp(18), Gravity.CENTER));
-            card.addView(badge, lp(dp(28), dp(28), Gravity.TOP | Gravity.START,
-                    dp(10), dp(10), 0, 0));
+            badge.addView(mark, new FrameLayout.LayoutParams(dp(16), dp(16), Gravity.CENTER));
+            // Top-right: the title and metadata own the bottom-left of the tile.
+            card.addView(badge, lp(dp(22), dp(22), Gravity.TOP | Gravity.END,
+                    0, dp(10), dp(10), 0));
         }
 
         // The lower 55% only: enough for two lines of text over any still, no black band up top.
         View shade = new View(this);
         shade.setBackground(HomeTheme.vertical(
-                new int[]{0x00000000, 0x99000000, 0xC7000000}));
-        card.addView(shade, lp(-1, (int) (dp(HomeTheme.CW_H) * 0.55f), Gravity.BOTTOM, 0, 0, 0, 0));
+                new int[]{0x00000000, 0xB3000000, 0xD9000000}));
+        card.addView(shade, lp(-1, (int) (dp(HomeTheme.CW_H) * HomeTheme.CW_SHADE),
+                Gravity.BOTTOM, 0, 0, 0, 0));
 
         LinearLayout lines = new LinearLayout(this);
         lines.setOrientation(LinearLayout.VERTICAL);
-        TextView title = text(Typo.CAPTION, "sans-serif-semibold", Color.WHITE);
+        TextView title = text(Typo.BODY, "sans-serif-semibold", Color.WHITE);
         title.setText(it.title);
         title.setSingleLine(true);
         title.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        title.setShadowLayer(dp(6), 0, dp(1), 0xB3000000);   // a white still can still fight the gradient
+        title.setShadowLayer(dp(6), 0, dp(1), 0x99000000);   // a white still can still fight the gradient
         lines.addView(title);
         TextView meta = text(Typo.CAPTION, "sans-serif", 0xC7FFFFFF);
         meta.setText(it.sub);
@@ -1108,8 +1148,12 @@ public class MainActivity extends Activity {
 
         holder.setOnFocusChangeListener((v, has) -> {
             rim.setStroke(dp(has ? 2 : 1), has ? 0xE6FFFFFF : HomeTheme.RIM);
-            v.animate().scaleX(has ? 1.06f : 1f).scaleY(has ? 1.06f : 1f)
-                    .translationZ(has ? dp(8) : 0).setDuration(has ? 170 : 200).start();
+            // setScale, not animate(): inside the scroll view the property animator never produced a
+            // visible scale change (the rim moved, the tile did not). Setting it is what renders.
+            float s = has ? HomeTheme.CW_FOCUS_SCALE : 1f;
+            v.setScaleX(s);
+            v.setScaleY(s);
+            v.animate().translationZ(has ? dp(8) : 0).setDuration(has ? 170 : 200).start();
             if (has) {
                 lastFocusedId = v.getId();
                 cwScroll.smoothScrollTo(Math.max(0, v.getLeft() - dp(HomeTheme.SAFE)), 0);
@@ -1231,7 +1275,8 @@ public class MainActivity extends Activity {
         haPanel.setPadding(dp(24), dp(20), dp(24), dp(20));
         haFrost = new Frost(haPanel, dp(24), Math.max(1, dp(1)));
         haPanel.setBackground(haFrost);
-        haPanel.setElevation(dp(18));
+        // No elevation: on API 28 the shadow of a rounded sheet is drawn as a plain rectangle, which
+        // showed up as a hard dark strip down the panel's left edge (and never matched the corners).
         haPanel.setFocusable(true);
         haPanel.setClickable(true);
         haPanel.setId(View.generateViewId());
@@ -1538,14 +1583,10 @@ public class MainActivity extends Activity {
         haGlance.setPadding(dp(6), dp(4), dp(6), dp(4));
         haGlance.setVisibility(View.GONE);   // until the first snapshot arrives
         haGlance.setOnClickListener(v -> openHa());
-        GradientDrawable gbg = new GradientDrawable();
-        gbg.setCornerRadius(dp(10));
-        gbg.setColor(Color.TRANSPARENT);
-        haGlance.setBackground(gbg);
-        haGlance.setOnFocusChangeListener((v, has) -> {
-            gbg.setColor(has ? 0x1FFFFFFF : Color.TRANSPARENT);
-            v.animate().scaleX(has ? 1.04f : 1f).scaleY(has ? 1.04f : 1f).setDuration(170).start();
-        });
+        // No focus box: the translucent slab behind the strip read as a stray panel over bright art.
+        // The 4% step is the whole cue here.
+        haGlance.setOnFocusChangeListener((v, has) ->
+                v.animate().scaleX(has ? 1.04f : 1f).scaleY(has ? 1.04f : 1f).setDuration(170).start());
         int[] glanceIcons = {R.drawable.ic_thermo, R.drawable.ic_solar,
                 R.drawable.ic_battery, R.drawable.ic_bins};
         for (int i = 0; i < 4; i++) {
@@ -1729,12 +1770,7 @@ public class MainActivity extends Activity {
         card.setFocusable(true);
         card.setClickable(true);
         card.setTag(app);
-        card.setClipToOutline(true);
-        card.setOutlineProvider(new ViewOutlineProvider() {
-            @Override public void getOutline(View v, Outline o) {
-                o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), dp(HomeTheme.TILE_RADIUS));
-            }
-        });
+        // The radius and its clip live in AppTile, so the cover's dock gets them too.
 
         View sheen = new View(this);
         sheen.setBackground(new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
@@ -1763,9 +1799,10 @@ public class MainActivity extends Activity {
             if (!opened) pressUndo(v, 1.08f);
         });
         card.setOnFocusChangeListener((v, has) -> {
-            float s = has ? 1.08f : 1f;
+            float s = has ? HomeTheme.DOCK_FOCUS_SCALE : 1f;
             v.animate().scaleX(s).scaleY(s)
-                    .translationZ(has ? dp(10) : 0).translationY(has ? -dp(4) : 0)
+                    .translationZ(has ? dp(10) : 0)
+                    .translationY(has ? -dp(HomeTheme.DOCK_FOCUS_LIFT) : 0)
                     .setInterpolator(new DecelerateInterpolator(1.6f))
                     .setDuration(has ? 170 : 200).start();
             // One sheen sweep on focus, not a permanent glow: it reads as light passing over glass.

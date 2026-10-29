@@ -36,8 +36,8 @@ final class Frost extends Drawable {
         this.view = view;
         this.corner = cornerPx;
         this.hairline = hairlinePx;
-        tint.setColor(0xE6000000);   // 90% black: the dock sits directly behind this sheet and
-                                     // the top bar is hidden while it is open, so nothing reads through
+        tint.setColor(HomeTheme.HA_TINT);   // 98% #0E0E10: the hero's dots and the dock's bright
+                                            // tiles used to ghost through at 90%
         edge.setStyle(Paint.Style.STROKE);
         edge.setStrokeWidth(hairlinePx);
         edge.setColor(0x1FFFFFFF);   // white, 12%

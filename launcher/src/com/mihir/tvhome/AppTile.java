@@ -1,9 +1,11 @@
 package com.mihir.tvhome;
 
 import android.content.Context;
+import android.graphics.Outline;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -26,6 +28,7 @@ final class AppTile {
             bg.setColors(new int[]{HomeTheme.darken(app.color, 0.85f),
                     HomeTheme.darken(app.color, 0.4f), HomeTheme.darken(app.color, 0.22f)});
         }
+        bg.setCornerRadius(px(d, HomeTheme.TILE_RADIUS));
         card.setBackground(bg);
 
         ImageView img = new ImageView(c);
@@ -63,6 +66,15 @@ final class AppTile {
         View edge = new View(c);
         edge.setBackground(rim);
         card.addView(edge, new FrameLayout.LayoutParams(-1, -1));
+
+        // Clipping is part of the tile, not of the screen that shows it: an app banner is a square
+        // drawable, so without this the radius exists only in the rim and both docks look square.
+        card.setClipToOutline(true);
+        card.setOutlineProvider(new ViewOutlineProvider() {
+            @Override public void getOutline(View v, Outline o) {
+                o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), px(d, HomeTheme.TILE_RADIUS));
+            }
+        });
         return card;
     }
 
