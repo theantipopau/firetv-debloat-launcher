@@ -3,6 +3,58 @@
 All notable changes to the Fire TV Debloat Launcher. Versions match `versionName` in
 [`launcher/AndroidManifest.xml`](launcher/AndroidManifest.xml).
 
+## 1.4 — 2026-10-29
+
+### Added
+- **The rotating cards alternate.** Live and New on Plex used to turn together, so both sides of the row
+  changed on the same frame. They now sit on one 10-second grid: live on the beat, Plex half a beat later. The
+  grid is shared rather than counted per card, so a re-arm (new guide data, focus leaving, the screen waking)
+  lands on that card's own slot instead of quietly putting the two back in step.
+- **A live card wears its channel's logo.** The line under the title was `7AFL · until 21:39`; the channel's
+  name is now the guide's own logo, sitting on the caption's baseline, with the time after it. `tvhome_keep.py`
+  saves the channel icon next to the still (new `badge` key in `tvhome_new.json`), so the card keeps its
+  programme still as artwork; a guide with no icon falls back to the old text and nothing else changes.
+- **The Home Assistant sheet says more.** Under the tiles: the weather outside ("4 km/h · 56% humidity"), the sun
+  ("Sunrise 05:02 · Sunset 18:08"), the day's solar ("47.7 kWh today"), who is home by name ("Matt is home") and what
+  Plex is playing elsewhere in the house ("Plex · Chuck · S01E02"). All of it comes from `tvhome.json` as new
+  optional keys; a line with no data hides itself, and the names are only used while they agree with the count.
+- **The battery's runway says whole hours.** "29 h left" shares the energy line with the day's solar instead of
+  being cut off at "30 h 23 m i…" — the minutes were the only thing that did not fit.
+- **`tools/install-tv.py`** installs an APK on a Fire TV and reboots it. Fire OS only re-attaches a package's
+  accessibility service at boot, so an install that skips the reboot leaves the Home button on Amazon's launcher -
+  that is the whole reason the script exists.
+
+### Fixed
+- **The Home Assistant sheet can no longer be cut off.** Its content had grown past a 1080p TV's 492dp of usable
+  height, and Android measures the overflow to zero: the last lines vanished without a trace. The condition and
+  "feels" share a line now, the weather lives in the sheet's line style rather than a third row of tiles, and the
+  sheet's text drops Android's extra font padding - with Inter's own metrics, six tile cells and seven lines fit
+  with room to spare.
+- **Bins say "Tonight" when they are out tonight.** The old rule folded "tonight" into "today", so a bin standing
+  at the kerb for tomorrow's collection was announced as due today.
+- **The cover's spinner no longer sits on the dock's glass.** "Please wait, Home loading…" with the wheel beside it
+  sits on the floor beneath the pill, where the glass cannot cross it.
+- **Home closes the sheet.** Pressing Home with the panel open used to leave it standing over the screen.
+- **The Inputs menu no longer lands in the middle of the home screen.** It anchored to the Settings row that asked
+  for it, and that row is hidden by the time the popup opens, so the popup was placed on stale coordinates - on the
+  Cube it appeared as a white pill floating over the Now Showing cards. It anchors to the Settings pill now, in the
+  sheet's glass rather than a grey phone menu, with 18sp rows. Selecting an input that Fire OS refuses (the Cube's
+  phantom HDMI1, whose player logs "No tune target found") now says so instead of doing nothing.
+
+### Changed
+- **The card row's gaps are one number.** 14dp between the two cards, 14dp from the row down to the dock's glass
+  - the same gutter the dock keeps between its own tiles - and the cards are 425dp wide to hold the 48dp margins.
+  Focusing a card no longer scales it into the gutter, so the spacing is identical whether a card is highlighted
+  or not: focus is the rim and a lighter glass, in place. (Before: 36dp between the cards, 9dp above the dock, and
+  a focused card grew ~4dp into both.)
+- **The clock follows the TV, and the TV's 12/24-hour setting is the only switch.** 24-hour shows "21:35",
+  12-hour "9:35 pm"; the sun times in the sheet and the whole Inputs menu follow the same setting, so there is
+  no second preference to keep in sync. On a TV that is set to 12-hour, `adb shell settings put system
+  time_12_24 24` switches it (and `12` goes back).
+- **The Home Assistant sheet's content sits lower in its glass.** The hero's cap leaves more air above it than its
+  digits use, so an even 16dp/16dp padding made the block read as high. It is 25dp above and 7dp below now: the
+  text and tiles move down 9dp, the sum stays 32dp, and the glass itself does not move or resize.
+
 ## 1.3.3 — 2026-10-29
 
 ### Fixed

@@ -24,7 +24,8 @@ Other Fire OS 7 devices will probably work. Not tested on Fire OS 8 / Vega OS de
 - **Home button takes you here.** Fire OS blocks other apps for a few seconds after Home is pressed, so a cover screen (greeting,
   clock, loading bar, optional house info) hides Amazon's home until the launcher opens.
 - Hold OK on any app to move it, add it to the main row, hide it, open its info or uninstall it. No rebuild needed.
-- Settings and Wi-Fi/Ethernet pills open Amazon's own full-screen pages; **Inputs** pill on devices with HDMI in (Cube).
+- Settings and Wi-Fi/Ethernet pills open Amazon's own full-screen pages; **Inputs** sits in Settings on devices that
+  report an HDMI passthrough input. The clock follows the TV's own 12/24-hour setting.
 - Screensaver (big clock over a drifting wallpaper) instead of Amazon's ad-supported one.
 - Alert cards over whatever is playing: doorbell, bins, timers (`am broadcast`, or from Home Assistant). Only shell/ADB
   senders can trigger one, so an app installed on the TV cannot spoof a card.

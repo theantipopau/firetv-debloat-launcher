@@ -19,7 +19,8 @@ public final class FeedTest {
         // and a show called "Bob's Burgers" would otherwise be a parser bug waiting to happen.
         String live = "{\"sig\":\"x\",\"items\":["
                 + "{\"kind\":\"live\",\"app\":\"TiviMate\",\"pkg\":\"ar.tvplayer.tv\",\"title\":\"Test - South Africa v Australia\","
-                + "\"channel\":\"7AFL\",\"until\":1793239200,\"progress\":0},"
+                + "\"channel\":\"7AFL\",\"caption\":\"7AFL \u00B7 until 21:00\",\"until\":1793239200,\"progress\":0,"
+                + "\"badge\":\"http://ha/local/tvhome/live0_badge.png\"},"
                 + "{\"kind\":\"live\",\"title\":\"NBA Basketball\",\"channel\":\"ESPN\",\"until\":1793237700},"
                 + "{\"kind\":\"new\",\"app\":\"Plex\",\"title\":\"Verity\",\"sub\":\"2026 \\u00b7 2h 00m\",\"progress\":0,"
                 + "\"image\":\"http://ha/local/tvhome/new1_bg.jpg\"},"
@@ -30,6 +31,11 @@ public final class FeedTest {
         expect("parsed count", "5", String.valueOf(parsed.size()));
         expect("live flag", "true", String.valueOf(parsed.get(0).live()));
         expect("live until", "1793239200", String.valueOf(parsed.get(0).until));
+        // A live item says "caption", not "sub": the card's third line reads either.
+        expect("live caption as sub", "7AFL \u00B7 until 21:00", parsed.get(0).sub);
+        // The channel mark the caption shows instead of the channel's name (v1.4); absent means text.
+        expect("live channel badge", "http://ha/local/tvhome/live0_badge.png", parsed.get(0).badge);
+        expect("no badge, no logo", "", parsed.get(1).badge);
         expect("escaped apostrophe", "Bob's Burgers", parsed.get(3).title);
         expect("unicode middle dot", "2026 \u00b7 2h 00m", parsed.get(2).sub);
 

@@ -402,6 +402,9 @@ def live_cards():
                 "title": title, "channel": channel,
                 "caption": "%s \u00b7 until %s" % (channel, datetime.fromtimestamp(stop).strftime("%H:%M")),
                 "progress": 0, "uri": "", "_art": art,
+                # The channel's own mark, for the caption line ("[7AFL] · until 21:39"): EPG icons are
+                # 200x100 at most, so the card can carry one without giving up its still.
+                "_badge": ch_icon,
                 "_backup": ch_icon if art != ch_icon else "",
                 "_fit": 0 if (icon is not None and icon.get("src")) else 1,
                 "_plex": False, "_sport": sport, "_score": 0, "until": int(stop),
@@ -439,7 +442,7 @@ def write_tile(cards):
             open(path, "w", encoding="utf-8").write('{"items": []}')
         return
     sig = json.dumps([[c.get("kind", ""), c["title"], c.get("until", 0), c.get("uri", ""),
-                       c.get("_art", ""), c.get("_logo", "")] for c in cards])
+                       c.get("_art", ""), c.get("_logo", ""), c.get("_badge", "")] for c in cards])
     old = {}
     try:
         old = json.load(open(path, encoding="utf-8"))
@@ -450,7 +453,7 @@ def write_tile(cards):
     items = []
     for i, c in enumerate(cards):
         art, logo = c.pop("_art", ""), c.pop("_logo", "")
-        backup = c.pop("_backup", "")
+        backup, badge = c.pop("_backup", ""), c.pop("_badge", "")
         plex = c.pop("_plex", False)
         if c.pop("_fit", 0):
             c["artfit"] = 1
@@ -470,6 +473,7 @@ def write_tile(cards):
         else:
             c["image"] = ""
         c["logo"] = was.get("logo") or (save(logo, "new%d_logo.png" % i) if logo else "")
+        c["badge"] = was.get("badge") or (epg_image(badge, "live%d_badge.png" % i) if badge else "")
         items.append(c)
     if same and old.get("items") == items:
         print("tile unchanged")

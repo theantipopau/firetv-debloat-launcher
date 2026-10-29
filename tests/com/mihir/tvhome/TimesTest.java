@@ -51,6 +51,26 @@ public final class TimesTest {
                 Times.clockDigits(nz, false, brisbane) + " " + Times.meridian(nz, false, brisbane));
         expect("digits 24h", "04:00", Times.clockDigits(nz, true, brisbane));
 
+        // The date under the clock: day, then day of the month, then month. No year, no leading zero.
+        expect("date line", "Thursday 29 October", Times.dateLine(
+                OffsetDateTime.parse("2026-10-29T09:00:00+10:00").toEpochSecond(), brisbane));
+        expect("date line, one digit day", "Sunday 1 March", Times.dateLine(
+                OffsetDateTime.parse("2026-03-01T09:00:00+10:00").toEpochSecond(), brisbane));
+
+        // The greeting follows the device clock; the small hours are still the evening.
+        expect("greeting 04:00", "Good evening",
+                Times.greeting(OffsetDateTime.parse("2026-10-29T04:00:00+10:00").toEpochSecond(), brisbane));
+        expect("greeting 05:00", "Good morning",
+                Times.greeting(OffsetDateTime.parse("2026-10-29T05:00:00+10:00").toEpochSecond(), brisbane));
+        expect("greeting 11:59", "Good morning",
+                Times.greeting(OffsetDateTime.parse("2026-10-29T11:59:00+10:00").toEpochSecond(), brisbane));
+        expect("greeting 12:00", "Good afternoon",
+                Times.greeting(OffsetDateTime.parse("2026-10-29T12:00:00+10:00").toEpochSecond(), brisbane));
+        expect("greeting 17:59", "Good afternoon",
+                Times.greeting(OffsetDateTime.parse("2026-10-29T17:59:00+10:00").toEpochSecond(), brisbane));
+        expect("greeting 18:00", "Good evening",
+                Times.greeting(OffsetDateTime.parse("2026-10-29T18:00:00+10:00").toEpochSecond(), brisbane));
+
         expect("calendar codes", "Next: 6:30pm Training 2026 TERM 4",
                 Times.cleanCalendar("Next: 6:30pm Training [BCE10100] 2026 TERM 4"));
 

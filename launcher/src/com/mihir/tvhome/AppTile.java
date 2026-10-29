@@ -78,6 +78,52 @@ final class AppTile {
         return card;
     }
 
+    /**
+     * A dock tile: the app's banner filling a 16:9 plate, or its icon centred when it has no banner
+     * (sideloaded apps). No name inside - the dock prints one under every tile - but the same
+     * radius, rim and clip as the rest of the screen. Shared with the Home-key cover.
+     */
+    static FrameLayout dock(Context c, MainActivity.App app, float d) {
+        FrameLayout card = new FrameLayout(c);
+        GradientDrawable bg = new GradientDrawable();
+        if (app.isBanner) {
+            bg.setColor(0xFF1C1C1E);
+        } else {
+            bg.setOrientation(GradientDrawable.Orientation.TL_BR);
+            bg.setColors(new int[]{HomeTheme.darken(app.color, 0.85f),
+                    HomeTheme.darken(app.color, 0.42f), 0xFF141417});
+        }
+        bg.setCornerRadius(px(d, HomeTheme.DOCK_ICON_RADIUS));
+        card.setBackground(bg);
+
+        ImageView img = new ImageView(c);
+        if (app.isBanner) {
+            img.setImageDrawable(app.art);
+            img.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            card.addView(img, new FrameLayout.LayoutParams(-1, -1));
+        } else {
+            img.setImageDrawable(app.icon != null ? app.icon : app.art);
+            img.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            img.setPadding(px(d, 8), px(d, 6), px(d, 8), px(d, 6));
+            card.addView(img, new FrameLayout.LayoutParams(-1, -1));
+        }
+
+        GradientDrawable rim = new GradientDrawable();
+        rim.setStroke(Math.max(1, Math.round(d)), HomeTheme.RIM);
+        rim.setCornerRadius(px(d, HomeTheme.DOCK_ICON_RADIUS));
+        View edge = new View(c);
+        edge.setBackground(rim);
+        card.addView(edge, new FrameLayout.LayoutParams(-1, -1));
+
+        card.setClipToOutline(true);
+        card.setOutlineProvider(new ViewOutlineProvider() {
+            @Override public void getOutline(View v, Outline o) {
+                o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), px(d, HomeTheme.DOCK_ICON_RADIUS));
+            }
+        });
+        return card;
+    }
+
     private static int px(float d, int dp) {
         return Math.round(dp * d);
     }

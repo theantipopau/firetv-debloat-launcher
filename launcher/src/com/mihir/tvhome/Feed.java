@@ -24,7 +24,7 @@ final class Feed {
     static final class Item {
         String kind = "";      // "live", "new", or "" for a resume card
         String app = "", title = "", sub = "", channel = "";
-        String image = "", logo = "", uri = "", pkg = "";
+        String image = "", logo = "", badge = "", uri = "", pkg = "";
         long until;            // epoch seconds, live only
         double progress;       // 0..1
         boolean artfit;        // the image is a logo, show it contained
@@ -93,9 +93,11 @@ final class Feed {
         it.app = str(m, "app");
         it.title = str(m, "title");
         it.sub = str(m, "sub");
+        if (it.sub.isEmpty()) it.sub = str(m, "caption");   // live items carry their caption, not a sub
         it.channel = str(m, "channel");
         it.image = str(m, "image");
         it.logo = str(m, "logo");
+        it.badge = str(m, "badge");   // a live channel's mark, shown in the caption
         it.uri = str(m, "uri");
         it.pkg = str(m, "pkg");
         it.until = (long) num(m, "until");

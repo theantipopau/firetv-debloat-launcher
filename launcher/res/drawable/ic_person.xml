@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Head and shoulders: who is home, for houses with no door sensors to count. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M9.2,7.8a2.8,2.8 0 1 0 5.6,0a2.8,2.8 0 1 0 -5.6,0" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M5.6,19.2c0,-3.4 2.9,-5.6 6.4,-5.6s6.4,2.2 6.4,5.6Z" />
+</vector>

@@ -23,6 +23,7 @@ final class Times {
     private static final DateTimeFormatter H24 = DateTimeFormatter.ofPattern("HH:mm", Locale.UK);
     private static final DateTimeFormatter H12 = DateTimeFormatter.ofPattern("h:mm", Locale.UK);
     private static final DateTimeFormatter MERIDIEM = DateTimeFormatter.ofPattern("a", Locale.UK);
+    private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.UK);
 
     /** A wall-clock time typed into free text, e.g. "12:00pm" or "12:00 pm". */
     private static final Pattern TYPED_TIME = Pattern.compile("(?i)\\b(\\d{1,2}):(\\d{2})(?:\\s*([ap])\\.?m\\.?)?\\b");
@@ -66,6 +67,22 @@ final class Times {
     /** "AM"/"PM" in 12-hour mode, empty in 24-hour mode. Upper case: the house style, everywhere. */
     static String meridian(long epochSec, boolean is24, ZoneId zone) {
         return is24 ? "" : at(epochSec, zone).format(MERIDIEM).toUpperCase(Locale.UK);
+    }
+
+    /** "Wednesday 29 October": the day and month, never the year - a home screen is not a form. */
+    static String dateLine(long epochSec, ZoneId zone) {
+        return at(epochSec, zone).format(DATE);
+    }
+
+    /**
+     * The greeting above the clock: morning from 5, afternoon from noon, evening from 18. The small
+     * hours stay "Good evening" - a home screen should never wish anyone a good morning at 2 am.
+     */
+    static String greeting(long epochSec, ZoneId zone) {
+        int h = at(epochSec, zone).getHour();
+        if (h >= 5 && h < 12) return "Good morning";
+        if (h >= 12 && h < 18) return "Good afternoon";
+        return "Good evening";
     }
 
     /** The whole clock: "9:32 AM" or "09:32", built from the same two pieces the big clocks use. */

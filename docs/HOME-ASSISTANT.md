@@ -35,14 +35,27 @@ Keys (all optional; an empty or missing value hides that tile):
 | `temp`, `feels` | `22`, `21` | 72sp temperature, condition and "feels" beside it |
 | `solar`, `battery`, `house` | `3.2`, `72`, `1.4` | top row of tiles: kW (one decimal), %, kW |
 | `inside`, `ac` | `24.5`, `cool` | bottom row: indoor temperature, air-con state |
-| `bins` | `General bins - out tonight` | "General" with `TONIGHT` / `TOMORROW` under it, in the one accent colour |
+| `bins` | `General bins - out tonight` | "General" with `Tonight` / `Tomorrow` under it, in the one accent colour |
 | `rain` | `Dry right now - 0.0 mm today` | one line; a dry forecast collapses to "No rain expected" |
 | `next`, `next_at` | `Next: 6:30pm Training`, `1793239200` | one line, bracketed codes removed, "· in 2 h" from `next_at` |
+| `wind`, `wind_unit`, `humidity` | `14`, `km/h`, `62` | one line: "14 km/h · 62% humidity" |
+| `sunrise_at`, `sunset_at` | `1793239200` | one line: "Sunrise 6:12 AM · Sunset 6:12 PM", in the TV's 12/24-hour format |
+| `energy_today`, `battery_left` | `46.7`, `8 h 38 m` | one line "46.7 kWh today · 9 h left", the runway rounded to whole hours |
+| `people`, `people_names` | `1`, `Matt` | "Matt is home", "Matt & Caitlyn are home", "1 person home" - hidden when you have no person entities |
+| `plex` | `Chuck - s01e02 - Chuck Versus the Helicopter` | last line: "Plex · Chuck · S01E02", from Tautulli's who-is-watching sensor |
 | `ages` | `{"solar": 2400}` | a value older than 15 minutes dims to 40% and its label becomes `40m ago` |
 
 The panel is a frosted sample of the wallpaper, the values are white, the labels are white at 60%, and exactly one
 accent colour (amber) is used - only where something needs attention (bins due, rain on the way). Values in kW are
 rounded to one decimal place.
+
+The weather line only appears once your snapshot sends `wind`, `humidity`, `sunrise_at` or `sunset_at`; the solar
+line once it sends `energy_today`; the last lines once it sends `people` or `plex`. Nothing has to be there: a line
+with no data hides itself. `people_names` is only used while it agrees with `people`, so a half-written snapshot can
+never say somebody is in when they are not.
+
+The sheet's content must fit a 1080p TV's 540dp of screen: it is measured to nothing if it grows past that, so extra
+values belong in a line rather than in another row of tiles.
 
 The same file feeds the cover screen shown right after you press Home.
 Update speed is limited by your sensors (cloud inverter integrations often update every 5 minutes; local Modbus/MQTT is much faster).
@@ -90,7 +103,9 @@ app deep-link into TiviMate's player. The end time is formatted **on the TV**, f
 device's own time zone and its own 12/24-hour setting (the guide's zone is only used to read the guide, never to display
 a time). A frame carries its end time, so the TV drops it once the programme has finished rather than waiting for the
 next ten-minute refresh. If the guide has no still for a programme, the channel logo is shown contained instead of being
-cropped to fill the space.
+cropped to fill the space. The caption's channel name is the guide's logo too when one exists - `[7AFL] · until 21:39` -
+so a live card is readable from across the room without reading a channel name; the text is still the fallback when
+the guide carries no icon.
 
 What counts: sport categories (cricket, rugby, football/AFL, golf, racing, the US leagues) with a live tag, a "v" fixture
 or a named sport, plus films in a Movie category. Replays, classics, highlights, countdowns and studio shows are

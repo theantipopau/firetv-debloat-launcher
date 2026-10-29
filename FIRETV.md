@@ -14,7 +14,15 @@ Not affiliated with Amazon. Everything here is reversible; nothing is uninstalle
 - **Hold OK on an app**: move left/right, add to / remove from the main row, hide, app info, uninstall.
   Long-press the Settings pill to reset the row and bring back hidden apps. Recently opened apps float to the front of the list.
 - **Settings and Wi-Fi pills** open Amazon's own full-screen pages. Wi-Fi/Ethernet pill with icon and link speed.
-- **Inputs pill** (Fire TV Cube / TV-edition sets with HDMI in) and a **Voice** pill (same as the remote's mic button).
+- **Inputs**, in Settings, for devices that report an HDMI passthrough input. The list appears under the Settings
+  pill, not in the middle of the screen, and choosing an input switches to it where Fire OS allows it.
+  On the Cube it cannot: the input is registered (`Hdmi1InputService`) but has no tune target, and the player that
+  would switch it requires `com.amazon.tv.permission.TUNE_INPUT` - a signature permission that even the ADB shell
+  (uid 2000) is refused, so no sideloaded app can hold it. Picking it there says "Input unavailable" rather than
+  silently returning to the home screen.
+- **The clock follows the TV's own 12/24-hour setting.** On a TV set to 12-hour, switch it with
+  `adb shell settings put system time_12_24 24` (and `12` to go back); the clock, the sun times in the HA sheet and
+  the Inputs menu all follow it.
 - **Screensaver**: big clock over a drifting wallpaper after 3 minutes idle on Home (also registered as the system screensaver).
 - **Alert cards** over any app (`am broadcast ...`), for doorbell, bins, timers. Optional.
 - With **Home Assistant** (optional): info panel (weather, solar, battery, house power, bins, next event),
@@ -27,14 +35,15 @@ Not affiliated with Amazon. Everything here is reversible; nothing is uninstalle
 3. Build the APK (`python launcher/build_win.py`; see "Building") or use a release APK.
 4. Run:
    ```
-   tools/firetv-install.sh <tv-ip> launcher/out/tvhome.apk
+   tools/firetv-install.sh <tv-ip> launcher/out/tvhome.apk        # needs adb
+   python tools/install-tv.py launcher/out/tvhome.apk --host <tv-ip>   # no adb needed
    ```
-   Accept the "Allow USB debugging" prompt on the TV the first time. The script installs, grants the
-   permissions the launcher needs, selects it as the home activity, switches on the Home-button service and
-   reboots the TV.
-5. If you install an updated APK another way (`adb install -r`), reboot the TV afterwards: Android turns an app's
-   accessibility services off when the app is updated, and Fire OS only attaches them again at boot. Without the
-   reboot the next Home press goes to Amazon's launcher.
+   Accept the "Allow USB debugging" prompt on the TV the first time. Both install, grant the permissions the
+   launcher needs, select it as the home activity, switch on the Home-button service and reboot the TV.
+5. If you install an updated APK another way (`adb install -r`, or a `pm install -r` over `tools/tv.py`), reboot the
+   TV afterwards: Android turns an app's accessibility services off when the app is updated, and Fire OS only attaches
+   them again at boot. Without the reboot the next Home press goes to Amazon's launcher - and stays there, because a
+   settings write does not bring the service back on Fire OS. `tools/install-tv.py` does the reboot for you.
 6. Optional clean-up and speed-ups (reversible): `tools/firetv-tune.sh <tv-ip>`.
 
 ## Make it yours
@@ -80,6 +89,10 @@ adb shell pm uninstall --user 0 com.mihir.tvhome
 - A real remote's Home button never reaches an accessibility service's key filter. The launcher reacts to Amazon's home window
   opening instead, and the cover hides the wait. (ADB `input keyevent HOME` behaves differently from the remote.)
 - Amazon Settings pages open on top of ours and Back returns to the launcher.
+- HDMI switching on the Cube is closed to third-party apps. `am start -d tvinput://…` resolves to
+  `com.amazon.tv.inputpreference.service/.player.PassthroughPlayerActivity` and is refused with
+  `requires com.amazon.tv.permission.TUNE_INPUT`, for the shell as well as for an app; `com.amazon.tv.devicecontrol`
+  is no help either, its input activities being signature-guarded and its home activity disabled.
 - The Home service can lose its binding after a force-stop or reinstall; the launcher re-enables it on start
   (needs `WRITE_SECURE_SETTINGS`, granted over ADB by the install script).
 - Amazon's home-screen ads are loaded from Amazon's servers. The launcher hides them; to remove them at the network, block the

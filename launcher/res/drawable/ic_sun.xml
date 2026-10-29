@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A solid disc and eight rays: sunset, at the weight the sheet already uses. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M8.4,12a3.6,3.6 0 1 0 7.2,0a3.6,3.6 0 1 0 -7.2,0" />
+    <path
+        android:pathData="M12,2.8v2.3M12,18.9v2.3M2.8,12h2.3M18.9,12h2.3M5.5,5.5l1.6,1.6M16.9,16.9l1.6,1.6M18.5,5.5l-1.6,1.6M7.1,16.9l-1.6,1.6"
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round" />
+</vector>

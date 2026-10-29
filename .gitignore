@@ -2,6 +2,8 @@
 tools/venv/
 tools/adbkey/
 tools/.tv_host
+tools/.tizen_host
+tools/.tizen_token
 launcher/debug.keystore
 backup/
 shots/
@@ -34,3 +36,6 @@ launcher/out/
 /shot*.png
 /REDDIT-POST.md
 /logo.png
+
+# Local captures and one-off dumps
+screenshots/

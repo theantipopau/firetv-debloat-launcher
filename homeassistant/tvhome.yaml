@@ -86,6 +86,26 @@ automation:
             house: "{{ states('sensor.house_power') }}"                                                                                         # kW
             inside: "{{ states('sensor.living_room_temperature') | float(0) | round(1) }}"
             ac: ""                                    # e.g. "cool", "heat" or "off"; "" hides it
+            # The sheet's weather row and its last line. Every value is optional: "" hides that cell,
+            # and a whole row disappears when all three of its cells are hidden.
+            wind: "{{ state_attr('weather.home', 'wind_speed') | float(0) | round(0) | int }}"
+            wind_unit: "{{ state_attr('weather.home', 'wind_speed_unit') | default('km/h', true) }}"
+            humidity: "{{ state_attr('weather.home', 'humidity') | int(0) }}"
+            sunrise_at: "{{ as_timestamp(state_attr('sun.sun', 'next_rising')) | int(0) }}"    # epoch seconds
+            sunset_at: "{{ as_timestamp(state_attr('sun.sun', 'next_setting')) | int(0) }}"
+            # The day's solar and the battery's runway, on one line: "46.7 kWh today · 9 h left". The TV rounds
+            # the runway to whole hours so the line fits, so send the span alone: "8 h 38 m", not "Lasts 8 h 38 m".
+            energy_today: "{{ states('sensor.foxess_energy_generated') | float(0) | round(1) }}"   # CHANGE: your kWh-today sensor
+            battery_left: "{{ states('sensor.battery_estimate') | replace('Lasts ', '') }}"        # CHANGE: leaves "8 h 38 m"
+            people: "{{ (states.person | selectattr('state', 'eq', 'home') | list | count) if states.person else '' }}"
+            # First names of whoever is home: "Matt is home". Only used while it matches `people` above.
+            people_names: "{{ (states.person | selectattr('state', 'eq', 'home') | map(attribute='name') | map('regex_replace', ' .*', '') | list) | join(' & ') }}"
+            # What Plex is playing elsewhere in the house, if you run Tautulli: the sensor's attribute VALUE is
+            # Plex's own title string, and the TV shortens it to "Plex · Chuck · S01E02". Empty when nobody is
+            # watching. Left empty here so this file never breaks a snapshot on a house without Plex.
+            plex: ""
+            # With a Tautulli "who is watching" sensor whose attribute value is the title:
+            # plex: "{% set n = states('sensor.plex_watching') | int(0) %}{% set a = states.sensor.plex_watching.attributes %}{{ (a.values() | list | first) if n > 0 and a else '' }}"
             bins: ""                                  # e.g. "General bins - out tonight"
             next: ""                                  # e.g. "Next: 6:30pm Football training"
             next_at: 0                                # optional: epoch seconds of that event, so the TV can say "in 2 h"

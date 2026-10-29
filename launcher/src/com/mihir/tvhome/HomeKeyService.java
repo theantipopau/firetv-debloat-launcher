@@ -52,6 +52,16 @@ public class HomeKeyService extends AccessibilityService {
     static volatile boolean running;
     private static HomeKeyService instance;
     private final Handler ui = new Handler(Looper.getMainLooper());
+    /** Retries live on their own handler: hideCover() clears the cover's callbacks, not these. */
+    private final Handler retry = new Handler(Looper.getMainLooper());
+    private long pingStart;
+    private final Runnable homePing = new Runnable() {
+        @Override public void run() {
+            if (cover == null) return;
+            if (!MainActivity.visible) goHome();
+            if (SystemClock.elapsedRealtime() - pingStart < 9000) retry.postDelayed(this, 600);
+        }
+    };
     private View cover;
 
     // The cover is built inside an accessibility callback, so nothing here may decode a bitmap or list
@@ -63,16 +73,12 @@ public class HomeKeyService extends AccessibilityService {
     private static boolean coverDecoding;
     /** The dock the cover draws when the launcher's own list is not in memory yet. */
     private List<MainActivity.App> coverDock;
-    /** The last hero still, decoded once in the background so a Home press never waits on it. */
-    private static Bitmap coverHero;
-    private static boolean heroDecoding;
 
     @Override protected void onServiceConnected() {
         running = true; instance = this; Log.w("TvHome", "HomeKeyService connected");
         try { wallNames = getAssets().list("wallpapers"); } catch (Exception ignored) { }
         loadDock();
         prefetchWallpaper();
-        prefetchHero();
     }
 
     @Override public boolean onUnbind(Intent intent) { running = false; instance = null; hideCover(); return super.onUnbind(intent); }
@@ -120,7 +126,20 @@ public class HomeKeyService extends AccessibilityService {
         if (SystemClock.elapsedRealtime() < MainActivity.suppressRedirectUntil) return;
         Log.w("TvHome", "bounce Amazon home -> ours");
         showCover();
+        startHomePing();
+    }
+
+    /**
+     * Android refuses background activity starts for about five seconds after Home, and Amazon's own
+     * home is already launching by then - one start can therefore lose the race and leave its page
+     * on screen. So ask again, every 600ms, until the launcher is actually the visible activity; the
+     * cover stays down meanwhile, which is why the retries are invisible.
+     */
+    private void startHomePing() {
+        pingStart = SystemClock.elapsedRealtime();
+        retry.removeCallbacks(homePing);
         goHome();
+        retry.postDelayed(homePing, 600);
     }
 
     private void goHome() {
@@ -134,9 +153,12 @@ public class HomeKeyService extends AccessibilityService {
         Log.w("TvHome", "key " + e.getKeyCode() + " a=" + e.getAction() + " src=" + e.getSource() + " dev=" + e.getDeviceId());
         if (e.getKeyCode() != KeyEvent.KEYCODE_HOME) return false;
         Log.w("TvHome", "HOME key action=" + e.getAction());
+        // Put the cover up as the key goes down, before the system brings Amazon's home to the
+        // front: waiting for its window event meant that page was visible for a moment first.
+        if (e.getAction() == KeyEvent.ACTION_DOWN && !MainActivity.visible) showCover();
         if (e.getAction() == KeyEvent.ACTION_UP) {
             MainActivity.suppressRedirectUntil = 0;
-            goHome();
+            startHomePing();
         }
         return true;
     }
@@ -196,8 +218,9 @@ public class HomeKeyService extends AccessibilityService {
                 a.pkg = p;
                 a.label = String.valueOf(pm.getApplicationLabel(ai));
                 Drawable banner = ai.loadBanner(pm);
+                a.icon = ai.loadIcon(pm);
                 a.isBanner = banner != null;
-                a.art = banner != null ? banner : ai.loadIcon(pm);
+                a.art = banner != null ? banner : a.icon;
                 // The launcher samples a colour from the art; a neutral wash is close enough for the
                 // split second this fallback is on screen, and sampling would decode bitmaps here.
                 a.color = 0xFF4A4F5A;
@@ -207,30 +230,13 @@ public class HomeKeyService extends AccessibilityService {
         coverDock = apps;
     }
 
-    /** Decode the hero still the launcher cached, off the UI thread, so the cover has art instantly. */
-    private void prefetchHero() {
-        final java.io.File f = new java.io.File(getCacheDir(), "hero_cover.jpg");
-        if (!f.isFile() || heroDecoding) return;
-        heroDecoding = true;
-        new Thread(() -> {
-            Bitmap bm = null;
-            try {
-                BitmapFactory.Options o = new BitmapFactory.Options();
-                o.inPreferredConfig = Bitmap.Config.RGB_565;
-                bm = BitmapFactory.decodeFile(f.getAbsolutePath(), o);
-            } catch (Exception ignored) { }
-            final Bitmap done = bm;
-            ui.post(() -> { if (done != null) coverHero = done; heroDecoding = false; });
-        }).start();
-    }
-
     // ------------------------------------------------------------------ the cover
 
     /**
      * The screen the viewer sees while Android refuses our activity start. It is not a logo or a
-     * loading screen: it is the home screen with the data already known - the same bar, the last
-     * hero still, the real dock icons and the shape of the resume row - so Home reads as one screen
-     * settling rather than three.
+     * loading screen: it is the home screen with the data already known - the same clock in the same
+     * place, skeleton lines where the values will appear, and the same glass pill of real icons at
+     * the same size, gaps and focus scale - so Home reads as one screen settling.
      */
     private void showCover() {
         if (cover != null) return;
@@ -240,11 +246,7 @@ public class HomeKeyService extends AccessibilityService {
             FrameLayout f = new FrameLayout(this);
             f.setBackgroundColor(Color.BLACK);
 
-            // The still the launcher is showing, borrowed from its process (same app). If it has
-            // one, the cover gets the hero's own gradients; if not, the wallpaper and its wash.
-            Bitmap hero = MainActivity.currentHero != null ? MainActivity.currentHero : coverHero;
-            Bitmap photo = hero != null ? hero
-                    : MainActivity.currentWall != null ? MainActivity.currentWall : coverWall;
+            Bitmap photo = MainActivity.currentWall != null ? MainActivity.currentWall : coverWall;
             if (photo != null) {
                 ImageView iv = new ImageView(this);
                 iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -252,44 +254,16 @@ public class HomeKeyService extends AccessibilityService {
                 f.addView(iv, new FrameLayout.LayoutParams(-1, -1));
             }
 
-            int hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
-            if (hero == null) {
-                View scrim = new View(this);
-                scrim.setBackground(HomeTheme.wallpaperScrim());
-                f.addView(scrim, new FrameLayout.LayoutParams(-1, -1));
+            // The launcher's two washes, from the same source, so the swap is invisible.
+            View left = new View(this);
+            left.setBackground(HomeTheme.leftWash());
+            f.addView(left, new FrameLayout.LayoutParams(-1, -1));
+            View bottom = new View(this);
+            bottom.setBackground(HomeTheme.bottomWash());
+            f.addView(bottom, new FrameLayout.LayoutParams(-1, px(d, 340), Gravity.BOTTOM));
 
-                View tint = new View(this);
-                tint.setBackgroundColor(HomeTheme.timeTint(hour));
-                f.addView(tint, new FrameLayout.LayoutParams(-1, -1));
-
-                View glow = new View(this);    // the launcher's ambient colour behind the dock
-                GradientDrawable g = new GradientDrawable();
-                g.setGradientType(GradientDrawable.RADIAL_GRADIENT);
-                g.setGradientCenter(0.5f, 0.78f);
-                g.setGradientRadius(getResources().getDisplayMetrics().widthPixels * 0.62f);
-                int gc = MainActivity.glowNow;
-                g.setColors(new int[]{HomeTheme.withAlpha(gc, 0.5f), HomeTheme.withAlpha(gc, 0.14f),
-                        Color.TRANSPARENT});
-                glow.setBackground(g);
-                f.addView(glow, new FrameLayout.LayoutParams(-1, -1));
-            } else {
-                View top = new View(this);
-                top.setBackground(HomeTheme.topScrim());
-                f.addView(top, new FrameLayout.LayoutParams(-1, px(d, HomeTheme.TOP_SCRIM_H)));
-                View left = new View(this);
-                left.setBackground(HomeTheme.leftScrim());
-                f.addView(left, new FrameLayout.LayoutParams(-1, -1));
-                View bottom = new View(this);
-                bottom.setBackground(HomeTheme.bottomScrim());
-                f.addView(bottom, new FrameLayout.LayoutParams(-1, -1));
-            }
-
-            View dockFade = new View(this);
-            dockFade.setBackground(HomeTheme.dockFade());
-            f.addView(dockFade, new FrameLayout.LayoutParams(-1, px(d, 230), Gravity.BOTTOM));
-
-            addTopBar(f, d);
-            addBottom(f, d);
+            addStatus(f, d);
+            addDock(f, d);
             addSpinner(f, d);
 
             f.setFocusable(true);
@@ -308,61 +282,80 @@ public class HomeKeyService extends AccessibilityService {
         } catch (Exception e) { Log.w("TvHome", "cover failed: " + e); }
     }
 
-    /** The top bar as the launcher draws it: greeting, glance strip, clock, icon-only chips. */
-    private void addTopBar(final FrameLayout f, final float d) {
-        int hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
+    /** The clock, then three skeleton lines in the shape the real ones take. */
+    private void addStatus(final FrameLayout f, final float d) {
+        LinearLayout block = new LinearLayout(this);
+        block.setOrientation(LinearLayout.VERTICAL);
+        block.setPadding(px(d, HomeTheme.BLOCK_PAD_H), px(d, HomeTheme.BLOCK_PAD_V),
+                px(d, HomeTheme.BLOCK_PAD_H), px(d, HomeTheme.BLOCK_PAD_V));
+
+        // The greeting is real text, not a bar: it needs nothing from the network, so the cover can
+        // say exactly what the launcher will say a moment later.
         String family = getString(R.string.family_name);
-        String hello = hour < 5 ? "Good night" : hour < 12 ? "Good morning"
-                : hour < 17 ? "Good afternoon" : "Good evening";
-        // The cover must pick the same string the launcher will: with a strip present the full name
-        // does not fit on this width, and home shows the short greeting there.
-
-        LinearLayout bar = new LinearLayout(this);
-        bar.setOrientation(LinearLayout.HORIZONTAL);
-        bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setClipChildren(false);
-
-        LinearLayout right = new LinearLayout(this);
-        right.setGravity(Gravity.CENTER_VERTICAL);
-        right.setClipChildren(false);
-        boolean glance = addGlance(right, d);
-
+        String hello = Times.greeting(System.currentTimeMillis() / 1000L,
+                java.time.ZoneId.systemDefault());
         TextView g = new TextView(this);
-        g.setText(family.isEmpty() || glance ? hello : hello + ", " + family);
-        g.setTextSize(TypedValue.COMPLEX_UNIT_SP, Typo.BODY);
+        g.setText(family.isEmpty() ? hello : hello + " " + family);
+        g.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
         g.setTypeface(Typo.medium(this));
-        g.setTextColor(HomeTheme.TEXT_70);
-        g.setSingleLine(true);
-        g.setEllipsize(TextUtils.TruncateAt.END);
-        g.setShadowLayer(10 * d, 0, d, 0xB3000000);
-        bar.addView(g, new LinearLayout.LayoutParams(0, -2, 1f));
+        g.setTextColor(0xD9FFFFFF);
+        g.setIncludeFontPadding(false);
+        g.setShadowLayer(px(d, 8), 0, px(d, 1), 0x80000000);
+        LinearLayout.LayoutParams gp = new LinearLayout.LayoutParams(-2, -2);
+        gp.bottomMargin = px(d, HomeTheme.GREET_GAP);
+        block.addView(g, gp);
 
         final TextView clk = new TextView(this);
-        clk.setText(Times.clockTime(System.currentTimeMillis() / 1000L, is24(), java.time.ZoneId.systemDefault()));
-        clk.setTextSize(TypedValue.COMPLEX_UNIT_SP, Typo.CLOCK_BAR);
+        clk.setText(Times.clockDigits(System.currentTimeMillis() / 1000L, is24(),
+                java.time.ZoneId.systemDefault()));
+        clk.setTextSize(TypedValue.COMPLEX_UNIT_SP, 56);
         clk.setTypeface(Typo.light(this));
         clk.setTextColor(Color.WHITE);
         clk.setIncludeFontPadding(false);
         clk.setFontFeatureSettings("tnum");
-        clk.setShadowLayer(10 * d, 0, d, 0xB3000000);
-        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-2, -2);
-        clp.setMargins(px(d, 32), 0, 0, 0);
-        right.addView(clk, clp);
+        clk.setShadowLayer(px(d, 8), 0, px(d, 1), 0x80000000);
+        block.addView(clk);
 
-        if (hasPassthroughInputs()) right.addView(chip(R.drawable.ic_input, d), chipParams(d));
-        right.addView(chip(isEthernet() ? R.drawable.ic_ethernet : R.drawable.ic_wifi, d), chipParams(d));
-        right.addView(chip(R.drawable.ic_settings, d), chipParams(d));
+        // The date hangs under the clock in the same spot the launcher puts it.
+        TextView day = new TextView(this);
+        day.setText(Times.dateLine(System.currentTimeMillis() / 1000L,
+                java.time.ZoneId.systemDefault()));
+        day.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+        day.setTypeface(Typo.regular(this));
+        day.setTextColor(0xB3FFFFFF);
+        day.setIncludeFontPadding(false);
+        day.setShadowLayer(px(d, 8), 0, px(d, 1), 0x80000000);
+        LinearLayout.LayoutParams dp2 = new LinearLayout.LayoutParams(-2, -2);
+        dp2.topMargin = px(d, HomeTheme.DATE_TOP);
+        block.addView(day, dp2);
 
-        bar.addView(right, new LinearLayout.LayoutParams(-2, -2));
-        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-1, px(d, HomeTheme.TOP_BAR_H), Gravity.TOP);
-        lp.setMargins(px(d, HomeTheme.SAFE), px(d, HomeTheme.TOP_BAR_TOP), px(d, HomeTheme.SAFE), 0);
-        f.addView(bar, lp);
+        LinearLayout bars = new LinearLayout(this);
+        bars.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams box = new LinearLayout.LayoutParams(-1, -2);
+        box.topMargin = px(d, HomeTheme.CLOCK_GAP + 8);
+        block.addView(bars, box);
+        int[] widths = {300, 246, 190};
+        for (int i = 0; i < widths.length; i++) {
+            View bar = new View(this);
+            GradientDrawable bg = new GradientDrawable();
+            bg.setCornerRadius(px(d, 7));
+            bg.setColor(0x20FFFFFF);   // white 12%: a shape, never fake text
+            bar.setBackground(bg);
+            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(px(d, widths[i]), px(d, 14));
+            p.topMargin = px(d, i == 0 ? 0 : HomeTheme.LINE_GAP + 6);
+            bars.addView(bar, p);
+        }
+
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
+                px(d, HomeTheme.NOW_W), -2, Gravity.TOP | Gravity.START);
+        lp.setMargins(px(d, HomeTheme.SAFE), px(d, HomeTheme.CLOCK_TOP), 0, 0);
+        f.addView(block, lp);
 
         // A cover can outlive the minute it was built in.
         final Runnable tick = new Runnable() {
             @Override public void run() {
                 if (cover == null) return;
-                clk.setText(Times.clockTime(System.currentTimeMillis() / 1000L, is24(),
+                clk.setText(Times.clockDigits(System.currentTimeMillis() / 1000L, is24(),
                         java.time.ZoneId.systemDefault()));
                 ui.postDelayed(this, 10_000);
             }
@@ -370,183 +363,118 @@ public class HomeKeyService extends AccessibilityService {
         ui.postDelayed(tick, 10_000);
     }
 
+    /** One glass pill: the same tile size, gaps, names and first-slot lift as the launcher's. */
+    private void addDock(FrameLayout f, float d) {
+        LinearLayout pill = new LinearLayout(this);
+        pill.setOrientation(LinearLayout.HORIZONTAL);
+        pill.setGravity(Gravity.CENTER_VERTICAL);
+        pill.setClipChildren(false);
+        pill.setClipToPadding(false);
+        pill.setPadding(px(d, HomeTheme.DOCK_PAD), px(d, HomeTheme.DOCK_PAD_TOP),
+                px(d, HomeTheme.DOCK_PAD), px(d, HomeTheme.DOCK_PAD_BOTTOM));
+        pill.setBackground(HomeTheme.glassPill(HomeTheme.DOCK_PILL_RADIUS, d));
+
+        List<MainActivity.App> apps = MainActivity.dockSnapshot != null
+                ? MainActivity.dockSnapshot : coverDock;
+        if (apps != null) {
+            int gap = Math.max(0, px(d, HomeTheme.DOCK_GAP) - px(d, 12));
+            for (int i = 0; i < apps.size(); i++) {
+                FrameLayout slot = new FrameLayout(this);
+                slot.setClipChildren(false);
+                slot.setClipToPadding(false);
+                slot.setPadding(px(d, 6), px(d, 3), px(d, 6), px(d, 9));   // same shift as the launcher
+
+                View halo = new View(this);
+                GradientDrawable gd = new GradientDrawable();
+                gd.setGradientType(GradientDrawable.RADIAL_GRADIENT);
+                gd.setGradientRadius(px(d, 74));
+                gd.setGradientCenter(0.5f, 0.5f);
+                gd.setColors(new int[]{0x40FFFFFF, 0x0DFFFFFF, 0x00000000});
+                halo.setBackground(gd);
+                halo.setAlpha(0f);
+                slot.addView(halo, new FrameLayout.LayoutParams(-1, -1));
+
+                LinearLayout col = new LinearLayout(this);
+                col.setOrientation(LinearLayout.VERTICAL);
+                col.setGravity(Gravity.CENTER_HORIZONTAL);
+                FrameLayout frame = new FrameLayout(this);
+                frame.addView(AppTile.dock(this, apps.get(i), d),
+                        new FrameLayout.LayoutParams(-1, -1));
+                col.addView(frame, new LinearLayout.LayoutParams(
+                        px(d, HomeTheme.DOCK_W), px(d, HomeTheme.DOCK_H)));
+
+                TextView name = new TextView(this);
+                name.setText(apps.get(i).label);
+                name.setTextSize(TypedValue.COMPLEX_UNIT_SP, HomeTheme.DOCK_NAME);   // a label, not a caption
+                name.setTypeface(Typo.medium(this));
+                name.setTextColor(0xCCFFFFFF);
+                name.setSingleLine(true);
+                name.setGravity(Gravity.CENTER);
+                name.setEllipsize(TextUtils.TruncateAt.END);
+                name.setShadowLayer(px(d, 6), 0, px(d, 1), 0x99000000);
+                LinearLayout.LayoutParams np = new LinearLayout.LayoutParams(
+                        px(d, HomeTheme.DOCK_W), -2);
+                np.topMargin = px(d, HomeTheme.DOCK_NAME_GAP);
+                col.addView(name, np);
+                slot.addView(col, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER));
+
+                // The launcher hands the cursor to the first slot, so the cover draws it lifted.
+                if (i == 0) {
+                    slot.setScaleX(HomeTheme.DOCK_FOCUS_SCALE);
+                    slot.setScaleY(HomeTheme.DOCK_FOCUS_SCALE);
+                    halo.setAlpha(1f);
+                }
+                LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
+                        px(d, HomeTheme.DOCK_W + 12), px(d, HomeTheme.DOCK_SLOT_H));
+                p.setMargins(i == 0 ? 0 : gap, 0, i == apps.size() - 1 ? 0 : gap, 0);
+                pill.addView(slot, p);
+            }
+        }
+
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-2, -2,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        lp.bottomMargin = px(d, HomeTheme.DOCK_BOTTOM);
+        f.addView(pill, lp);
+    }
+
     private boolean is24() {
         return android.text.format.DateFormat.is24HourFormat(this);
     }
 
-    /** The same four values, separators and staleness rule as the launcher's strip. */
-    private boolean addGlance(LinearLayout right, float d) {
-        String json = getSharedPreferences("launcher", MODE_PRIVATE).getString("ha_json", "");
-        if (json.isEmpty()) return false;
-        try {
-            JSONObject j = new JSONObject(json);
-            JSONObject ages = j.optJSONObject("ages");
-            String temp = j.optString("temp", "");
-            String solar = j.optString("solar", "");
-            String battery = j.optString("battery", "");
-            String bins = Cards.binsGlance(j.optString("bins", ""));
-            String[] values = {
-                    temp.isEmpty() ? "" : temp + "\u00B0",
-                    solar.isEmpty() ? "" : Times.kw(solar) + " kW",
-                    battery.isEmpty() ? "" : battery + "%",
-                    bins
-            };
-            String[] keys = {"temp", "solar", "battery", "bins"};
-            int[] icons = {R.drawable.ic_thermo, R.drawable.ic_solar,
-                    R.drawable.ic_battery, R.drawable.ic_bins};
-
-            LinearLayout strip = new LinearLayout(this);
-            strip.setOrientation(LinearLayout.HORIZONTAL);
-            strip.setGravity(Gravity.CENTER_VERTICAL);
-            strip.setPadding(px(d, 6), px(d, 4), px(d, 6), px(d, 4));
-            boolean any = false;
-            for (int i = 0; i < values.length; i++) {
-                if (values[i].isEmpty()) continue;
-                LinearLayout item = new LinearLayout(this);
-                item.setGravity(Gravity.CENTER_VERTICAL);
-                if (any) {
-                    TextView sep = new TextView(this);
-                    sep.setText("\u00B7");
-                    sep.setTextSize(TypedValue.COMPLEX_UNIT_SP, Typo.CAPTION);
-                    sep.setTextColor(0x66FFFFFF);
-                    LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-2, -2);
-                    sp.setMargins(px(d, 8), 0, px(d, 6), 0);   // ~24dp between values, dot included
-                    item.addView(sep, sp);
-                }
-                ImageView icon = new ImageView(this);
-                icon.setImageResource(icons[i]);
-                icon.setImageTintList(ColorStateList.valueOf(0x99FFFFFF));
-                item.addView(icon, new LinearLayout.LayoutParams(px(d, 16), px(d, 16)));
-                TextView value = new TextView(this);
-                value.setText(values[i]);
-                value.setTextSize(TypedValue.COMPLEX_UNIT_SP, Typo.BODY);
-                value.setTypeface(Typo.medium(this));
-                value.setTextColor("bins".equals(keys[i]) ? HomeTheme.ACCENT : Color.WHITE);
-                value.setSingleLine(true);
-                value.setFontFeatureSettings("tnum");
-                value.setShadowLayer(8 * d, 0, d, 0x99000000);
-                LinearLayout.LayoutParams vp = new LinearLayout.LayoutParams(-2, -2);
-                vp.setMargins(px(d, 4), 0, 0, 0);
-                item.addView(value, vp);
-                long age = ages == null ? 0 : ages.optLong(keys[i], 0);
-                item.setAlpha(Cards.glanceAlpha(age));
-                strip.addView(item, new LinearLayout.LayoutParams(-2, -2));
-                any = true;
-            }
-            if (any) right.addView(strip, new LinearLayout.LayoutParams(-2, px(d, 44)));
-            return any;
-        } catch (Exception ignored) { return false; }
-    }
-
-    private TextView chip(int iconRes, float d) {
-        TextView p = new TextView(this);
-        p.setTextSize(TypedValue.COMPLEX_UNIT_SP, Typo.CAPTION);
-        p.setTypeface(Typo.medium(this));
-        p.setTextColor(0xE6FFFFFF);
-        p.setGravity(Gravity.CENTER);
-        p.setPadding(px(d, 6), 0, px(d, 6), 0);
-        p.setMinWidth(px(d, 30));
-        Drawable ic = getDrawable(iconRes);
-        ic.setBounds(0, 0, px(d, 18), px(d, 18));
-        p.setCompoundDrawables(ic, null, null, null);
-        p.setCompoundDrawableTintList(ColorStateList.valueOf(0xE6FFFFFF));
-        return p;
-    }
-
-    private LinearLayout.LayoutParams chipParams(float d) {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-2, px(d, 40));
-        p.setMargins(px(d, 6), 0, 0, 0);
-        return p;
-    }
-
-    /** Dock, then the resume row: the same stack, order and margins as the launcher's bottom block. */
-    private void addBottom(FrameLayout f, float d) {
-        LinearLayout bottom = new LinearLayout(this);
-        bottom.setOrientation(LinearLayout.VERTICAL);
-        bottom.setClipChildren(false);
-        bottom.setClipToPadding(false);
-
-        LinearLayout dock = new LinearLayout(this);
-        dock.setOrientation(LinearLayout.HORIZONTAL);
-        dock.setGravity(Gravity.CENTER);
-        dock.setClipChildren(false);   // the first tile's 1.08 focus scale must be allowed to overhang
-        dock.setPadding(px(d, HomeTheme.DOCK_PAD_H), px(d, HomeTheme.DOCK_PAD_V),
-                px(d, HomeTheme.DOCK_PAD_H), px(d, HomeTheme.DOCK_PAD_V));
-        List<MainActivity.App> apps = MainActivity.dockSnapshot != null ? MainActivity.dockSnapshot : coverDock;
-        if (apps != null) {
-            for (int i = 0; i < apps.size(); i++) {
-                FrameLayout card = AppTile.card(this, apps.get(i), d);
-                // The launcher hands the cursor to the first tile on a cold start, so that tile is
-                // already at 1.08 and lifted. Drawing it flat made the dock jump by 8% on the swap.
-                if (i == 0) {
-                    card.setScaleX(HomeTheme.DOCK_FOCUS_SCALE);
-                    card.setScaleY(HomeTheme.DOCK_FOCUS_SCALE);
-                    card.setTranslationY(-px(d, HomeTheme.DOCK_FOCUS_LIFT));
-                }
-                LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, 1f);
-                p.setMargins(i == 0 ? 0 : px(d, HomeTheme.DOCK_GAP), 0,
-                        i == apps.size() - 1 ? 0 : px(d, HomeTheme.DOCK_GAP), 0);
-                dock.addView(card, p);
-            }
-        }
-        bottom.addView(dock, new LinearLayout.LayoutParams(-1, -2));
-
-        int count = getSharedPreferences("launcher", MODE_PRIVATE).getInt("cw_count", 0);
-        if (count > 0) {
-            LinearLayout block = new LinearLayout(this);
-            block.setOrientation(LinearLayout.VERTICAL);
-
-            TextView head = new TextView(this);
-            head.setText("Continue Watching");
-            head.setTextSize(TypedValue.COMPLEX_UNIT_SP, Typo.SECTION);
-            head.setTypeface(Typo.semibold(this));
-            head.setTextColor(0xE6FFFFFF);
-            head.setShadowLayer(10 * d, 0, d, 0x99000000);
-            LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(-2, -2);
-            hp.setMargins(px(d, HomeTheme.SAFE), 0, 0, px(d, HomeTheme.CW_HEAD_GAP));
-            block.addView(head, hp);
-
-            LinearLayout row = new LinearLayout(this);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setPadding(px(d, HomeTheme.SAFE), 0, px(d, HomeTheme.SAFE), 0);
-            int n = Math.min(3, count);
-            for (int i = 0; i < n; i++) {
-                View tile = new View(this);
-                GradientDrawable bg = new GradientDrawable();
-                bg.setCornerRadius(px(d, HomeTheme.CW_RADIUS));
-                bg.setColor(0x14FFFFFF);   // white 8%: a shape, not a fake poster
-                tile.setBackground(bg);
-                LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
-                        px(d, HomeTheme.CW_W), px(d, HomeTheme.CW_H));
-                p.setMargins(i == 0 ? 0 : px(d, HomeTheme.CW_GAP), 0, 0, 0);
-                row.addView(tile, p);
-            }
-            // The same fixed height the launcher's scroll view uses, or the dock above sits higher.
-            block.addView(row, new LinearLayout.LayoutParams(-1, px(d, HomeTheme.CW_H)));
-
-            LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-1, -2);
-            bp.topMargin = px(d, HomeTheme.DOCK_TO_CW);
-            bottom.addView(block, bp);
-        }
-
-        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
-        lp.bottomMargin = px(d, HomeTheme.CW_BOTTOM);
-        f.addView(bottom, lp);
-    }
-
     /** Only after 1.5s: for that long the cover is simply the home screen, and a spinner would spoil it. */
+    /**
+     * The loading line: "Please wait, Home loading…" with the wheel beside it, on the floor under the
+     * glass pill. It used to sit at the pill's own height, where the glass's right end cut across the
+     * wheel and the two read as one broken control.
+     */
     private void addSpinner(FrameLayout f, float d) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView label = new TextView(this);
+        label.setText("Please wait, Home loading\u2026");
+        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        label.setTypeface(Typo.medium(this));
+        label.setTextColor(0xD9FFFFFF);
+        label.setIncludeFontPadding(false);
+        label.setShadowLayer(px(d, 6), 0, px(d, 1), 0x99000000);   // the wallpaper can be bright here
+        row.addView(label);
+
         final android.widget.ProgressBar spin = new android.widget.ProgressBar(
                 this, null, android.R.attr.progressBarStyleSmall);
-        spin.setIndeterminateTintList(ColorStateList.valueOf(0x99FFFFFF));
-        FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(px(d, 24), px(d, 24),
-                Gravity.BOTTOM | Gravity.END);
-        p.setMargins(0, 0, px(d, HomeTheme.SAFE), px(d, HomeTheme.CW_BOTTOM));
-        f.addView(spin, p);
-        spin.setAlpha(0f);
+        spin.setIndeterminateTintList(ColorStateList.valueOf(0xD9FFFFFF));
+        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(px(d, 20), px(d, 20));
+        sp.setMargins(px(d, 10), 0, 0, 0);
+        row.addView(spin, sp);
+
+        FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.END);
+        p.setMargins(0, 0, px(d, HomeTheme.SAFE), px(d, HomeTheme.LOADING_BOTTOM));
+        f.addView(row, p);
+        row.setAlpha(0f);
         ui.postDelayed(() -> {
-            if (cover == f) spin.animate().alpha(0.6f).setDuration(300).start();
-        }, 1500);
+            if (cover == f) row.animate().alpha(0.8f).setDuration(300).start();
+        }, 1200);
     }
 
     private boolean isEthernet() {
@@ -571,6 +499,7 @@ public class HomeKeyService extends AccessibilityService {
 
     private void hideCover() {
         ui.removeCallbacksAndMessages(null);
+        retry.removeCallbacks(homePing);
         final View c = cover;
         if (c == null) return;
         cover = null;
