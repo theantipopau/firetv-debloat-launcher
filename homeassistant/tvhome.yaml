@@ -83,6 +83,11 @@ automation:
             rain: ""                                  # e.g. a template sensor: "Dry right now"
             solar: "{{ states('sensor.solar_power') | float(0) if states('sensor.solar_power') not in ['unknown', 'unavailable'] else '' }}"      # kW; "" hides the energy row
             battery: "{{ states('sensor.battery_soc') | float(0) | round(0) | int }}"                                                           # %
+            # Optional: signed battery power in WATTS, positive while charging. The words stay white;
+            # only the battery mark turns green (charging), orange (supplying the house) or red (under
+            # 20%). "" keeps it neutral. Example for separate charge/discharge power sensors:
+            # bat_power: "{{ (((states('sensor.battery_charge_power') | float(0)) - (states('sensor.battery_discharge_power') | float(0))) * 1000) | round(0) | int }}"
+            bat_power: ""
             house: "{{ states('sensor.house_power') }}"                                                                                         # kW
             inside: "{{ states('sensor.living_room_temperature') | float(0) | round(1) }}"
             ac: ""                                    # e.g. "cool", "heat" or "off"; "" hides it

@@ -453,17 +453,13 @@ public class MainActivity extends Activity {
         statusBlock.setId(View.generateViewId());
         statusBlock.setClipChildren(false);
         statusBlock.setPadding(dp(HomeTheme.BLOCK_PAD_H), dp(HomeTheme.BLOCK_PAD_V),
-                dp(HomeTheme.BLOCK_PAD_H), dp(HomeTheme.BLOCK_PAD_V));
+                dp(HomeTheme.BLOCK_PAD_H), dp(HomeTheme.BLOCK_PAD_BOTTOM));
         final GradientDrawable bg = new GradientDrawable();
         bg.setCornerRadius(dp(HomeTheme.BLOCK_RADIUS));
         bg.setColor(Color.TRANSPARENT);
-        // Inset layer, not the view's own box: the highlight has to stop a full gutter above the
-        // cards, and padding cannot go negative without also moving the last line of text.
-        android.graphics.drawable.LayerDrawable bgLayer =
-                new android.graphics.drawable.LayerDrawable(
-                        new android.graphics.drawable.Drawable[]{bg});
-        bgLayer.setLayerInset(0, 0, 0, 0, dp(HomeTheme.BLOCK_INSET_BOTTOM));
-        statusBlock.setBackground(bgLayer);
+        // The highlight is the block's own box, padding included: an inset edge used to cross the
+        // last line whenever a line was hidden, so the glass ended through "Air con off".
+        statusBlock.setBackground(bg);
         // OK on the block opens the detail sheet; the block is the only way in.
         statusBlock.setOnClickListener(v -> openHa());
         statusBlock.setOnFocusChangeListener((v, has) ->
@@ -1922,10 +1918,11 @@ public class MainActivity extends Activity {
             int state = Batteries.state(soc, watts, posCharge);
             boolean stale = Times.stale(age(ages, "battery"));
             String name = j.optString("battery_name", "House");
-            int color = Batteries.color(state, stale);
-            setStatusLine(statusBatteryRow, statusBattery, Batteries.line(name, soc, state), color,
-                    Batteries.alpha(stale));
-            tintBatteryIcon(color);
+            // The words stay white like every other line; the mark carries the state, so a
+            // charging battery is green and a draining one orange without tinting the sentence.
+            setStatusLine(statusBatteryRow, statusBattery, Batteries.line(name, soc, state),
+                    HomeTheme.TEXT_90, Batteries.alpha(stale));
+            tintBatteryIcon(stale ? Batteries.GREY : Batteries.color(state));
         }
 
         String ac = j.optString("ac", "");

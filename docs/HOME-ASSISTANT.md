@@ -34,6 +34,7 @@ Keys (all optional; an empty or missing value hides that tile):
 |---|---|---|
 | `temp`, `feels` | `22`, `21` | 72sp temperature, condition and "feels" beside it |
 | `solar`, `battery`, `house` | `3.2`, `72`, `1.4` | top row of tiles: kW (one decimal), %, kW |
+| `bat_power` | `1916` | signed watts: the battery mark is green charging, orange discharging, red below 20%; the words stay white |
 | `inside`, `ac` | `24.5`, `cool` | bottom row: indoor temperature, air-con state |
 | `bins` | `General bins - out tonight` | "General" with `Tonight` / `Tomorrow` under it, in the one accent colour |
 | `rain` | `Dry right now - 0.0 mm today` | one line; a dry forecast collapses to "No rain expected" |
@@ -53,7 +54,8 @@ rounded to one decimal place.
 
 The weather line only appears once your snapshot sends `wind`, `humidity`, `sunrise_at` or `sunset_at`; the solar
 line once it sends `energy_today`; the last lines once it sends `people` or `plex`. Nothing has to be there: a line
-with no data hides itself. `people_names` is only used while it agrees with `people`, so a half-written snapshot can
+with no data hides itself. `bat_power` only colours the battery mark - without it the charge still shows, in white,
+with a neutral mark. `people_names` is only used while it agrees with `people`, so a half-written snapshot can
 never say somebody is in when they are not.
 
 The sheet's content must fit a 1080p TV's 540dp of screen: it is measured to nothing if it grows past that, so extra

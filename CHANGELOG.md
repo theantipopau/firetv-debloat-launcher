@@ -18,14 +18,24 @@ All notable changes to the Fire TV Debloat Launcher. Versions match `versionName
   it is too dark to read, sets it on a light rounded plate. Logos that already read stay bare. Marks are trimmed of
   their transparent margins and measured from their own aspect (the guide's icons run from 237x413 to 1001x370), so
   a 22dp box holds the mark rather than its frame.
-- **The status block's focus highlight stops a gutter above the card row.** It used to end 5dp over the live card,
-  which read as two glasses touching whenever the remote was on the clock. The highlight is drawn as an inset layer
-  (17dp up from the block's own bottom), so the text does not move and the gap is the row's 14dp gutter.
+- **The status block's glass wraps its last line.** The highlight used to be inset 17dp from the block's own
+  bottom to keep a gutter above the cards, which cut through "Air con off" whenever the bins line was hidden. It is
+  the block's box again, with 12dp of padding under the words; the card row keeps its own 14dp gutter.
+- **The battery line reads like the others.** "House 56%" took the battery state as its text colour, so it sat
+  quieter than the weather and air-con lines and dimmed whenever the SOC entity went quiet. The words are white now
+  and the battery mark carries the state: green charging, orange supplying the house, red under 20%, neutral when
+  idle. The direction comes from an optional `bat_power` (signed watts) in `tvhome.json`; the package template and
+  [the docs](docs/HOME-ASSISTANT.md) show it. On the TVs the snapshot now measures battery freshness from the
+  charge and discharge power sensors, so a percentage that only moves at the odd percent no longer looks stale.
 
 ### Changed
 - **More to rotate through: ten live channels, and ten new titles.** `tvhome_keep.py` now takes up to 10 live
   programmes (`LIVE_COUNT`, was 4), and the launcher shows up to 10 live and 10 new-on-Plex cards (was 7 and 5), so
   five new films and five new episodes all get a turn instead of being cut at five.
+- **The screensaver speaks the home screen's type.** Inter Light for the clock, Inter Regular for the date and the
+  two lines, the home's 48dp safe margin and 56dp floor, the weather in white and only the next event in amber. A
+  long event keeps its line by shrinking from 18sp to 14sp before it would be cut. The block also stays in its
+  corner and drifts 24dp either way instead of jumping to a new random spot every 30 seconds.
 
 ## 1.4 — 2026-10-29
 

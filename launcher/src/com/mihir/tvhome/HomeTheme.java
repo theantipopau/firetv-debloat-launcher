@@ -35,11 +35,11 @@ final class HomeTheme {
     static final int BLOCK_PAD_H = 12;
     static final int BLOCK_PAD_V = 6;
     /**
-     * The focus highlight stops this far above the block's last pixel, so the glass behind the block
-     * sits a full GUTTER above the card row instead of 5dp above it. The text does not move: the
-     * inset is in the background layer, not in the layout.
+     * The focus highlight is the block's own box, so its bottom edge has to clear the last line by
+     * sight, not by an inset: 12dp below the text, which still clears the card row when the bins
+     * line is showing and leaves more air when it is not. Text sits at the same place either way.
      */
-    static final int BLOCK_INSET_BOTTOM = 17;
+    static final int BLOCK_PAD_BOTTOM = 12;
 
     // ---- top-right actions
     static final int ACTION_TOP = 46;
