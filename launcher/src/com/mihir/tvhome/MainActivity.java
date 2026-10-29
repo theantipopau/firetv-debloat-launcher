@@ -455,7 +455,13 @@ public class MainActivity extends Activity {
         final GradientDrawable bg = new GradientDrawable();
         bg.setCornerRadius(dp(HomeTheme.BLOCK_RADIUS));
         bg.setColor(Color.TRANSPARENT);
-        statusBlock.setBackground(bg);
+        // Inset layer, not the view's own box: the highlight has to stop a full gutter above the
+        // cards, and padding cannot go negative without also moving the last line of text.
+        android.graphics.drawable.LayerDrawable bgLayer =
+                new android.graphics.drawable.LayerDrawable(
+                        new android.graphics.drawable.Drawable[]{bg});
+        bgLayer.setLayerInset(0, 0, 0, 0, dp(HomeTheme.BLOCK_INSET_BOTTOM));
+        statusBlock.setBackground(bgLayer);
         // OK on the block opens the detail sheet; the block is the only way in.
         statusBlock.setOnClickListener(v -> openHa());
         statusBlock.setOnFocusChangeListener((v, has) ->
@@ -652,7 +658,7 @@ public class MainActivity extends Activity {
     private static final long NOW_EPOCH = SystemClock.elapsedRealtime();
     private static final long NOW_FADE_MS = 400;
     /** How many frames each card rotates: the guide's next few live events, Plex's newest few titles. */
-    private static final int LIVE_MAX = 7, PLEX_MAX = 5;
+    private static final int LIVE_MAX = 10, PLEX_MAX = 10;
     /** Card art is 120x68dp, so decoding a 1080p still would only cost memory. */
     private static final long NOW_PIXELS = 160_000;
 
@@ -762,6 +768,19 @@ public class MainActivity extends Activity {
                 String ch = it.channel;
                 if (!ch.isEmpty() && meta.startsWith(ch))
                     meta = meta.substring(ch.length()).replaceFirst("^\\s*\\u00B7\\s*", "\u00B7 ");
+                // A mark drawn for a white page disappears on the card's glass; those get a light
+                // plate behind them, the same treatment a light logo needs nowhere.
+                boolean plate = darkMark(badge);
+                int markH = 18;   // inside the 22dp box, 2dp of air above and below
+                int markW = Math.max(8, Math.min(104,
+                        Math.round(markH * badge.getWidth() / (float) badge.getHeight())));
+                LinearLayout.LayoutParams blp =
+                        (LinearLayout.LayoutParams) p.badge.getLayoutParams();
+                blp.width = dp(markW + (plate ? 8 : 0));
+                blp.height = dp(22);
+                p.badge.setLayoutParams(blp);
+                p.badge.setPadding(dp(plate ? 4 : 0), dp(2), dp(plate ? 4 : 0), dp(2));
+                p.badge.setBackground(plate ? markPlate() : null);
                 p.badge.setImageBitmap(badge);
                 p.badge.setVisibility(View.VISIBLE);
             } else {
@@ -904,12 +923,12 @@ public class MainActivity extends Activity {
         metaRow.setOrientation(LinearLayout.HORIZONTAL);
         metaRow.setGravity(Gravity.BOTTOM);
         ImageView badge = new ImageView(this);
+        // Sized from the mark's own aspect in render(), so FIT_CENTER never letterboxes a wide logo
+        // into a square box or a portrait one into a sliver.
         badge.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        badge.setAdjustViewBounds(true);
-        badge.setMaxWidth(dp(112));
         badge.setVisibility(View.GONE);
         // Sits on the caption's baseline, like a glyph: 4dp is the 16sp line's own descent.
-        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(-2, dp(22));
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(dp(24), dp(22));
         blp.rightMargin = dp(7);
         blp.bottomMargin = dp(4);
         metaRow.addView(badge, blp);
@@ -975,10 +994,65 @@ public class MainActivity extends Activity {
     /** Channel marks for the caption line: EPG icons are a couple of hundred pixels wide. */
     private List<Bitmap> badges(List<Feed.Item> items) {
         List<Bitmap> out = new ArrayList<>();
-        for (Feed.Item it : items)
-            out.add(it.badge.isEmpty() ? null
-                    : Net.image(it.badge, 4000, 4000, 1, 60_000));
+        for (Feed.Item it : items) {
+            Bitmap b = it.badge.isEmpty() ? null
+                    : Net.image(it.badge, 4000, 4000, 1, 60_000);
+            out.add(b == null ? null : trimMark(b));
+        }
         return out;
+    }
+
+    /**
+     * Strip the transparent surround from a channel mark. EPG icons are padded very differently -
+     * one of this guide's puts its whole logo in 33 of 150 rows - and the caption shows the mark,
+     * not its margins. Returns the original when there is nothing worth cutting.
+     */
+    private static Bitmap trimMark(Bitmap b) {
+        int w = b.getWidth(), h = b.getHeight();
+        if (w < 4 || h < 4) return b;
+        int[] px = new int[w * h];
+        b.getPixels(px, 0, w, 0, 0, w, h);
+        int left = w, right = -1, top = h, bottom = -1;
+        for (int y = 0; y < h; y++) {
+            int row = y * w;
+            for (int x = 0; x < w; x++) {
+                if ((px[row + x] >>> 24) < 24) continue;
+                if (x < left) left = x;
+                if (x > right) right = x;
+                if (y < top) top = y;
+                if (y > bottom) bottom = y;
+            }
+        }
+        if (right <= left || bottom <= top) return b;
+        if (left == 0 && top == 0 && right == w - 1 && bottom == h - 1) return b;
+        return Bitmap.createBitmap(b, left, top, right - left + 1, bottom - top + 1);
+    }
+
+    /** A light plate behind a channel mark: EPG logos are drawn for white pages, not for glass. */
+    private GradientDrawable markPlate() {
+        GradientDrawable g = new GradientDrawable();
+        g.setCornerRadius(dp(6));
+        g.setColor(0xF2FFFFFF);
+        return g;
+    }
+
+    /**
+     * True when a mark's own pixels are too dark to read on the card's glass. Only opaque pixels
+     * are sampled, every third one in each direction: a transparent surround must not brighten a
+     * dark logo, and a 250x150 icon costs about four thousand reads.
+     */
+    private static boolean darkMark(Bitmap b) {
+        long sum = 0;
+        int n = 0;
+        for (int y = 0; y < b.getHeight(); y += 3) {
+            for (int x = 0; x < b.getWidth(); x += 3) {
+                int c = b.getPixel(x, y);
+                if ((c >>> 24) < 40) continue;
+                sum += (299 * ((c >> 16) & 255) + 587 * ((c >> 8) & 255) + 114 * (c & 255)) / 1000;
+                n++;
+            }
+        }
+        return n > 0 && sum / n < 110;   // under ~43% brightness
     }
 
     /** One deck at a time; an unchanged list keeps the frame that is already showing. */
@@ -2480,6 +2554,33 @@ public class MainActivity extends Activity {
         if (dateLine != null) dateLine.setText(Times.dateLine(now, zone));
     }
 
+    /**
+     * The wired link's rate. Android has no API for it; the driver publishes it in
+     * /sys/class/net/<iface>/speed, which is the same number Amazon's own network page prints.
+     * Fire OS 7 denies that file to apps as well as to the shell (measured on the Cube: EACCES),
+     * so the pill falls back to plain "Ethernet" there; a firmware that allows the read gets the rate.
+     */
+    private static int ethernetMbps() {
+        try {
+            java.util.Enumeration<java.net.NetworkInterface> all = java.net.NetworkInterface.getNetworkInterfaces();
+            while (all != null && all.hasMoreElements()) {
+                java.net.NetworkInterface iface = all.nextElement();
+                String name = iface.getName();
+                if (name == null || !name.startsWith("eth") || !iface.isUp()) continue;
+                java.io.BufferedReader r = new java.io.BufferedReader(
+                        new java.io.FileReader("/sys/class/net/" + name + "/speed"));
+                try {
+                    int mbps = Integer.parseInt(r.readLine().trim());
+                    if (mbps > 0) return mbps;
+                } catch (Exception ignored) {
+                } finally {
+                    try { r.close(); } catch (Exception ignored) { }
+                }
+            }
+        } catch (Exception ignored) { }
+        return 0;
+    }
+
     private boolean isEthernet() {
         android.net.ConnectivityManager cm =
                 (android.net.ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
@@ -2501,7 +2602,8 @@ public class MainActivity extends Activity {
         android.net.ConnectivityManager cm = (android.net.ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
         android.net.NetworkInfo ni = cm == null ? null : cm.getActiveNetworkInfo();
         if (ni != null && ni.isConnected() && ni.getType() == android.net.ConnectivityManager.TYPE_ETHERNET) {
-            setNet("Ethernet");
+            int mbps = ethernetMbps();
+            setNet(mbps > 0 ? "Ethernet  \u00B7  Link " + mbps + " Mbps" : "Ethernet");
             return;
         }
         try {

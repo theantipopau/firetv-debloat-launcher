@@ -34,6 +34,12 @@ final class HomeTheme {
     static final int BLOCK_RADIUS = 16;
     static final int BLOCK_PAD_H = 12;
     static final int BLOCK_PAD_V = 6;
+    /**
+     * The focus highlight stops this far above the block's last pixel, so the glass behind the block
+     * sits a full GUTTER above the card row instead of 5dp above it. The text does not move: the
+     * inset is in the background layer, not in the layout.
+     */
+    static final int BLOCK_INSET_BOTTOM = 17;
 
     // ---- top-right actions
     static final int ACTION_TOP = 46;

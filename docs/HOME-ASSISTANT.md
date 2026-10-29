@@ -105,12 +105,14 @@ a time). A frame carries its end time, so the TV drops it once the programme has
 next ten-minute refresh. If the guide has no still for a programme, the channel logo is shown contained instead of being
 cropped to fill the space. The caption's channel name is the guide's logo too when one exists - `[7AFL] · until 21:39` -
 so a live card is readable from across the room without reading a channel name; the text is still the fallback when
-the guide carries no icon.
+the guide carries no icon. A mark whose own pixels are near-black gets a light rounded plate behind it, because most
+EPG logos are drawn for a white page and vanish on the card's glass.
 
 What counts: sport categories (cricket, rugby, football/AFL, golf, racing, the US leagues) with a live tag, a "v" fixture
 or a named sport, plus films in a Movie category. Replays, classics, highlights, countdowns and studio shows are
 dropped, as are 24/7 filler channels, shopping and the empty "Stan Sport Event 12" placeholders. The same match on a
-simulcast channel appears once. `LIVE_COUNT` sets how many live cards are mixed in (default `4`).
+simulcast channel appears once. `LIVE_COUNT` sets how many live cards are mixed in (default `10`, so the row can
+show eight to ten channels when the guide has that many).
 
 The guides are cached in `/config/.tvhome_epg/` and downloaded again only when the server says they changed; the iptv4u
 guide is 11 MB, so that matters. Point `EPG_URLS` at a local file to try a guide before committing to it.
@@ -123,7 +125,7 @@ guide is 11 MB, so that matters. Point `EPG_URLS` at a local file to try a guide
 | `PLEX_NEW_MOVIES` | `5` | film cards (released this year or last only) |
 | `PLEX_NEW_EPISODES` | `5` | episode entries, one per series |
 | `PLEX_NEW_DAYS` | `60` | an episode counts as new if it aired inside this many days |
-| `LIVE_COUNT` | `4` | live programmes mixed in ahead of the new-on-Plex ones |
+| `LIVE_COUNT` | `10` | live programmes mixed in ahead of the new-on-Plex ones |
 | `EPG_URLS` | `epg_urls` secret | guide URLs, if you would rather set them in the shell command |
 
 ## 5. Alerts over any app

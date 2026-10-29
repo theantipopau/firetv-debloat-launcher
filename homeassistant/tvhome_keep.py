@@ -48,7 +48,7 @@ NEW_DAYS = int(os.environ.get("PLEX_NEW_DAYS", "60"))         # an episode is ne
 # "Live now" cards come from XMLTV guides - the same data TiviMate draws its own guide from. Comma or
 # space separated, and local files work too: EPG_URLS="https://.../epg.xml,/tmp/guide.xml".
 EPG_URLS = [u for u in re.split(r"[,\s]+", os.environ.get("EPG_URLS") or secret("epg_urls", "")) if u.strip()]
-LIVE_COUNT = int(os.environ.get("LIVE_COUNT", "4"))          # how many "live now" cards to mix in
+LIVE_COUNT = int(os.environ.get("LIVE_COUNT", "10"))         # how many "live now" cards to mix in
 
 def token():
     t = os.environ.get("PLEX_TOKEN")

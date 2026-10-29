@@ -89,6 +89,9 @@ adb shell pm uninstall --user 0 com.mihir.tvhome
 - A real remote's Home button never reaches an accessibility service's key filter. The launcher reacts to Amazon's home window
   opening instead, and the cover hides the wait. (ADB `input keyevent HOME` behaves differently from the remote.)
 - Amazon Settings pages open on top of ours and Back returns to the launcher.
+- A wired link's rate is not readable by an app: `/sys/class/net/eth0/speed` is EACCES for apps **and** for the
+  ADB shell on Fire OS 7, and Android exposes no API for it. The Ethernet pill therefore names the network but
+  cannot show Mbps the way the Wi-Fi pill does (WifiManager hands that one over).
 - HDMI switching on the Cube is closed to third-party apps. `am start -d tvinput://…` resolves to
   `com.amazon.tv.inputpreference.service/.player.PassthroughPlayerActivity` and is refused with
   `requires com.amazon.tv.permission.TUNE_INPUT`, for the shell as well as for an app; `com.amazon.tv.devicecontrol`

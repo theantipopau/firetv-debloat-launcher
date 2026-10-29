@@ -3,6 +3,23 @@
 All notable changes to the Fire TV Debloat Launcher. Versions match `versionName` in
 [`launcher/AndroidManifest.xml`](launcher/AndroidManifest.xml).
 
+## 1.4.1 — 2026-10-29
+
+### Fixed
+- **A dark channel logo is no longer lost on the glass.** EPG marks are drawn for white pages, and several of the
+  guide's (Fox Cricket, Sky Racing, 7AFL) are near-black: the caption samples the mark's own opaque pixels and, when
+  it is too dark to read, sets it on a light rounded plate. Logos that already read stay bare. Marks are trimmed of
+  their transparent margins and measured from their own aspect (the guide's icons run from 237x413 to 1001x370), so
+  a 22dp box holds the mark rather than its frame.
+- **The status block's focus highlight stops a gutter above the card row.** It used to end 5dp over the live card,
+  which read as two glasses touching whenever the remote was on the clock. The highlight is drawn as an inset layer
+  (17dp up from the block's own bottom), so the text does not move and the gap is the row's 14dp gutter.
+
+### Changed
+- **More to rotate through: ten live channels, and ten new titles.** `tvhome_keep.py` now takes up to 10 live
+  programmes (`LIVE_COUNT`, was 4), and the launcher shows up to 10 live and 10 new-on-Plex cards (was 7 and 5), so
+  five new films and five new episodes all get a turn instead of being cut at five.
+
 ## 1.4 — 2026-10-29
 
 ### Added
