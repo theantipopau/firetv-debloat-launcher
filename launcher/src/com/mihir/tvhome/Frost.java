@@ -36,7 +36,7 @@ final class Frost extends Drawable {
         this.view = view;
         this.corner = cornerPx;
         this.hairline = hairlinePx;
-        tint.setColor(0x8C000000);   // 55% black: keeps white text readable over a bright photo
+        tint.setColor(0xB8000000);   // 72% black: a sheet this narrow sits over bright artwork
         edge.setStyle(Paint.Style.STROKE);
         edge.setStrokeWidth(hairlinePx);
         edge.setColor(0x1FFFFFFF);   // white, 12%

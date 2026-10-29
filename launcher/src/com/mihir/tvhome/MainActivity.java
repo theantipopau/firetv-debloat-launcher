@@ -234,6 +234,18 @@ public class MainActivity extends Activity {
         handler.removeCallbacks(haPoll);
         handler.removeCallbacks(heroTick);
         handler.removeCallbacks(idle);
+        if (haOpen) {   // never come back to a sheet that was already sliding out
+            haOpen = false;
+            if (haPanel != null) {
+                haPanel.animate().cancel();
+                haPanel.setTranslationX(0);
+                haPanel.setAlpha(1f);
+                haPanel.setVisibility(View.GONE);
+                haScrim.animate().cancel();
+                haScrim.setAlpha(0f);
+                haScrim.setVisibility(View.GONE);
+            }
+        }
         unregisterReceiver(tick);
         if (scrollGlide != null) scrollGlide.cancel();
         if (inputsPopup != null) inputsPopup.dismiss();
@@ -256,7 +268,8 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        // Home has nowhere to go back to: Back always returns to the dock, and to the top.
+        // The sheet is the only thing Back can close; otherwise Back returns to the dock.
+        if (haOpen) { closeHa(); return; }
         View now = getCurrentFocus();
         boolean away = scroll.getScrollY() > 0 || gridCards.contains(now) || cwCards.contains(now);
         if (away && !dockCards.isEmpty()) {
@@ -351,6 +364,16 @@ public class MainActivity extends Activity {
         grid.setClipChildren(false);
         grid.setClipToPadding(false);
         content.addView(grid, llp(-1, -2, dp(48), 0, dp(48), dp(160)));
+
+        // Above the scroll view, so the sheet slides over the dock and the row rather than with them.
+        haScrim = new View(this);
+        haScrim.setBackgroundColor(0x73000000);
+        haScrim.setAlpha(0f);
+        haScrim.setVisibility(View.GONE);
+        haScrim.setClickable(true);
+        haScrim.setOnClickListener(v -> closeHa());
+        root.addView(haScrim, new FrameLayout.LayoutParams(-1, -1));
+        root.addView(buildHaPanel(), lp(dp(HA_PANEL_W_DP), -1, Gravity.END, 0, dp(24), dp(24), dp(24)));
         return root;
     }
 
@@ -1028,88 +1051,121 @@ public class MainActivity extends Activity {
 
     // ---------------------------------------------------------------- Home Assistant panel
 
+    private static final int HA_PANEL_W_DP = 336;   // 35% of a 960dp screen
+    private boolean haOpen;
+    private View haScrim;
+
+    /** The detail panel: a glass sheet that slides in from the right, over the home screen. */
     private View buildHaPanel() {
         haPanel = new LinearLayout(this);
         haPanel.setOrientation(LinearLayout.VERTICAL);
-        haPanel.setPadding(dp(24), dp(16), dp(24), dp(16));
+        haPanel.setPadding(dp(24), dp(20), dp(24), dp(20));
         haFrost = new Frost(haPanel, dp(24), Math.max(1, dp(1)));
         haPanel.setBackground(haFrost);
-        haPanel.setElevation(dp(10));
+        haPanel.setElevation(dp(18));
+        haPanel.setFocusable(true);
+        haPanel.setClickable(true);
+        haPanel.setId(View.generateViewId());
         haPanel.setVisibility(View.GONE);
+        haPanel.setOnClickListener(v -> closeHa());
 
-        // Temperature and condition share a row: stacked, the panel grew a line taller than the
-        // six tiles under it and ran into the dock.
-        LinearLayout top = new LinearLayout(this);
-        top.setOrientation(LinearLayout.HORIZONTAL);
-        top.setGravity(Gravity.BOTTOM);
-        haBig = text(Typo.TEMPERATURE, "sans-serif-light", Color.WHITE);
+        haBig = text(48, "sans-serif-light", Color.WHITE);   // the screen's ceiling: no bigger than the hero
         Typo.numbers(haBig);
-        top.addView(haBig, new LinearLayout.LayoutParams(-2, -2));
-        LinearLayout cond = new LinearLayout(this);
-        cond.setOrientation(LinearLayout.VERTICAL);
-        haSub = text(Typo.CAPTION, "sans-serif-medium", 0xE6FFFFFF);
-        haSub.setLetterSpacing(Typo.LABEL_TRACKING);
+        haPanel.addView(haBig);
+
+        haSub = text(20, "sans-serif-medium", 0xE6FFFFFF);
         haSub.setSingleLine(true);
-        haFeels = text(Typo.CAPTION, "sans-serif", HA_LABEL);
+        haSub.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        haPanel.addView(haSub);
+
+        haFeels = text(18, "sans-serif", HA_LABEL);
         haFeels.setSingleLine(true);
-        cond.addView(haSub);
-        cond.addView(haFeels, llp(-2, -2, 0, dp(2), 0, 0));
-        top.addView(cond, llp(-2, -2, dp(16), 0, 0, dp(10)));
-        haPanel.addView(top, llp(-1, -2, 0, 0, 0, dp(10)));
+        haPanel.addView(haFeels, llp(-2, -2, 0, dp(2), 0, 0));
+
+        View rule = new View(this);
+        rule.setBackgroundColor(0x1FFFFFFF);
+        haPanel.addView(rule, llp(-1, dp(1), 0, dp(14), 0, dp(14)));
 
         for (int r = 0; r < 2; r++) {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
-            // Bins needs the widest cell ("General" + "TOMORROW"), AC the narrowest ("Off").
-            // Solar carries "10.0 kW" and bins "TOMORROW"; AC only ever says "Off".
-            float[] weights = r == 0 ? new float[]{1.08f, 0.96f, 0.96f} : new float[]{1f, 0.72f, 1.28f};
+            // Bins carries "General · Tomorrow", so it gets the room; AC only ever says "Off".
+            float[] weights = r == 0 ? new float[]{1f, 1f, 1f} : new float[]{0.85f, 0.6f, 1.55f};
             for (int c = 0; c < 3; c++) {
                 View tile = haTile(r * 3 + c);
                 LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, weights[c]);
-                p.setMargins(c == 0 ? 0 : dp(10), 0, 0, 0);
+                p.setMargins(c == 0 ? 0 : dp(8), 0, 0, 0);
                 row.addView(tile, p);
             }
-            haPanel.addView(row, llp(-1, -2, 0, 0, 0, r == 0 ? dp(10) : 0));
+            haPanel.addView(row, llp(-1, -2, 0, 0, 0, r == 0 ? dp(14) : 0));
         }
 
-        haRain = text(Typo.CAPTION, "sans-serif", 0xF2FFFFFF);
+        haRain = text(18, "sans-serif", 0xF2FFFFFF);
         haRainRow = haLine(R.drawable.ic_rain, haRain);
-        haPanel.addView(haRainRow, llp(-1, -2, 0, dp(10), 0, 0));
-        haNext = text(Typo.CAPTION, "sans-serif", 0xF2FFFFFF);
+        haPanel.addView(haRainRow, llp(-1, -2, 0, dp(16), 0, 0));
+        haNext = text(18, "sans-serif", 0xF2FFFFFF);
         haNextRow = haLine(R.drawable.ic_calendar, haNext);
-        haPanel.addView(haNextRow, llp(-1, -2, 0, dp(4), 0, 0));
+        haPanel.addView(haNextRow, llp(-1, -2, 0, dp(6), 0, 0));
         return haPanel;
     }
 
-    /** One cell: line icon, the value, and the label that says what the value is. */
+    /** One cell of the sheet: icon over value over label, so three fit in 35% of the screen. */
     private View haTile(int i) {
         LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.HORIZONTAL);
-        box.setGravity(Gravity.CENTER_VERTICAL);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(Gravity.CENTER_HORIZONTAL);
         ImageView icon = new ImageView(this);
         icon.setImageResource(HA_ICONS[i]);
         icon.setImageTintList(android.content.res.ColorStateList.valueOf(HA_LABEL));
         box.addView(icon, new LinearLayout.LayoutParams(dp(18), dp(18)));
-        LinearLayout col = new LinearLayout(this);
-        col.setOrientation(LinearLayout.VERTICAL);
-        TextView value = text(Typo.BODY, "sans-serif-semibold", Color.WHITE);
-        value.setSingleLine(true);
+        TextView value = text(20, "sans-serif-semibold", Color.WHITE);
+        value.setGravity(Gravity.CENTER);
+        value.setMaxLines(2);   // "General \u00b7 Tomorrow" wraps instead of being cut
         value.setEllipsize(android.text.TextUtils.TruncateAt.END);
         Typo.numbers(value);
-        TextView label = text(Typo.CAPTION, "sans-serif", HA_LABEL);
+        LinearLayout.LayoutParams vp = new LinearLayout.LayoutParams(-1, -2);
+        vp.setMargins(0, dp(4), 0, 0);
+        box.addView(value, vp);
+        TextView label = text(18, "sans-serif", HA_LABEL);
         label.setSingleLine(true);
         label.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        label.setGravity(Gravity.CENTER);
         label.setText(HA_LABELS[i]);
-        col.addView(value);
-        col.addView(label);
-        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(0, -2, 1f);
-        cp.setMargins(dp(6), 0, 0, 0);
-        box.addView(col, cp);
+        box.addView(label, new LinearLayout.LayoutParams(-1, -2));
         haTileBox[i] = box;
         haTileValue[i] = value;
         haTileLabel[i] = label;
         haTileIcon[i] = icon;
         return box;
+    }
+
+    /** OK on the glance strip opens the sheet; it takes focus so the D-pad cannot wander behind it. */
+    private void openHa() {
+        if (haPanel == null || haOpen) return;
+        haOpen = true;
+        handler.removeCallbacks(heroTick);
+        haScrim.setVisibility(View.VISIBLE);
+        haScrim.animate().alpha(1f).setDuration(240).start();
+        haPanel.setVisibility(View.VISIBLE);
+        haPanel.setTranslationX(dp(HA_PANEL_W_DP));
+        haPanel.setAlpha(0f);
+        haPanel.animate().translationX(0).alpha(1f)
+                .setInterpolator(new DecelerateInterpolator(2f)).setDuration(260).start();
+        haPanel.requestFocus();
+    }
+
+    private void closeHa() {
+        if (!haOpen) return;
+        haOpen = false;
+        haPanel.animate().translationX(dp(HA_PANEL_W_DP)).alpha(0f).setDuration(200)
+                .withEndAction(() -> {
+                    if (!haOpen) haPanel.setVisibility(View.GONE);
+                }).start();
+        haScrim.animate().alpha(0f).setDuration(180).withEndAction(() -> {
+            if (!haOpen) haScrim.setVisibility(View.GONE);
+        }).start();
+        if (haGlance != null) haGlance.requestFocus();
+        startHeroRotation();
     }
 
     private View haLine(int iconRes, TextView t) {
@@ -1120,7 +1176,7 @@ public class MainActivity extends Activity {
         icon.setImageResource(iconRes);
         icon.setImageTintList(android.content.res.ColorStateList.valueOf(HA_LABEL));
         row.addView(icon, new LinearLayout.LayoutParams(dp(20), dp(20)));
-        t.setSingleLine(true);
+        t.setMaxLines(2);   // a calendar line is long by nature; two lines beat "Working · i..."
         t.setEllipsize(android.text.TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, 1f);
         p.setMargins(dp(8), 0, 0, 0);
@@ -1236,8 +1292,6 @@ public class MainActivity extends Activity {
         for (LinearLayout b : glanceBox) if (b != null && b.getVisibility() == View.VISIBLE) any = true;
         if (haGlance != null) haGlance.setVisibility(any ? View.VISIBLE : View.GONE);
 
-        if (haBig == null) return;   // the detail panel is optional; the glance works without it
-
         haBig.setText(j.optString("temp", "--") + "\u00B0");
         String cond = j.optString("condition", "");
         haSub.setText(cond.toUpperCase(Locale.getDefault()));
@@ -1257,9 +1311,11 @@ public class MainActivity extends Activity {
         String ac = j.optString("ac", "");
         setHaTile(4, ac.isEmpty() ? "" : capitalise(ac), ac, ages, HA_LABELS[4]);
         String bins = j.optString("bins", "");
-        setHaTile(5, bins.isEmpty() ? "" : binsKind(bins), bins, ages,
-                bins.isEmpty() ? HA_LABELS[5] : binsWhen(bins));
-        alertTile(5, !bins.isEmpty() && !"BINS".equals(binsWhen(bins)));
+        String due = binsWhen(bins);
+        String binsValue = bins.isEmpty() ? "" : binsKind(bins);
+        if (!bins.isEmpty() && !"BINS".equals(due)) binsValue += " \u00B7 " + capitalise(due);
+        setHaTile(5, binsValue, bins, ages, HA_LABELS[5]);
+        alertTile(5, !bins.isEmpty() && !"BINS".equals(due));
 
         String rain = j.optString("rain", "");
         boolean wet = rain.startsWith("Raining") || rain.toLowerCase(Locale.US).contains("on the way");
@@ -1300,6 +1356,7 @@ public class MainActivity extends Activity {
         haGlance.setId(View.generateViewId());
         haGlance.setPadding(dp(6), dp(4), dp(6), dp(4));
         haGlance.setVisibility(View.GONE);   // until the first snapshot arrives
+        haGlance.setOnClickListener(v -> openHa());
         GradientDrawable gbg = new GradientDrawable();
         gbg.setCornerRadius(dp(10));
         gbg.setColor(Color.TRANSPARENT);
