@@ -1,18 +1,31 @@
 package com.mihir.tvhome;
 
 import java.time.Instant;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Pure text and time helpers. Deliberately free of Android types so tests/ can run them on a
  * plain JVM - the Fire OS build has no test runner, and a rule about time zones is exactly the
  * kind of thing that is wrong until something checks it.
+ *
+ * Every clock on every surface comes from here: one set of patterns, so the top-bar clock, a
+ * hero's "Ends", the calendar line and the screensaver cannot drift apart.
  */
 final class Times {
     private Times() { }
+
+    private static final DateTimeFormatter H24 = DateTimeFormatter.ofPattern("HH:mm", Locale.UK);
+    private static final DateTimeFormatter H12 = DateTimeFormatter.ofPattern("h:mm", Locale.UK);
+    private static final DateTimeFormatter MERIDIEM = DateTimeFormatter.ofPattern("a", Locale.UK);
+
+    /** A wall-clock time typed into free text, e.g. "12:00pm" or "12:00 pm". */
+    private static final Pattern TYPED_TIME = Pattern.compile("(?i)\\b(\\d{1,2}):(\\d{2})(?:\\s*([ap])\\.?m\\.?)?\\b");
 
     /**
      * A calendar line arrives as free text from Home Assistant, often with codes in brackets:
@@ -41,17 +54,68 @@ final class Times {
         return mins < 0 ? span + " ago" : "in " + span;
     }
 
-    /** The system's 12/24-hour setting decides the pattern; never assume a country's convention. */
-    static String clockTime(long epochSec, boolean is24, ZoneId zone) {
-        DateTimeFormatter f = DateTimeFormatter.ofPattern(is24 ? "HH:mm" : "h:mm a", Locale.UK);
-        String s = ZonedDateTime.ofInstant(Instant.ofEpochSecond(epochSec), zone).format(f);
-        return is24 ? s : s.toUpperCase(Locale.UK);   // "Ends 10:00 AM", matching the clock's own AM/PM
+    private static ZonedDateTime at(long epochSec, ZoneId zone) {
+        return ZonedDateTime.ofInstant(Instant.ofEpochSecond(epochSec), zone);
     }
 
-    /** "H:mm" or "h:mm" for the big clock, which draws its own AM/PM beside it. */
+    /** "9:32" or "09:32": the digits alone, for a clock that sets its meridian in its own view. */
     static String clockDigits(long epochSec, boolean is24, ZoneId zone) {
-        DateTimeFormatter f = DateTimeFormatter.ofPattern(is24 ? "HH:mm" : "h:mm", Locale.UK);
-        return ZonedDateTime.ofInstant(Instant.ofEpochSecond(epochSec), zone).format(f);
+        return at(epochSec, zone).format(is24 ? H24 : H12);
+    }
+
+    /** "AM"/"PM" in 12-hour mode, empty in 24-hour mode. Upper case: the house style, everywhere. */
+    static String meridian(long epochSec, boolean is24, ZoneId zone) {
+        return is24 ? "" : at(epochSec, zone).format(MERIDIEM).toUpperCase(Locale.UK);
+    }
+
+    /** The whole clock: "9:32 AM" or "09:32", built from the same two pieces the big clocks use. */
+    static String clockTime(long epochSec, boolean is24, ZoneId zone) {
+        String digits = clockDigits(epochSec, is24, zone);
+        return is24 ? digits : digits + " " + meridian(epochSec, is24, zone);
+    }
+
+    /**
+     * Rewrites a time typed into free text into the house format, following the device's 12/24-hour
+     * setting: "Next: 12:00pm Working" -> "12:00 PM Working". A bare "12:00" is left alone - without
+     * a meridian there is no way to know whether it means noon or midnight, and guessing is worse
+     * than echoing.
+     */
+    static String wallClock(String text, boolean is24) {
+        if (text == null || text.isEmpty()) return "";
+        Matcher m = TYPED_TIME.matcher(text);
+        StringBuilder out = new StringBuilder();
+        int last = 0;
+        while (m.find()) {
+            out.append(text, last, m.start());
+            String ap = m.group(3);
+            if (ap == null) {
+                out.append(m.group());
+            } else {
+                int h = Integer.parseInt(m.group(1));
+                int min = Integer.parseInt(m.group(2));
+                if (h < 1 || h > 12 || min > 59) {
+                    out.append(m.group());
+                } else {
+                    LocalTime t = LocalTime.of((h % 12) + ("p".equalsIgnoreCase(ap) ? 12 : 0), min);
+                    out.append(is24 ? t.format(H24)
+                            : t.format(H12) + " " + t.format(MERIDIEM).toUpperCase(Locale.UK));
+                }
+            }
+            last = m.end();
+        }
+        return out.append(text.substring(last)).toString();
+    }
+
+    /**
+     * One line for the next calendar event: codes stripped, its typed-in time in the house format,
+     * the redundant "Next:" dropped, and the distance in words after a separator. The sheet gives
+     * this a single line, so the shorter it is the more of the event survives.
+     */
+    static String calendarLine(String raw, boolean is24, long atSec, long nowSec) {
+        String text = wallClock(cleanCalendar(raw), is24).replaceFirst("(?i)^next:?\\s*", "");
+        String rel = relative(atSec, nowSec);
+        if (rel.isEmpty()) return text;
+        return text.isEmpty() ? rel : text + " \u00B7 " + rel;
     }
 
     /**

@@ -92,7 +92,7 @@ public class SaverView extends FrameLayout {
     private void update() {
         Date now = new Date();
         boolean is24 = android.text.format.DateFormat.is24HourFormat(getContext());
-        clock.setText(new SimpleDateFormat(is24 ? "H:mm" : "h:mm", Locale.getDefault()).format(now));
+        clock.setText(Times.clockDigits(now.getTime() / 1000L, is24, java.time.ZoneId.systemDefault()));
         date.setText(new SimpleDateFormat("EEEE d MMMM", Locale.getDefault()).format(now));
     }
 

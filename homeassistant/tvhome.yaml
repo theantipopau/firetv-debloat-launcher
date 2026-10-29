@@ -89,14 +89,16 @@ automation:
             bins: ""                                  # e.g. "General bins - out tonight"
             next: ""                                  # e.g. "Next: 6:30pm Football training"
             next_at: 0                                # optional: epoch seconds of that event, so the TV can say "in 2 h"
-            # Optional but recommended: seconds since each entity last changed. The TV dims a value
-            # to 40% and labels it "updated 42 min ago" once it is older than 15 minutes.
+            # Optional but recommended: seconds since each entity last updated. The TV dims a value
+            # to 40% and labels it "42m ago" once it is older than 15 minutes. Use last_updated, not
+            # last_changed: a battery only changes at the odd percent, so last_changed can be hours
+            # old and would dim a perfectly live reading.
             ages:
-              temp: "{{ (now() - states.weather.home.last_changed).total_seconds() | int(0) }}"
-              solar: "{{ (now() - states.sensor.solar_power.last_changed).total_seconds() | int(0) }}"
-              battery: "{{ (now() - states.sensor.battery_soc.last_changed).total_seconds() | int(0) }}"
-              house: "{{ (now() - states.sensor.house_power.last_changed).total_seconds() | int(0) }}"
-              inside: "{{ (now() - states.sensor.living_room_temperature.last_changed).total_seconds() | int(0) }}"
+              temp: "{{ (now() - states.weather.home.last_updated).total_seconds() | int(0) }}"
+              solar: "{{ (now() - states.sensor.solar_power.last_updated).total_seconds() | int(0) }}"
+              battery: "{{ (now() - states.sensor.battery_soc.last_updated).total_seconds() | int(0) }}"
+              house: "{{ (now() - states.sensor.house_power.last_updated).total_seconds() | int(0) }}"
+              inside: "{{ (now() - states.sensor.living_room_temperature.last_updated).total_seconds() | int(0) }}"
       - action: shell_command.write_tvhome
         data:
           payload: "{{ snap | tojson | base64_encode }}"

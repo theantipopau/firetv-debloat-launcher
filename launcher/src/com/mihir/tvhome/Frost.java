@@ -36,7 +36,8 @@ final class Frost extends Drawable {
         this.view = view;
         this.corner = cornerPx;
         this.hairline = hairlinePx;
-        tint.setColor(0xB8000000);   // 72% black: a sheet this narrow sits over bright artwork
+        tint.setColor(0xE6000000);   // 90% black: the dock sits directly behind this sheet and
+                                     // the top bar is hidden while it is open, so nothing reads through
         edge.setStyle(Paint.Style.STROKE);
         edge.setStrokeWidth(hairlinePx);
         edge.setColor(0x1FFFFFFF);   // white, 12%
@@ -68,9 +69,13 @@ final class Frost extends Drawable {
                 // showing through everywhere else.
                 float kx = rootW / (float) blur.getWidth();
                 float ky = rootH / (float) blur.getHeight();
+                int bitmap = c.save();
                 c.translate(-where[0], -where[1]);
                 c.scale(kx, ky);
                 c.drawBitmap(blur, 0, 0, blit);
+                // The tint has to come off that transform, or it is drawn scaled and translated
+                // along with the bitmap and lands somewhere off the panel entirely.
+                c.restoreToCount(bitmap);
             }
         }
         c.drawRect(box, tint);

@@ -3,6 +3,30 @@
 All notable changes to the Fire TV Debloat Launcher. Versions match `versionName` in
 [`launcher/AndroidManifest.xml`](launcher/AndroidManifest.xml).
 
+## 1.3.2 — 2026-10-29
+
+### Fixed
+- **The Home-key cover is now the screen behind it.** Both are built from one `HomeTheme`: the same top bar and
+  clock formatter, the real dock icons from `PackageManager`, the last hero backdrop cached as a downscaled JPEG,
+  and Continue Watching as skeletons (or hidden when the last list was empty). The old "Opening Home…" line, the
+  54sp clock, the letter-spaced greeting and the emoji panel are gone; a 24dp spinner appears bottom-right after
+  1.5s, and the cover fades out as soon as the launcher draws.
+- **Continue Watching reads as Plex.** Each tile carries Plex's installed icon top-left, the episode still (then the
+  show backdrop, never a cropped poster), a bottom gradient, and a 4dp progress bar inset inside the tile so the
+  focus rim can never paint over it.
+- **The top bar holds up over bright artwork.** A 180dp scrim under it, 24dp between glance items with a thin
+  separator, 32dp before the clock, "Bins today/tomorrow" in the accent colour only when it is due, and the same
+  15-minute staleness dimming the panel uses (now measured from `last_updated`, so a battery that only moves at the
+  odd percent is not dimmed for being quiet).
+- **The Home Assistant sheet fits its content** instead of leaving half of it empty, hides the top bar while open,
+  and reads the bins tile as "Tomorrow" over "General bins".
+- **Long hero titles shrink to fit.** 48sp down to 36sp before wrapping, two lines maximum, then an ellipsis; the
+  live meta line picks up an EPG subtitle when the guide has one.
+
+### Added (testing)
+- `tests/run.sh` now also covers the title auto-size rules and the Continue Watching artwork order plus the
+  glance strip's staleness dimming (86 checks).
+
 ## 1.3 — 2026-10-29
 
 ### Added

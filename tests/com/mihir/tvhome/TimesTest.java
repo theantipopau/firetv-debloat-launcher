@@ -33,16 +33,46 @@ public final class TimesTest {
         // constant offset baked in.
         expect("NZ end, same zone", "7:00 AM", Times.clockTime(nz, false, ZoneId.of("Pacific/Auckland")));
 
-        // The clock's own digits never carry AM/PM - that is drawn beside it.
-        expect("clock digits 12h", "4:00", Times.clockDigits(nz, false, brisbane));
-        expect("clock digits 24h", "04:00", Times.clockDigits(nz, true, brisbane));
+        // One formatter for the clock and every "Ends" line. 12h has no leading zero, and the
+        // two edges of the dial (midnight, noon) are where hand-written formatting usually breaks.
+        long midnight = OffsetDateTime.parse("2026-10-29T14:30:00Z").toEpochSecond();   // 00:30 Brisbane
+        expect("midnight 12h", "12:30 AM", Times.clockTime(midnight, false, brisbane));
+        long noon = OffsetDateTime.parse("2026-10-30T02:05:00Z").toEpochSecond();       // 12:05 Brisbane
+        expect("noon 12h", "12:05 PM", Times.clockTime(noon, false, brisbane));
+        expect("no leading zero", "4:00 AM", Times.clockTime(nz, false, brisbane));
+        expect("midnight 24h", "00:30", Times.clockTime(midnight, true, brisbane));
+
+        // Every clock is built from the same digits + meridian pair, so a surface that draws the
+        // meridian itself cannot disagree with the top bar.
+        expect("digits 12h", "4:00", Times.clockDigits(nz, false, brisbane));
+        expect("meridian 12h", "AM", Times.meridian(nz, false, brisbane));
+        expect("meridian 24h", "", Times.meridian(nz, true, brisbane));
+        expect("clock is digits + meridian", "4:00 AM",
+                Times.clockDigits(nz, false, brisbane) + " " + Times.meridian(nz, false, brisbane));
+        expect("digits 24h", "04:00", Times.clockDigits(nz, true, brisbane));
 
         expect("calendar codes", "Next: 6:30pm Training 2026 TERM 4",
                 Times.cleanCalendar("Next: 6:30pm Training [BCE10100] 2026 TERM 4"));
+
+        // A time typed into the calendar text by Home Assistant comes out in the house format.
+        expect("typed pm", "12:00 PM Working", Times.wallClock("12:00pm Working", false));
+        expect("typed pm spaced", "6:30 PM Training", Times.wallClock("6:30 pm Training", false));
+        expect("typed pm in 24h", "12:00 Working", Times.wallClock("12:00pm Working", true));
+        expect("typed midnight", "12:00 AM", Times.wallClock("12:00am", false));
+        expect("bare time left alone", "Dinner 18:30", Times.wallClock("Dinner 18:30", false));
         expect("calendar whitespace", "Bins tonight", Times.cleanCalendar("  Bins   tonight "));
         expect("calendar empty", "", Times.cleanCalendar(null));
 
         long now = 1_800_000_000L;
+
+        // The one-line calendar composer: codes out, house time, "Next:" dropped, distance appended.
+        long in2h = now + 2 * 3600;
+        expect("calendar line 12h", "6:30 PM Football training \u00B7 in 2 h",
+                Times.calendarLine("Next: 6:30pm Football [X1] training", false, in2h, now));
+        expect("calendar line 24h", "18:30 Training \u00B7 in 2 h",
+                Times.calendarLine("Next: 6:30pm Training", true, in2h, now));
+        expect("calendar line no time", "Bins tonight", Times.calendarLine("Bins tonight", false, 0, now));
+
         expect("in 2 h", "in 2 h", Times.relative(now + 2 * 3600, now));
         expect("in 25 min", "in 25 min", Times.relative(now + 25 * 60, now));
         expect("now", "now", Times.relative(now + 20, now));

@@ -13,14 +13,17 @@ import android.widget.TextView;
  * instance variable fonts. Licence: LICENSES/Inter-OFL.txt.
  */
 final class Typo {
+    // The home screen's scale (v1.3.1): nothing above the hero title, nothing below a caption.
+    static final float HERO = 48f;        // hero title; the ceiling for the whole screen
+    static final float CLOCK_BAR = 28f;   // the top-bar clock
+    static final float SECTION = 22f;     // "Continue Watching", "Apps"
+    static final float BODY = 20f;        // greeting, glance values, hero meta
+    static final float CAPTION = 18f;     // labels, chips, tile metadata
+
+    // The full-screen clock saver predates this scale and is its own surface.
     static final float CLOCK = 96f;
     static final float TEMPERATURE = 72f;
     static final float HEADING = 28f;
-    static final float BODY = 22f;
-    static final float CAPTION = 18f;
-
-    /** Small labels used to breathe at 0.22-0.25em; Inter's larger x-height carries 0.11. */
-    static final float LABEL_TRACKING = 0.11f;
 
     private static Typeface light, regular, medium, semibold;
 

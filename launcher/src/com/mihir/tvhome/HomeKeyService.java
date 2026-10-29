@@ -9,8 +9,10 @@ import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.content.pm.ApplicationInfo;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.media.tv.TvInputInfo;
 import android.media.tv.TvInputManager;
@@ -20,9 +22,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.provider.Settings;
-import android.text.SpannableStringBuilder;
-import android.text.Spanned;
-import android.text.style.ForegroundColorSpan;
+import android.text.TextUtils;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -61,14 +61,18 @@ public class HomeKeyService extends AccessibilityService {
     private static Bitmap coverWall;
     private static int coverWallIndex = -1;
     private static boolean coverDecoding;
-    private static int dockCount = -1;
-    private int bandHeight;
+    /** The dock the cover draws when the launcher's own list is not in memory yet. */
+    private List<MainActivity.App> coverDock;
+    /** The last hero still, decoded once in the background so a Home press never waits on it. */
+    private static Bitmap coverHero;
+    private static boolean heroDecoding;
 
     @Override protected void onServiceConnected() {
         running = true; instance = this; Log.w("TvHome", "HomeKeyService connected");
         try { wallNames = getAssets().list("wallpapers"); } catch (Exception ignored) { }
-        countDock();
+        loadDock();
         prefetchWallpaper();
+        prefetchHero();
     }
 
     @Override public boolean onUnbind(Intent intent) { running = false; instance = null; hideCover(); return super.onUnbind(intent); }
@@ -170,9 +174,12 @@ public class HomeKeyService extends AccessibilityService {
         return ((i % n) + n) % n;   // the launcher writes -1 before its first rotation
     }
 
-    /** How many dock tiles the launcher draws, so the band silhouette is the same size. Package lookups
-     *  are done once here rather than on every Home press. */
-    private void countDock() {
+    /**
+     * The dock as the launcher would draw it: same saved order, same banner-then-icon source. Looked
+     * up once when the service connects, because nothing may touch the package manager on a Home
+     * press. When the launcher is alive it publishes its own list and this is only a fallback.
+     */
+    private void loadDock() {
         List<String> order = new ArrayList<>();
         String saved = getSharedPreferences("launcher", MODE_PRIVATE).getString("dock_order", null);
         if (saved != null) {
@@ -180,26 +187,64 @@ public class HomeKeyService extends AccessibilityService {
         } else {
             order.addAll(Arrays.asList(getResources().getStringArray(R.array.dock_apps)));
         }
-        int n = 0;
+        List<MainActivity.App> apps = new ArrayList<>();
+        android.content.pm.PackageManager pm = getPackageManager();
         for (String p : order) {
-            try { getPackageManager().getPackageInfo(p, 0); n++; } catch (Exception ignored) { }
+            try {
+                ApplicationInfo ai = pm.getApplicationInfo(p, 0);
+                MainActivity.App a = new MainActivity.App();
+                a.pkg = p;
+                a.label = String.valueOf(pm.getApplicationLabel(ai));
+                Drawable banner = ai.loadBanner(pm);
+                a.isBanner = banner != null;
+                a.art = banner != null ? banner : ai.loadIcon(pm);
+                // The launcher samples a colour from the art; a neutral wash is close enough for the
+                // split second this fallback is on screen, and sampling would decode bitmaps here.
+                a.color = 0xFF4A4F5A;
+                apps.add(a);
+            } catch (Exception ignored) { }
         }
-        dockCount = n;
+        coverDock = apps;
+    }
+
+    /** Decode the hero still the launcher cached, off the UI thread, so the cover has art instantly. */
+    private void prefetchHero() {
+        final java.io.File f = new java.io.File(getCacheDir(), "hero_cover.jpg");
+        if (!f.isFile() || heroDecoding) return;
+        heroDecoding = true;
+        new Thread(() -> {
+            Bitmap bm = null;
+            try {
+                BitmapFactory.Options o = new BitmapFactory.Options();
+                o.inPreferredConfig = Bitmap.Config.RGB_565;
+                bm = BitmapFactory.decodeFile(f.getAbsolutePath(), o);
+            } catch (Exception ignored) { }
+            final Bitmap done = bm;
+            ui.post(() -> { if (done != null) coverHero = done; heroDecoding = false; });
+        }).start();
     }
 
     // ------------------------------------------------------------------ the cover
 
+    /**
+     * The screen the viewer sees while Android refuses our activity start. It is not a logo or a
+     * loading screen: it is the home screen with the data already known - the same bar, the last
+     * hero still, the real dock icons and the shape of the resume row - so Home reads as one screen
+     * settling rather than three.
+     */
     private void showCover() {
         if (cover != null) return;
         try {
-            float d = getResources().getDisplayMetrics().density;
-            prefetchWallpaper();   // keeps the next photo warm; this frame uses whatever is already decoded
+            final float d = getResources().getDisplayMetrics().density;
+            prefetchWallpaper();
             FrameLayout f = new FrameLayout(this);
             f.setBackgroundColor(Color.BLACK);
 
-            // Whatever is on the launcher's screen right now, borrowed from its process (same app). Falls
-            // back to our own decode when the launcher has never run, so a press is never a black flash.
-            Bitmap photo = MainActivity.currentWall != null ? MainActivity.currentWall : coverWall;
+            // The still the launcher is showing, borrowed from its process (same app). If it has
+            // one, the cover gets the hero's own gradients; if not, the wallpaper and its wash.
+            Bitmap hero = MainActivity.currentHero != null ? MainActivity.currentHero : coverHero;
+            Bitmap photo = hero != null ? hero
+                    : MainActivity.currentWall != null ? MainActivity.currentWall : coverWall;
             if (photo != null) {
                 ImageView iv = new ImageView(this);
                 iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -207,30 +252,45 @@ public class HomeKeyService extends AccessibilityService {
                 f.addView(iv, new FrameLayout.LayoutParams(-1, -1));
             }
 
-            View scrim = new View(this);   // the launcher's five stops, so the photo keeps the same brightness
-            scrim.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                    new int[]{0xB3000000, 0x40000000, 0x26000000, 0x8C000000, 0xE6000000}));
-            f.addView(scrim, new FrameLayout.LayoutParams(-1, -1));
-
             int hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
-            View tint = new View(this);    // the launcher's time-of-day wash
-            tint.setBackgroundColor(hour >= 18 || hour < 5 ? 0x26FF7A2E : hour < 10 ? 0x1A7FB8FF : 0x00000000);
-            f.addView(tint, new FrameLayout.LayoutParams(-1, -1));
+            if (hero == null) {
+                View scrim = new View(this);
+                scrim.setBackground(HomeTheme.wallpaperScrim());
+                f.addView(scrim, new FrameLayout.LayoutParams(-1, -1));
 
-            View glow = new View(this);    // the launcher's ambient colour behind the dock
-            GradientDrawable g = new GradientDrawable();
-            g.setGradientType(GradientDrawable.RADIAL_GRADIENT);
-            g.setGradientCenter(0.5f, 0.78f);
-            g.setGradientRadius(getResources().getDisplayMetrics().widthPixels * 0.62f);
-            int gc = MainActivity.glowNow;
-            g.setColors(new int[]{withAlpha(gc, 0.5f), withAlpha(gc, 0.14f), Color.TRANSPARENT});
-            glow.setBackground(g);
-            f.addView(glow, new FrameLayout.LayoutParams(-1, -1));
+                View tint = new View(this);
+                tint.setBackgroundColor(HomeTheme.timeTint(hour));
+                f.addView(tint, new FrameLayout.LayoutParams(-1, -1));
 
-            addHeader(f, d);
-            addPanel(f, d);
-            addDockBand(f, d);
-            addLoadingHint(f, d);
+                View glow = new View(this);    // the launcher's ambient colour behind the dock
+                GradientDrawable g = new GradientDrawable();
+                g.setGradientType(GradientDrawable.RADIAL_GRADIENT);
+                g.setGradientCenter(0.5f, 0.78f);
+                g.setGradientRadius(getResources().getDisplayMetrics().widthPixels * 0.62f);
+                int gc = MainActivity.glowNow;
+                g.setColors(new int[]{HomeTheme.withAlpha(gc, 0.5f), HomeTheme.withAlpha(gc, 0.14f),
+                        Color.TRANSPARENT});
+                glow.setBackground(g);
+                f.addView(glow, new FrameLayout.LayoutParams(-1, -1));
+            } else {
+                View top = new View(this);
+                top.setBackground(HomeTheme.topScrim());
+                f.addView(top, new FrameLayout.LayoutParams(-1, px(d, HomeTheme.TOP_SCRIM_H)));
+                View left = new View(this);
+                left.setBackground(HomeTheme.leftScrim());
+                f.addView(left, new FrameLayout.LayoutParams(-1, -1));
+                View bottom = new View(this);
+                bottom.setBackground(HomeTheme.bottomScrim());
+                f.addView(bottom, new FrameLayout.LayoutParams(-1, -1));
+            }
+
+            View dockFade = new View(this);
+            dockFade.setBackground(HomeTheme.dockFade());
+            f.addView(dockFade, new FrameLayout.LayoutParams(-1, px(d, 230), Gravity.BOTTOM));
+
+            addTopBar(f, d);
+            addBottom(f, d);
+            addSpinner(f, d);
 
             f.setFocusable(true);
             f.setOnKeyListener((v, k, e) -> true);   // swallow the remote while we load
@@ -248,106 +308,244 @@ public class HomeKeyService extends AccessibilityService {
         } catch (Exception e) { Log.w("TvHome", "cover failed: " + e); }
     }
 
-    /**
-     * The launcher's header, at its exact sizes and offsets. The cover used to draw a 64sp clock in the
-     * corner with no greeting, date or pills, so pressing Home read as three screens: Amazon's, a
-     * near-miss, then the launcher. Matching the chrome makes it one screen settling.
-     */
-    private void addHeader(FrameLayout f, float d) {
+    /** The top bar as the launcher draws it: greeting, glance strip, clock, icon-only chips. */
+    private void addTopBar(final FrameLayout f, final float d) {
         int hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
-        boolean is24 = android.text.format.DateFormat.is24HourFormat(this);
-        Date now = new Date();
         String family = getString(R.string.family_name);
-        String device = getString(R.string.device_name);
+        String hello = hour < 5 ? "Good night" : hour < 12 ? "Good morning"
+                : hour < 17 ? "Good afternoon" : "Good evening";
+        // The cover must pick the same string the launcher will: with a strip present the full name
+        // does not fit on this width, and home shows the short greeting there.
 
-        LinearLayout left = new LinearLayout(this);
-        left.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout bar = new LinearLayout(this);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setClipChildren(false);
 
-        TextView greet = new TextView(this);
-        greet.setText((hour < 5 ? "GOOD NIGHT" : hour < 12 ? "GOOD MORNING" : hour < 17 ? "GOOD AFTERNOON" : "GOOD EVENING")
-                + (family.isEmpty() ? "" : ",  " + family.toUpperCase(Locale.getDefault())));
-        greet.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
-        greet.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        greet.setTextColor(0xB3FFFFFF);
-        greet.setLetterSpacing(0.25f);
-        greet.setSingleLine(true);
-        left.addView(greet);
-
-        LinearLayout clockRow = new LinearLayout(this);
-        clockRow.setGravity(Gravity.BOTTOM);
-        TextView clk = new TextView(this);
-        clk.setText(new SimpleDateFormat(is24 ? "H:mm" : "h:mm", Locale.getDefault()).format(now));
-        clk.setTextSize(TypedValue.COMPLEX_UNIT_SP, 54);
-        clk.setTypeface(Typeface.create("sans-serif-thin", Typeface.NORMAL));
-        clk.setTextColor(Color.WHITE);
-        clk.setIncludeFontPadding(false);
-        clockRow.addView(clk);
-        TextView ampm = new TextView(this);
-        ampm.setText(is24 ? "" : (hour < 12 ? "AM" : "PM"));
-        ampm.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        ampm.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
-        ampm.setTextColor(0xCCFFFFFF);
-        LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(-2, -2);
-        ap.setMargins((int) (6 * d), 0, 0, (int) (8 * d));
-        clockRow.addView(ampm, ap);
-        LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-2, -2);
-        rp.setMargins(0, (int) (2 * d), 0, (int) (2 * d));
-        left.addView(clockRow, rp);
-
-        TextView date = new TextView(this);
-        date.setText(new SimpleDateFormat("EEEE  d MMMM", Locale.getDefault()).format(now).toUpperCase(Locale.getDefault())
-                + (device.isEmpty() ? "" : "   \u00B7   " + device.toUpperCase(Locale.getDefault())));
-        date.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
-        date.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        date.setTextColor(0x99FFFFFF);
-        date.setLetterSpacing(0.22f);
-        date.setSingleLine(true);
-        left.addView(date);
-        for (TextView t : new TextView[]{greet, clk, ampm, date}) t.setShadowLayer(10 * d, 0, (int) d, 0xB3000000);
-
-        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams((int) (420 * d), -2, Gravity.TOP | Gravity.START);
-        lp.setMargins((int) (48 * d), (int) (36 * d), 0, 0);
-        f.addView(left, lp);
-
-        // Top-right pills, right-aligned and 30dp tall like the launcher's, so the corner does not shift.
         LinearLayout right = new LinearLayout(this);
         right.setGravity(Gravity.CENTER_VERTICAL);
-        List<TextView> bar = new ArrayList<>();
-        if (hasPassthroughInputs()) bar.add(pill("Inputs", R.drawable.ic_input, d));
-        boolean ethernet = isEthernet();
-        bar.add(pill(netLabel(ethernet), ethernet ? R.drawable.ic_ethernet : R.drawable.ic_wifi, d));
-        bar.add(pill("\u2699  Settings", 0, d));
-        for (TextView p : bar) {
-            LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(-2, (int) (30 * d));
-            plp.setMargins((int) (10 * d), 0, 0, 0);
-            right.addView(p, plp);
-        }
-        FrameLayout.LayoutParams hp = new FrameLayout.LayoutParams(-2, -2, Gravity.END | Gravity.TOP);
-        hp.setMargins(0, (int) (36 * d), (int) (48 * d), 0);
-        f.addView(right, hp);
+        right.setClipChildren(false);
+        boolean glance = addGlance(right, d);
+
+        TextView g = new TextView(this);
+        g.setText(family.isEmpty() || glance ? hello : hello + ", " + family);
+        g.setTextSize(TypedValue.COMPLEX_UNIT_SP, Typo.BODY);
+        g.setTypeface(Typo.medium(this));
+        g.setTextColor(HomeTheme.TEXT_70);
+        g.setSingleLine(true);
+        g.setEllipsize(TextUtils.TruncateAt.END);
+        g.setShadowLayer(10 * d, 0, d, 0xB3000000);
+        bar.addView(g, new LinearLayout.LayoutParams(0, -2, 1f));
+
+        final TextView clk = new TextView(this);
+        clk.setText(Times.clockTime(System.currentTimeMillis() / 1000L, is24(), java.time.ZoneId.systemDefault()));
+        clk.setTextSize(TypedValue.COMPLEX_UNIT_SP, Typo.CLOCK_BAR);
+        clk.setTypeface(Typo.light(this));
+        clk.setTextColor(Color.WHITE);
+        clk.setIncludeFontPadding(false);
+        clk.setFontFeatureSettings("tnum");
+        clk.setShadowLayer(10 * d, 0, d, 0xB3000000);
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-2, -2);
+        clp.setMargins(px(d, 32), 0, 0, 0);
+        right.addView(clk, clp);
+
+        if (hasPassthroughInputs()) right.addView(chip(R.drawable.ic_input, d), chipParams(d));
+        right.addView(chip(isEthernet() ? R.drawable.ic_ethernet : R.drawable.ic_wifi, d), chipParams(d));
+        right.addView(chip(R.drawable.ic_settings, d), chipParams(d));
+
+        bar.addView(right, new LinearLayout.LayoutParams(-2, -2));
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-1, px(d, HomeTheme.TOP_BAR_H), Gravity.TOP);
+        lp.setMargins(px(d, HomeTheme.SAFE), px(d, HomeTheme.TOP_BAR_TOP), px(d, HomeTheme.SAFE), 0);
+        f.addView(bar, lp);
+
+        // A cover can outlive the minute it was built in.
+        final Runnable tick = new Runnable() {
+            @Override public void run() {
+                if (cover == null) return;
+                clk.setText(Times.clockTime(System.currentTimeMillis() / 1000L, is24(),
+                        java.time.ZoneId.systemDefault()));
+                ui.postDelayed(this, 10_000);
+            }
+        };
+        ui.postDelayed(tick, 10_000);
     }
 
-    private TextView pill(String text, int iconRes, float d) {
+    private boolean is24() {
+        return android.text.format.DateFormat.is24HourFormat(this);
+    }
+
+    /** The same four values, separators and staleness rule as the launcher's strip. */
+    private boolean addGlance(LinearLayout right, float d) {
+        String json = getSharedPreferences("launcher", MODE_PRIVATE).getString("ha_json", "");
+        if (json.isEmpty()) return false;
+        try {
+            JSONObject j = new JSONObject(json);
+            JSONObject ages = j.optJSONObject("ages");
+            String temp = j.optString("temp", "");
+            String solar = j.optString("solar", "");
+            String battery = j.optString("battery", "");
+            String bins = Cards.binsGlance(j.optString("bins", ""));
+            String[] values = {
+                    temp.isEmpty() ? "" : temp + "\u00B0",
+                    solar.isEmpty() ? "" : Times.kw(solar) + " kW",
+                    battery.isEmpty() ? "" : battery + "%",
+                    bins
+            };
+            String[] keys = {"temp", "solar", "battery", "bins"};
+            int[] icons = {R.drawable.ic_thermo, R.drawable.ic_solar,
+                    R.drawable.ic_battery, R.drawable.ic_bins};
+
+            LinearLayout strip = new LinearLayout(this);
+            strip.setOrientation(LinearLayout.HORIZONTAL);
+            strip.setGravity(Gravity.CENTER_VERTICAL);
+            strip.setPadding(px(d, 6), px(d, 4), px(d, 6), px(d, 4));
+            boolean any = false;
+            for (int i = 0; i < values.length; i++) {
+                if (values[i].isEmpty()) continue;
+                LinearLayout item = new LinearLayout(this);
+                item.setGravity(Gravity.CENTER_VERTICAL);
+                if (any) {
+                    TextView sep = new TextView(this);
+                    sep.setText("\u00B7");
+                    sep.setTextSize(TypedValue.COMPLEX_UNIT_SP, Typo.CAPTION);
+                    sep.setTextColor(0x66FFFFFF);
+                    LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-2, -2);
+                    sp.setMargins(px(d, 8), 0, px(d, 6), 0);   // ~24dp between values, dot included
+                    item.addView(sep, sp);
+                }
+                ImageView icon = new ImageView(this);
+                icon.setImageResource(icons[i]);
+                icon.setImageTintList(ColorStateList.valueOf(0x99FFFFFF));
+                item.addView(icon, new LinearLayout.LayoutParams(px(d, 16), px(d, 16)));
+                TextView value = new TextView(this);
+                value.setText(values[i]);
+                value.setTextSize(TypedValue.COMPLEX_UNIT_SP, Typo.BODY);
+                value.setTypeface(Typo.medium(this));
+                value.setTextColor("bins".equals(keys[i]) ? HomeTheme.ACCENT : Color.WHITE);
+                value.setSingleLine(true);
+                value.setFontFeatureSettings("tnum");
+                value.setShadowLayer(8 * d, 0, d, 0x99000000);
+                LinearLayout.LayoutParams vp = new LinearLayout.LayoutParams(-2, -2);
+                vp.setMargins(px(d, 4), 0, 0, 0);
+                item.addView(value, vp);
+                long age = ages == null ? 0 : ages.optLong(keys[i], 0);
+                item.setAlpha(Cards.glanceAlpha(age));
+                strip.addView(item, new LinearLayout.LayoutParams(-2, -2));
+                any = true;
+            }
+            if (any) right.addView(strip, new LinearLayout.LayoutParams(-2, px(d, 44)));
+            return any;
+        } catch (Exception ignored) { return false; }
+    }
+
+    private TextView chip(int iconRes, float d) {
         TextView p = new TextView(this);
-        p.setText(text);
-        p.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
-        p.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        p.setTextSize(TypedValue.COMPLEX_UNIT_SP, Typo.CAPTION);
+        p.setTypeface(Typo.medium(this));
         p.setTextColor(0xE6FFFFFF);
         p.setGravity(Gravity.CENTER);
-        p.setPadding((int) (14 * d), 0, (int) (14 * d), 0);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(15 * d);
-        bg.setColor(0x66000000);
-        bg.setStroke((int) d, 0x33FFFFFF);
-        p.setBackground(bg);
-        if (iconRes != 0) {
-            android.graphics.drawable.Drawable ic = getDrawable(iconRes);
-            ic.setBounds(0, 0, (int) (16 * d), (int) (16 * d));
-            p.setCompoundDrawables(ic, null, null, null);
-            p.setCompoundDrawablePadding((int) (8 * d));
-            p.setCompoundDrawableTintList(ColorStateList.valueOf(0xE6FFFFFF));
-        }
+        p.setPadding(px(d, 6), 0, px(d, 6), 0);
+        p.setMinWidth(px(d, 30));
+        Drawable ic = getDrawable(iconRes);
+        ic.setBounds(0, 0, px(d, 18), px(d, 18));
+        p.setCompoundDrawables(ic, null, null, null);
+        p.setCompoundDrawableTintList(ColorStateList.valueOf(0xE6FFFFFF));
         return p;
+    }
+
+    private LinearLayout.LayoutParams chipParams(float d) {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-2, px(d, 40));
+        p.setMargins(px(d, 6), 0, 0, 0);
+        return p;
+    }
+
+    /** Dock, then the resume row: the same stack, order and margins as the launcher's bottom block. */
+    private void addBottom(FrameLayout f, float d) {
+        LinearLayout bottom = new LinearLayout(this);
+        bottom.setOrientation(LinearLayout.VERTICAL);
+        bottom.setClipChildren(false);
+        bottom.setClipToPadding(false);
+
+        LinearLayout dock = new LinearLayout(this);
+        dock.setOrientation(LinearLayout.HORIZONTAL);
+        dock.setGravity(Gravity.CENTER);
+        dock.setClipChildren(false);   // the first tile's 1.08 focus scale must be allowed to overhang
+        dock.setPadding(px(d, HomeTheme.DOCK_PAD_H), px(d, HomeTheme.DOCK_PAD_V),
+                px(d, HomeTheme.DOCK_PAD_H), px(d, HomeTheme.DOCK_PAD_V));
+        List<MainActivity.App> apps = MainActivity.dockSnapshot != null ? MainActivity.dockSnapshot : coverDock;
+        if (apps != null) {
+            for (int i = 0; i < apps.size(); i++) {
+                FrameLayout card = AppTile.card(this, apps.get(i), d);
+                // The launcher hands the cursor to the first tile on a cold start, so that tile is
+                // already at 1.08 and lifted. Drawing it flat made the dock jump by 8% on the swap.
+                if (i == 0) {
+                    card.setScaleX(1.08f);
+                    card.setScaleY(1.08f);
+                    card.setTranslationY(-px(d, 4));
+                }
+                LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, 1f);
+                p.setMargins(i == 0 ? 0 : px(d, HomeTheme.DOCK_GAP), 0,
+                        i == apps.size() - 1 ? 0 : px(d, HomeTheme.DOCK_GAP), 0);
+                dock.addView(card, p);
+            }
+        }
+        bottom.addView(dock, new LinearLayout.LayoutParams(-1, -2));
+
+        int count = getSharedPreferences("launcher", MODE_PRIVATE).getInt("cw_count", 0);
+        if (count > 0) {
+            LinearLayout block = new LinearLayout(this);
+            block.setOrientation(LinearLayout.VERTICAL);
+
+            TextView head = new TextView(this);
+            head.setText("Continue Watching");
+            head.setTextSize(TypedValue.COMPLEX_UNIT_SP, Typo.SECTION);
+            head.setTypeface(Typo.semibold(this));
+            head.setTextColor(0xE6FFFFFF);
+            head.setShadowLayer(10 * d, 0, d, 0x99000000);
+            LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(-2, -2);
+            hp.setMargins(px(d, HomeTheme.SAFE), 0, 0, px(d, HomeTheme.CW_HEAD_GAP));
+            block.addView(head, hp);
+
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setPadding(px(d, HomeTheme.SAFE), 0, px(d, HomeTheme.SAFE), 0);
+            int n = Math.min(3, count);
+            for (int i = 0; i < n; i++) {
+                View tile = new View(this);
+                GradientDrawable bg = new GradientDrawable();
+                bg.setCornerRadius(px(d, HomeTheme.CW_RADIUS));
+                bg.setColor(0x14FFFFFF);   // white 8%: a shape, not a fake poster
+                tile.setBackground(bg);
+                LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
+                        px(d, HomeTheme.CW_W), px(d, HomeTheme.CW_H));
+                p.setMargins(i == 0 ? 0 : px(d, HomeTheme.CW_GAP), 0, 0, 0);
+                row.addView(tile, p);
+            }
+            block.addView(row, new LinearLayout.LayoutParams(-1, -2));
+
+            LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-1, -2);
+            bp.topMargin = px(d, HomeTheme.DOCK_TO_CW);
+            bottom.addView(block, bp);
+        }
+
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
+        lp.bottomMargin = px(d, HomeTheme.CW_BOTTOM);
+        f.addView(bottom, lp);
+    }
+
+    /** Only after 1.5s: for that long the cover is simply the home screen, and a spinner would spoil it. */
+    private void addSpinner(FrameLayout f, float d) {
+        final android.widget.ProgressBar spin = new android.widget.ProgressBar(
+                this, null, android.R.attr.progressBarStyleSmall);
+        spin.setIndeterminateTintList(ColorStateList.valueOf(0x99FFFFFF));
+        FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(px(d, 24), px(d, 24),
+                Gravity.BOTTOM | Gravity.END);
+        p.setMargins(0, 0, px(d, HomeTheme.SAFE), px(d, HomeTheme.CW_BOTTOM));
+        f.addView(spin, p);
+        spin.setAlpha(0f);
+        ui.postDelayed(() -> {
+            if (cover == f) spin.animate().alpha(0.6f).setDuration(300).start();
+        }, 1500);
     }
 
     private boolean isEthernet() {
@@ -356,182 +554,18 @@ public class HomeKeyService extends AccessibilityService {
         return ni != null && ni.isConnected() && ni.getType() == ConnectivityManager.TYPE_ETHERNET;
     }
 
-    /** Same label the launcher's pill shows, including the SSID and link speed. */
-    private String netLabel(boolean ethernet) {
-        if (ethernet) return "Ethernet";
-        String name = "Wi-Fi";
-        try {
-            WifiManager wm = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
-            if (wm != null && wm.getConnectionInfo() != null) {
-                String s = wm.getConnectionInfo().getSSID();
-                if (s != null && !s.contains("unknown ssid")) name = s.replace("\"", "");
-                if (wm.getConnectionInfo().getNetworkId() == -1) name = "Offline";
-                else if (wm.getConnectionInfo().getLinkSpeed() > 0)
-                    name += "  \u00B7  Link " + wm.getConnectionInfo().getLinkSpeed() + " Mbps";
-            }
-        } catch (SecurityException ignored) { }
-        return name;
-    }
-
-    /** The launcher's info panel with its exact geometry, padding and line colours. */
-    private void addPanel(FrameLayout f, float d) {
-        String json = getSharedPreferences("launcher", MODE_PRIVATE).getString("ha_json", "");
-        if (json.isEmpty()) return;
-        try {
-            JSONObject j = new JSONObject(json);
-            LinearLayout card = new LinearLayout(this);
-            card.setOrientation(LinearLayout.VERTICAL);
-            card.setPadding((int) (22 * d), (int) (16 * d), (int) (22 * d), (int) (16 * d));
-            GradientDrawable bg = new GradientDrawable();
-            bg.setCornerRadius(22 * d);
-            bg.setColor(0x73000000);
-            bg.setStroke((int) d, 0x26FFFFFF);
-            card.setBackground(bg);
-
-            String cond = j.optString("condition", "");
-            TextView big = new TextView(this);
-            big.setText(MainActivity.weatherEmoji(cond) + "  " + j.optString("temp", "--") + "\u00B0");
-            big.setTextSize(TypedValue.COMPLEX_UNIT_SP, 40);
-            big.setTypeface(Typeface.create("sans-serif-thin", Typeface.NORMAL));
-            big.setTextColor(Color.WHITE);
-            card.addView(big);
-
-            TextView sub = new TextView(this);
-            String feels = j.optString("feels", "");
-            sub.setText((cond.toUpperCase(Locale.getDefault()) + (feels.isEmpty() ? "" : "  \u00B7  FEELS " + feels + "\u00B0")).trim());
-            sub.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
-            sub.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-            sub.setTextColor(0xCCFFFFFF);
-            sub.setLetterSpacing(0.18f);
-            LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-2, -2);
-            sp.setMargins(0, 0, 0, (int) (10 * d));
-            card.addView(sub, sp);
-
-            String rain = j.optString("rain", "");
-            boolean wet = rain.startsWith("Raining") || rain.contains("on the way");
-            SpannableStringBuilder r = new SpannableStringBuilder();
-            if (!rain.isEmpty()) coloured(r, (wet ? "\u2614  " : "\uD83C\uDF24\uFE0F  ") + rain, wet ? 0xFF7CC4FF : 0xFF8FE3C8);
-            panelLine(card, r, d);
-
-            String solar = j.optString("solar", "");
-            SpannableStringBuilder p = new SpannableStringBuilder();
-            if (!solar.isEmpty()) {
-                int soc = j.optInt("battery", 0);
-                coloured(p, "\u2600\uFE0F " + solar + " kW", 0xFFFFC857);
-                coloured(p, "     \uD83D\uDD0B " + soc + "%", soc < 20 ? 0xFFFF6B6B : soc < 50 ? 0xFFFFC857 : 0xFF5BE3A1);
-                coloured(p, "     \uD83C\uDFE0 " + j.optString("house", "--") + " kW", 0xFF9AB0FF);
-            }
-            panelLine(card, p, d);
-
-            String bins = j.optString("bins", "");
-            SpannableStringBuilder b = new SpannableStringBuilder();
-            if (!bins.isEmpty()) coloured(b, "\uD83D\uDDD1\uFE0F  " + bins, bins.startsWith("General") ? 0xFFFF8A80 : bins.startsWith("Recycl") ? 0xFFFFE066 : 0xFFFFFFFF);
-            panelLine(card, b, d);
-
-            String next = j.optString("next", "");
-            SpannableStringBuilder n = new SpannableStringBuilder();
-            if (!next.isEmpty()) coloured(n, "\uD83D\uDCC5  " + next, 0xFFC9B6FF);
-            panelLine(card, n, d);
-
-            String inside = j.optString("inside", "");
-            String ac = j.optString("ac", "");
-            SpannableStringBuilder in = new SpannableStringBuilder();
-            if (!inside.isEmpty()) coloured(in, "\uD83C\uDF21\uFE0F  " + inside + "\u00B0 inside" + (ac.isEmpty() ? "" : "     \u2744\uFE0F AC " + ac), 0xFF9FE8FF);
-            panelLine(card, in, d);
-
-            FrameLayout.LayoutParams cp = new FrameLayout.LayoutParams((int) (360 * d), -2, Gravity.END | Gravity.TOP);
-            cp.setMargins(0, (int) (110 * d), (int) (48 * d), 0);
-            f.addView(card, cp);
-        } catch (Exception ignored) { }
-    }
-
-    private void panelLine(LinearLayout card, SpannableStringBuilder sb, float d) {
-        TextView t = new TextView(this);
-        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        t.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
-        t.setTextColor(0xE6FFFFFF);
-        t.setText(sb);
-        t.setVisibility(sb.length() == 0 ? View.GONE : View.VISIBLE);
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-2, -2);
-        p.setMargins(0, (int) (3 * d), 0, 0);
-        card.addView(t, p);
-    }
-
-    private static SpannableStringBuilder coloured(SpannableStringBuilder sb, String t, int color) {
-        int st = sb.length();
-        sb.append(t);
-        sb.setSpan(new ForegroundColorSpan(color), st, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        return sb;
-    }
-
-    /**
-     * The launcher's dock band at the same size and place, so the bottom of the screen does not jump.
-     * Empty: the icons themselves arrive with the launcher a few hundred ms later.
-     */
-    private void addDockBand(FrameLayout f, float d) {
-        int n = dockCount;
-        if (n <= 0) { bandHeight = 0; return; }
-        LinearLayout band = new LinearLayout(this);
-        band.setOrientation(LinearLayout.HORIZONTAL);
-        band.setGravity(Gravity.CENTER);
-        band.setPadding((int) (20 * d), (int) (22 * d), (int) (20 * d), (int) (22 * d));
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(26 * d);
-        bg.setColor(0x1FFFFFFF);
-        bg.setStroke((int) d, 0x14FFFFFF);
-        band.setBackground(bg);
-        for (int i = 0; i < n; i++) {
-            View box = new MainActivity.AspectFrame(this);   // same 16:9 measurement as a real tile
-            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -2, 1f);
-            p.setMargins(i == 0 ? 0 : (int) (10 * d), 0, i == n - 1 ? 0 : (int) (10 * d), 0);
-            band.addView(box, p);
-        }
-        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
-        lp.setMargins((int) (48 * d), 0, (int) (48 * d), (int) (30 * d));
-        f.addView(band, lp);
-        band.measure(View.MeasureSpec.makeMeasureSpec(
-                        getResources().getDisplayMetrics().widthPixels - (int) (96 * d), View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.UNSPECIFIED);
-        bandHeight = band.getMeasuredHeight();
-    }
-
-    /** Only appears if the launcher is slow to arrive: on frame one the cover is an exact copy of Home. */
-    private void addLoadingHint(final FrameLayout f, float d) {
-        TextView msg = new TextView(this);
-        msg.setText("Opening Home\u2026");
-        msg.setTextColor(0xCCFFFFFF);
-        msg.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
-        msg.setShadowLayer(10 * d, 0, (int) (2 * d), 0xB3000000);
-        FrameLayout.LayoutParams mp = new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.START);
-        mp.setMargins((int) (48 * d), 0, 0, (int) (44 * d) + bandHeight);
-        f.addView(msg, mp);
-        msg.setAlpha(0f);
-        ui.postDelayed(() -> { if (cover == f) msg.animate().alpha(1f).setDuration(400).start(); }, 260);
-
-        View bar = new View(this);   // indeterminate loading bar along the bottom
-        bar.setBackgroundColor(0xCCFFFFFF);
-        FrameLayout.LayoutParams bp = new FrameLayout.LayoutParams((int) (160 * d), (int) (3 * d), Gravity.BOTTOM | Gravity.START);
-        f.addView(bar, bp);
-        bar.setAlpha(0f);
-        ObjectAnimator sweep = ObjectAnimator.ofFloat(bar, View.TRANSLATION_X, -160 * d, getResources().getDisplayMetrics().widthPixels);
-        sweep.setDuration(1400);
-        sweep.setRepeatCount(ValueAnimator.INFINITE);
-        sweep.setInterpolator(new AccelerateDecelerateInterpolator());
-        sweep.start();
-        ui.postDelayed(() -> { if (cover == f) bar.animate().alpha(1f).setDuration(300).start(); }, 340);
-    }
-
     private boolean hasPassthroughInputs() {
         TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
         if (tim == null) return false;
         for (TvInputInfo t : tim.getTvInputList())
-            if (t.isPassthroughInput() && !t.isHidden(this) && !t.getId().startsWith("com.amazon.")
+            if (t.isPassthroughInput() && !t.isHidden(this)
+                    && !t.getId().startsWith("com.amazon.")
                     && !t.getId().toLowerCase(Locale.getDefault()).contains("arcinput")) return true;
         return false;
     }
 
-    private static int withAlpha(int c, float a) {
-        return Color.argb(Math.round(a * 255), Color.red(c), Color.green(c), Color.blue(c));
+    private static int px(float d, int dp) {
+        return Math.round(dp * d);
     }
 
     private void hideCover() {
@@ -539,7 +573,7 @@ public class HomeKeyService extends AccessibilityService {
         final View c = cover;
         if (c == null) return;
         cover = null;
-        c.animate().alpha(0f).setDuration(250).withEndAction(() -> {
+        c.animate().alpha(0f).setDuration(200).withEndAction(() -> {
             try { ((WindowManager) getSystemService(WINDOW_SERVICE)).removeView(c); } catch (Exception ignored) { }
         }).start();
     }
