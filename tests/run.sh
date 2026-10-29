@@ -16,5 +16,8 @@ OUT=tests/build
 rm -rf "$OUT" && mkdir -p "$OUT"
 "$JAVAC" -encoding UTF-8 --release 11 -d "$OUT" \
   launcher/src/com/mihir/tvhome/Times.java \
-  tests/com/mihir/tvhome/TimesTest.java
+  launcher/src/com/mihir/tvhome/Feed.java \
+  tests/com/mihir/tvhome/TimesTest.java \
+  tests/com/mihir/tvhome/FeedTest.java
 "$JAVA" -cp "$OUT" com.mihir.tvhome.TimesTest
+"$JAVA" -cp "$OUT" com.mihir.tvhome.FeedTest

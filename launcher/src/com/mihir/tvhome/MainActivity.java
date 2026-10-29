@@ -142,7 +142,11 @@ public class MainActivity extends Activity {
     private String familyName, deviceName;
     private int pollN;
     private final Runnable haPoll = new Runnable() {
-        @Override public void run() { fetchHa(); if (pollN++ % 20 == 0) fetchHero(); handler.postDelayed(this, 15000); }
+        @Override public void run() {
+            fetchHa();
+            if (pollN++ % 20 == 0) { fetchHero(); fetchKeep(); }
+            handler.postDelayed(this, 15000);
+        }
     };
 
     private final BroadcastReceiver tick = new BroadcastReceiver() {
@@ -369,15 +373,14 @@ public class MainActivity extends Activity {
     private static final long HERO_FADE_MS = 600;
     private static final int HERO_W_DP = 460;
     private static final int HERO_H_DP = 186;
-    // Four live programmes, two resumes and two new titles: sixteen dots would be a wall of
-    // gravel and a two-minute cycle before returning to what is live now.
-    private static final int HERO_MAX = 8;
 
     private View heroBox;
     private FrameLayout heroCard, heroStack;
     private LinearLayout heroDots;
     private final List<View> heroLayers = new ArrayList<>();
-    private final List<JSONObject> heroItems = new ArrayList<>();
+    private final List<Feed.Item> heroItems = new ArrayList<>();
+    /** Continue Watching: selected from keep_json_url, drawn in its own row (never in the hero). */
+    private final List<Feed.Item> cwItems = new ArrayList<>();
     private final List<View> heroDotsView = new ArrayList<>();
     private int heroCur;
     private boolean heroShown;
@@ -433,72 +436,53 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * Both feeds, merged: live programmes first, then what you are part-way through, then what is
-     * new. The old code kept these as separate rows; one banner can only show one thing at a time,
-     * so the order is the priority.
+     * The hero is live now and new on Plex only. What you are part-way through used to be mixed in
+     * here, which put it five frames into a minute-long rotation; it has its own row now.
      */
     private void fetchHero() {
         final String newUrl = getString(R.string.new_json_url);
-        final String keepUrl = getString(R.string.keep_json_url);
-        if (newUrl.isEmpty() && keepUrl.isEmpty()) return;
+        if (newUrl.isEmpty()) return;
         new Thread(() -> {
-            org.json.JSONArray fresh = readItems(newUrl);
-            org.json.JSONArray keep = readItems(keepUrl);
-            List<JSONObject> items = new ArrayList<>();
-            Set<String> seen = new HashSet<>();
-            for (int pass = 0; pass < 3; pass++) {
-                org.json.JSONArray src = pass == 1 ? keep : fresh;
-                if (src == null) continue;
-                for (int i = 0; i < src.length(); i++) {
-                    JSONObject it = src.optJSONObject(i);
-                    if (it == null) continue;
-                    boolean live = "live".equals(it.optString("kind"));
-                    if ((pass == 0 && !live) || (pass == 2 && live)) continue;
-                    String key = it.optString("title", "").toLowerCase(Locale.US) + "|" + it.optString("sub", "");
-                    if (!"live".equals(it.optString("kind")) && !seen.add(key)) continue;
-                    items.add(it);
-                    if (items.size() >= HERO_MAX) break;
-                }
-                if (items.size() >= HERO_MAX) break;
-            }
+            List<Feed.Item> items = Feed.hero(Feed.parse(Net.text(newUrl, 4000, 4000, Net.MAX_JSON_BYTES)));
             if (items.isEmpty()) {
                 runOnUiThread(this::hideHero);
                 return;
             }
             StringBuilder sig = new StringBuilder();
-            for (JSONObject it : items) {
-                sig.append(it.optString("title", "")).append('|')
-                        .append(it.optString("image", "")).append('|')
-                        .append(it.optLong("until", 0)).append('|')
-                        .append(it.optDouble("progress", 0)).append('|');
+            for (Feed.Item it : items) {
+                sig.append(it.title).append('|')
+                        .append(it.image).append('|')
+                        .append(it.until).append('|')
+                        .append(it.progress).append('|');
             }
             final String sigNow = sig.toString();
             // Same list as the one on screen: rebuilding would restart the crossfade and download
             // every still again.
             if (heroCard != null && sigNow.equals(heroSig)) return;
             final List<Bitmap> imgs = new ArrayList<>(), logos = new ArrayList<>();
-            for (JSONObject it : items) {
-                String img = it.optString("image", "");
-                imgs.add(img.isEmpty() ? null : Net.image(img, 4000, 4000, 1, Net.MAX_PANEL_PIXELS));
-                String logo = it.optString("logo", "");
-                logos.add(logo.isEmpty() ? null : Net.image(logo, 4000, 4000, 1, Net.MAX_PANEL_PIXELS));
+            for (Feed.Item it : items) {
+                imgs.add(it.image.isEmpty() ? null : Net.image(it.image, 4000, 4000, 1, Net.MAX_PANEL_PIXELS));
+                logos.add(it.logo.isEmpty() ? null : Net.image(it.logo, 4000, 4000, 1, Net.MAX_PANEL_PIXELS));
             }
             runOnUiThread(() -> showHero(items, imgs, logos, sigNow));
         }).start();
     }
 
-    private static org.json.JSONArray readItems(String url) {
-        if (url.isEmpty()) return null;
-        String body = Net.text(url, 4000, 4000, Net.MAX_JSON_BYTES);
-        if (body == null) return null;
-        try {
-            return new JSONObject(body).optJSONArray("items");
-        } catch (Exception e) {
-            return null;
-        }
+    /** Reads the resume feed. Kept apart from the hero so it can never be crowded out of it again. */
+    private void fetchKeep() {
+        final String keepUrl = getString(R.string.keep_json_url);
+        if (keepUrl.isEmpty()) return;
+        new Thread(() -> {
+            List<Feed.Item> items = Feed.continueWatching(
+                    Feed.parse(Net.text(keepUrl, 4000, 4000, Net.MAX_JSON_BYTES)));
+            runOnUiThread(() -> {
+                cwItems.clear();
+                cwItems.addAll(items);
+            });
+        }).start();
     }
 
-    private void showHero(List<JSONObject> items, List<Bitmap> imgs, List<Bitmap> logos, String sig) {
+    private void showHero(List<Feed.Item> items, List<Bitmap> imgs, List<Bitmap> logos, String sig) {
         boolean hadFocus = heroCard != null && heroCard.isFocused();
         heroSig = sig;
         heroItems.clear();
@@ -540,10 +524,10 @@ public class MainActivity extends Activity {
     }
 
     /** One frame: artwork, the source chip, the title (or its clearlogo) and a single meta line. */
-    private View heroLayer(JSONObject it, Bitmap bm, Bitmap logo) {
+    private View heroLayer(Feed.Item it, Bitmap bm, Bitmap logo) {
         FrameLayout layer = new FrameLayout(this);
-        boolean live = "live".equals(it.optString("kind"));
-        boolean contain = it.optInt("artfit", 0) == 1;
+        boolean live = it.live();
+        boolean contain = it.artfit;
         if (live) layer.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
                 new int[]{darken(0xFFD93A32, 0.55f), 0xFF14161C}));
         if (bm != null) {
@@ -561,8 +545,7 @@ public class MainActivity extends Activity {
                 new int[]{0xE6000000, 0x8C000000, 0x00000000}));
         layer.addView(shade, new FrameLayout.LayoutParams(-1, -1));
 
-        String kind = it.optString("kind");
-        String chipText = live ? "LIVE ON TIVIMATE" : "new".equals(kind) ? "NEW ON PLEX" : "CONTINUE WATCHING";
+        String chipText = live ? "LIVE ON TIVIMATE" : "new".equals(it.kind) ? "NEW ON PLEX" : "CONTINUE WATCHING";
         TextView chip = text(Typo.CAPTION, "sans-serif-medium", live ? 0xFFF7F7F7 : 0xFFF2C14E);
         SpannableStringBuilder chipLabel = new SpannableStringBuilder();
         if (live) {
@@ -588,13 +571,13 @@ public class MainActivity extends Activity {
             lv.setScaleType(ImageView.ScaleType.FIT_START);
             lv.setMaxHeight(dp(40));
             lv.setMaxWidth(dp(260));
-            lv.setContentDescription(it.optString("title", ""));
+            lv.setContentDescription(it.title);
             info.addView(lv);
         } else {
             TextView title = text(Typo.HEADING, "sans-serif-semibold", Color.WHITE);
             title.setSingleLine(true);
             title.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            title.setText(it.optString("title", ""));
+            title.setText(it.title);
             title.setShadowLayer(dp(8), 0, dp(1), 0x99000000);
             info.addView(title);
         }
@@ -605,7 +588,7 @@ public class MainActivity extends Activity {
         info.addView(meta, llp(-1, -2, 0, dp(2), 0, 0));
         layer.addView(info, lp(-1, -2, Gravity.BOTTOM, dp(20), 0, dp(20), dp(18)));
 
-        double prog = it.optDouble("progress", 0);
+        double prog = it.progress;
         if (prog > 0) {
             FrameLayout track = new FrameLayout(this);
             View groove = new View(this);
@@ -627,20 +610,18 @@ public class MainActivity extends Activity {
     }
 
     /** The one line under the title: where it comes from, and either when it ends or how long is left. */
-    private String heroMeta(JSONObject it) {
-        boolean live = "live".equals(it.optString("kind"));
-        if (live) {
-            String channel = it.optString("channel", "");
-            long until = it.optLong("until", 0);
+    private String heroMeta(Feed.Item it) {
+        if (it.live()) {
+            String channel = it.channel;
+            long until = it.until;
             StringBuilder sb = new StringBuilder("LIVE");
             if (!channel.isEmpty()) sb.append("  \u00B7  ").append(channel);
             if (until > 0) sb.append("  \u00B7  Ends ").append(
                     Times.clockTime(until, android.text.format.DateFormat.is24HourFormat(this), java.time.ZoneId.systemDefault()));
             return sb.toString();
         }
-        String app = it.optString("app", "Plex").toUpperCase(Locale.getDefault());
-        String sub = it.optString("sub", "");
-        return sub.isEmpty() ? app : app + "  \u00B7  " + sub;
+        String app = (it.app.isEmpty() ? "Plex" : it.app).toUpperCase(Locale.getDefault());
+        return it.sub.isEmpty() ? app : app + "  \u00B7  " + it.sub;
     }
 
     private void advanceHero() {
@@ -694,9 +675,8 @@ public class MainActivity extends Activity {
         return -1;
     }
 
-    private boolean expired(JSONObject it) {
-        long until = it.optLong("until", 0);
-        return until > 0 && until <= System.currentTimeMillis() / 1000L;
+    private boolean expired(Feed.Item it) {
+        return it.until > 0 && it.until <= System.currentTimeMillis() / 1000L;
     }
 
     private void startHeroRotation() {
@@ -716,9 +696,9 @@ public class MainActivity extends Activity {
 
     private void openHero(int i) {
         if (i < 0 || i >= heroItems.size()) return;
-        JSONObject it = heroItems.get(i);
+        Feed.Item it = heroItems.get(i);
         if (expired(it)) return;
-        String uri = it.optString("uri", ""), pkg = it.optString("pkg", "");
+        String uri = it.uri, pkg = it.pkg;
         if (!uri.isEmpty()) {
             Intent in = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(uri));
             if (!pkg.isEmpty()) in.setPackage(pkg);
