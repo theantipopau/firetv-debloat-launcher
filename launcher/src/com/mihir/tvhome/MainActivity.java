@@ -99,7 +99,14 @@ public class MainActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable rotateWallpaper = this::nextWallpaper;
     static final long WALLPAPER_INTERVAL_MS = 10 * 60 * 1000;
-    private TextView greeting, clock, ampm, date, wifiPill, appsLabel;
+    private TextView greeting, clock, wifiPill, appsLabel;
+    private View topBar;
+    /** The HA values you can see without opening anything: weather, solar, battery, next alert. */
+    private LinearLayout haGlance;
+    private final LinearLayout[] glanceBox = new LinearLayout[4];
+    private final TextView[] glanceValue = new TextView[4];
+    private String netLabel = "Wi-Fi";
+    private String cwSig = "";
     private int glowColor = 0xFF3A3A3A;
     private ValueAnimator glowAnim;
     private ValueAnimator scrollGlide;
@@ -132,8 +139,10 @@ public class MainActivity extends Activity {
     private static final int HA_ALERT = 0xFFFFC857;
     private static final int HA_LABEL = 0x99FFFFFF;
     private FrameLayout settingsPage;
-    private TextView settingsPill;
+    private TextView settingsPill, inputsChip;
     private View timeTint;
+    /** The hero copy lives in the upper 55% of the screen; the dock and the row below own the rest. */
+    private static final int HERO_COPY_DP = 290;
     private static final long IDLE_MS = 3 * 60 * 1000;
     private final Runnable idle = () -> {
         if (hasWindowFocus() && inputsPopup == null) startActivity(new Intent(this, ClockSaverActivity.class));
@@ -247,8 +256,13 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        // Home has nowhere to go back to; Back from the grid returns to the dock.
-        if (scroll.getScrollY() > 0 && !dockCards.isEmpty()) dockCards.get(0).requestFocus();
+        // Home has nowhere to go back to: Back always returns to the dock, and to the top.
+        View now = getCurrentFocus();
+        boolean away = scroll.getScrollY() > 0 || gridCards.contains(now) || cwCards.contains(now);
+        if (away && !dockCards.isEmpty()) {
+            dockCards.get(0).requestFocus();
+            glideTo(0);
+        }
     }
 
     // ---------------------------------------------------------------- layout
@@ -293,52 +307,50 @@ public class MainActivity extends Activity {
         content.setClipToPadding(false);
         scroll.addView(content, new FrameLayout.LayoutParams(-1, -2));
 
-        // Hero: exactly one screen tall, header on top, banner + dock at the bottom.
+        // The home screen: one screen tall. Backdrop behind, top bar over it, dock and the
+        // continue-watching row at the bottom; the apps grid begins below the fold.
         hero = new FrameLayout(this);
         hero.setClipChildren(false);
         int screenH = getResources().getDisplayMetrics().heightPixels;
         content.addView(hero, new LinearLayout.LayoutParams(-1, screenH));
 
-        hero.addView(buildHeader(), lp(-1, -2, Gravity.TOP, dp(48), dp(36), dp(48), 0));
-        hero.addView(buildHaPanel(), lp(dp(400), -2, Gravity.END | Gravity.TOP, 0, dp(96), dp(48), 0));
+        hero.addView(buildHero(), new FrameLayout.LayoutParams(-1, -1));
 
-        // A soft floor behind the dock: the band and its icons never sit on raw artwork.
+        // A soft floor: the dock and the row under it never sit on raw artwork.
         View dockFade = new View(this);
         dockFade.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{0x00000000, 0x3D000000, 0x8A000000}));
-        hero.addView(dockFade, lp(-1, dp(150), Gravity.BOTTOM, 0, 0, 0, 0));
+                new int[]{0x00000000, 0x59000000, 0xA6000000}));
+        hero.addView(dockFade, lp(-1, dp(230), Gravity.BOTTOM, 0, 0, 0, 0));
+
+        topBar = buildHeader();
+        hero.addView(topBar, lp(-1, dp(64), Gravity.TOP, dp(48), dp(16), dp(48), 0));
 
         LinearLayout bottom = new LinearLayout(this);
         bottom.setOrientation(LinearLayout.VERTICAL);
         bottom.setClipChildren(false);
         bottom.setClipToPadding(false);
-        hero.addView(bottom, lp(-1, -2, Gravity.BOTTOM, dp(48), 0, dp(48), dp(24)));
-        bottom.addView(buildHero(), 0);
+        hero.addView(bottom, lp(-1, -2, Gravity.BOTTOM, 0, 0, 0, dp(20)));
 
+        // No tray behind the row: the tiles themselves are the shape.
         dockRow = new LinearLayout(this);
         dockRow.setOrientation(LinearLayout.HORIZONTAL);
         dockRow.setGravity(Gravity.CENTER);
         dockRow.setClipChildren(false);
         dockRow.setClipToPadding(false);
-        dockRow.setPadding(dp(20), dp(22), dp(20), dp(22));
-        GradientDrawable band = new GradientDrawable();
-        band.setCornerRadius(dp(24));
-        band.setColor(0x1FFFFFFF);
-        band.setStroke(dp(1), 0x14FFFFFF);
-        dockRow.setBackground(band);
-        dockRow.setElevation(dp(12));   // lifts the tray off the photo instead of pasting it on
+        dockRow.setPadding(dp(48), dp(10), dp(48), dp(10));
         bottom.addView(dockRow, new LinearLayout.LayoutParams(-1, -2));
 
-        appsLabel = text(Typo.CAPTION, "sans-serif-medium", 0x99FFFFFF);
-        appsLabel.setText("ALL APPS");
-        appsLabel.setLetterSpacing(Typo.LABEL_TRACKING);
-        content.addView(appsLabel, llp(-2, -2, dp(68), dp(8), 0, dp(18)));
+        bottom.addView(buildContinue(), llp(-1, -2, 0, dp(16), 0, 0));
+
+        appsLabel = text(22, "sans-serif-semibold", 0xE6FFFFFF);
+        appsLabel.setText("Apps");
+        content.addView(appsLabel, llp(-2, -2, dp(48), dp(24), 0, dp(10)));
 
         grid = new LinearLayout(this);
         grid.setOrientation(LinearLayout.VERTICAL);
         grid.setClipChildren(false);
         grid.setClipToPadding(false);
-        content.addView(grid, llp(-1, -2, dp(68), 0, dp(68), dp(160)));
+        content.addView(grid, llp(-1, -2, dp(48), 0, dp(48), dp(160)));
         return root;
     }
 
@@ -374,8 +386,11 @@ public class MainActivity extends Activity {
     private static final int HERO_W_DP = 460;
     private static final int HERO_H_DP = 186;
 
-    private View heroBox;
-    private FrameLayout heroCard, heroStack;
+    private View heroArt;
+    private FrameLayout heroTarget, heroStack;
+    private LinearLayout cwBlock, cwRow;
+    private android.widget.HorizontalScrollView cwScroll;
+    private final List<View> cwCards = new ArrayList<>();
     private LinearLayout heroDots;
     private final List<View> heroLayers = new ArrayList<>();
     private final List<Feed.Item> heroItems = new ArrayList<>();
@@ -387,52 +402,42 @@ public class MainActivity extends Activity {
     private String heroSig = "";
     private final Runnable heroTick = this::advanceHero;
 
+    /**
+     * The backdrop: a full-bleed frame that replaces the wallpaper while an item is showing. Its
+     * copy is confined to the top 290dp, so the dock and the row below never move for it.
+     */
     private View buildHero() {
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setClipChildren(false);
-        box.setClipToPadding(false);
-        box.setVisibility(View.GONE);
-        heroBox = box;
-
-        heroCard = new FrameLayout(this);
-        heroCard.setId(View.generateViewId());
-        heroCard.setFocusable(true);
-        heroCard.setClickable(true);
-        heroCard.setClipToOutline(true);
-        heroCard.setOutlineProvider(new ViewOutlineProvider() {
-            @Override public void getOutline(View v, Outline o) {
-                o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), dp(24));
-            }
-        });
-        heroCard.setBackgroundColor(0xFF14161C);
-        GradientDrawable ring = new GradientDrawable();
-        ring.setCornerRadius(dp(24));
-        ring.setStroke(dp(1), 0x33FFFFFF);
-        heroCard.setForeground(ring);
-        heroCard.setElevation(dp(8));
+        FrameLayout art = new FrameLayout(this);
+        art.setVisibility(View.GONE);
+        art.setFocusable(true);
+        art.setClickable(true);
+        art.setId(View.generateViewId());
+        heroArt = art;
+        heroTarget = art;
 
         heroStack = new FrameLayout(this);
-        heroCard.addView(heroStack, new FrameLayout.LayoutParams(-1, -1));
-        box.addView(heroCard, new LinearLayout.LayoutParams(dp(HERO_W_DP), dp(HERO_H_DP)));
+        art.addView(heroStack, new FrameLayout.LayoutParams(-1, -1));
 
         heroDots = new LinearLayout(this);
         heroDots.setOrientation(LinearLayout.HORIZONTAL);
         heroDots.setGravity(Gravity.CENTER_VERTICAL);
-        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(-2, -2);
-        dlp.setMargins(0, dp(10), 0, 0);
-        box.addView(heroDots, dlp);
+        heroDots.setAlpha(0.6f);
+        heroDots.setClipChildren(false);
 
-        heroCard.setOnClickListener(v -> openHero(heroCur));
-        heroCard.setOnFocusChangeListener((v, has) -> {
-            ring.setStroke(dp(has ? 2 : 1), has ? 0xE6FFFFFF : 0x33FFFFFF);
-            v.animate().scaleX(has ? 1.02f : 1f).scaleY(has ? 1.02f : 1f)
-                    .translationZ(has ? dp(12) : 0).setDuration(has ? 170 : 220).start();
+        FrameLayout copy = new FrameLayout(this);
+        art.addView(copy, new FrameLayout.LayoutParams(-1, dp(HERO_COPY_DP)));
+        copy.addView(heroDots, lp(-2, -2, Gravity.BOTTOM | Gravity.END, 0, 0, dp(48), dp(24)));
+
+        art.setOnClickListener(v -> openHero(heroCur));
+        art.setOnFocusChangeListener((v, has) -> {
+            heroStack.animate().scaleX(has ? 1.012f : 1f).scaleY(has ? 1.012f : 1f)
+                    .setDuration(has ? 200 : 300).start();
+            heroDots.setAlpha(has ? 1f : 0.6f);
             // Focus is the pause: OK must open exactly what is on screen.
             handler.removeCallbacks(heroTick);
             if (!has) handler.postDelayed(heroTick, 1500);
         });
-        return box;
+        return art;
     }
 
     /**
@@ -458,7 +463,7 @@ public class MainActivity extends Activity {
             final String sigNow = sig.toString();
             // Same list as the one on screen: rebuilding would restart the crossfade and download
             // every still again.
-            if (heroCard != null && sigNow.equals(heroSig)) return;
+            if (heroTarget != null && sigNow.equals(heroSig)) return;
             final List<Bitmap> imgs = new ArrayList<>(), logos = new ArrayList<>();
             for (Feed.Item it : items) {
                 imgs.add(it.image.isEmpty() ? null : Net.image(it.image, 4000, 4000, 1, Net.MAX_PANEL_PIXELS));
@@ -475,15 +480,12 @@ public class MainActivity extends Activity {
         new Thread(() -> {
             List<Feed.Item> items = Feed.continueWatching(
                     Feed.parse(Net.text(keepUrl, 4000, 4000, Net.MAX_JSON_BYTES)));
-            runOnUiThread(() -> {
-                cwItems.clear();
-                cwItems.addAll(items);
-            });
+            runOnUiThread(() -> showContinue(items));
         }).start();
     }
 
     private void showHero(List<Feed.Item> items, List<Bitmap> imgs, List<Bitmap> logos, String sig) {
-        boolean hadFocus = heroCard != null && heroCard.isFocused();
+        boolean hadFocus = heroTarget != null && heroTarget.isFocused();
         heroSig = sig;
         heroItems.clear();
         heroItems.addAll(items);
@@ -505,15 +507,17 @@ public class MainActivity extends Activity {
             heroDotsView.add(dot);
         }
         heroDots.setVisibility(heroItems.size() > 1 ? View.VISIBLE : View.GONE);
-        heroBox.setVisibility(View.VISIBLE);
+        updateHeroDots();   // the first frame's dot is drawn before any advance happens
+        heroArt.setVisibility(View.VISIBLE);
         if (!heroShown) {
             heroShown = true;
-            heroBox.setAlpha(0f);
-            heroBox.setTranslationY(dp(10));
-            heroBox.animate().alpha(1f).translationY(0)
-                    .setInterpolator(new DecelerateInterpolator(2f)).setDuration(260).start();
+            heroArt.setAlpha(0f);
+            heroArt.animate().alpha(1f)
+                    .setInterpolator(new DecelerateInterpolator(2f)).setDuration(420).start();
         }
-        if (hadFocus) heroCard.requestFocus();
+        if (hadFocus) heroTarget.requestFocus();
+        rewireHero();
+        if (!heroLayers.isEmpty() && !heroArt.isFocused()) zoomHeroLayer(heroLayers.get(0));
         startHeroRotation();
     }
 
@@ -523,73 +527,106 @@ public class MainActivity extends Activity {
         return p;
     }
 
-    /** One frame: artwork, the source chip, the title (or its clearlogo) and a single meta line. */
+    /** One full-bleed frame: art, the two gradients that make text readable, and the copy. */
     private View heroLayer(Feed.Item it, Bitmap bm, Bitmap logo) {
         FrameLayout layer = new FrameLayout(this);
         boolean live = it.live();
-        boolean contain = it.artfit;
-        if (live) layer.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                new int[]{darken(0xFFD93A32, 0.55f), 0xFF14161C}));
-        if (bm != null) {
-            ImageView art = new ImageView(this);
-            art.setScaleType(contain ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER_CROP);
-            if (contain) {   // a channel logo, not a still: show the whole mark instead of a slice
-                art.setPadding(dp(96), dp(24), dp(96), dp(24));
-                art.setAlpha(0.94f);
-            }
-            art.setImageBitmap(bm);
-            layer.addView(art, new FrameLayout.LayoutParams(-1, -1));
-        }
-        View shade = new View(this);
-        shade.setBackground(new GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP,
-                new int[]{0xE6000000, 0x8C000000, 0x00000000}));
-        layer.addView(shade, new FrameLayout.LayoutParams(-1, -1));
 
-        String chipText = live ? "LIVE ON TIVIMATE" : "new".equals(it.kind) ? "NEW ON PLEX" : "CONTINUE WATCHING";
-        TextView chip = text(Typo.CAPTION, "sans-serif-medium", live ? 0xFFF7F7F7 : 0xFFF2C14E);
-        SpannableStringBuilder chipLabel = new SpannableStringBuilder();
-        if (live) {
-            chipLabel.append("\u25CF ");
-            chipLabel.setSpan(new ForegroundColorSpan(0xFFFF453A), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        if (bm != null && !it.artfit) {
+            ImageView art = new ImageView(this);
+            art.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            art.setImageBitmap(bm);
+            layer.setTag(art);   // the one view the slow push animates
+            layer.addView(art, new FrameLayout.LayoutParams(-1, -1));
+        } else {
+            layer.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                    live ? new int[]{darken(0xFFD93A32, 0.5f), 0xFF0B0C10}
+                            : new int[]{0xFF2A2E38, 0xFF0B0C10}));
+            if (bm != null) {   // a channel logo, not a still: show the whole mark, never a crop
+                ImageView mark = new ImageView(this);
+                mark.setImageBitmap(bm);
+                mark.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                mark.setAlpha(0.94f);
+                layer.addView(mark, lp(dp(300), dp(170), Gravity.END | Gravity.CENTER_VERTICAL,
+                        0, 0, dp(120), 0));
+            }
         }
-        chipLabel.append(chipText);
-        chip.setText(chipLabel);
-        chip.setLetterSpacing(0.06f);
-        GradientDrawable pill = new GradientDrawable();
-        pill.setCornerRadius(dp(8));
-        pill.setColor(0xCC000000);
-        chip.setBackground(pill);
-        chip.setPadding(dp(10), dp(5), dp(10), dp(5));
-        layer.addView(chip, lp(-2, -2, Gravity.TOP | Gravity.START, dp(16), dp(16), 0, 0));
+
+        // The top bar sits on the art, so it gets its own shade: 65% at the edge, gone by 150dp.
+        View top = new View(this);
+        top.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{0xA6000000, 0x33000000, 0x00000000}));
+        layer.addView(top, new FrameLayout.LayoutParams(-1, dp(150)));
+
+        // Black 70% at the left, gone by the middle: the title sits on its own shadow, the art survives.
+        View left = new View(this);
+        left.setBackground(new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{0xC0000000, 0x5E000000, 0x00000000}));
+        layer.addView(left, new FrameLayout.LayoutParams(-1, -1));
+        View bottom = new View(this);
+        bottom.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{0x00000000, 0x1A000000, 0x8C000000, 0xF0000000}));
+        layer.addView(bottom, new FrameLayout.LayoutParams(-1, -1));
+
+        FrameLayout copy = new FrameLayout(this);
+        layer.addView(copy, new FrameLayout.LayoutParams(-1, dp(HERO_COPY_DP)));
 
         LinearLayout info = new LinearLayout(this);
         info.setOrientation(LinearLayout.VERTICAL);
+
+        SpannableStringBuilder badge = new SpannableStringBuilder();
+        if (live) {
+            badge.append("\u25CF ");
+            badge.setSpan(new ForegroundColorSpan(0xFFFF453A), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            badge.append("LIVE");
+            if (!it.channel.isEmpty()) badge.append("  \u00B7  ").append(it.channel);
+        } else {
+            badge.append("NEW ON PLEX");
+        }
+        TextView chip = text(18, "sans-serif-medium", Color.WHITE);
+        chip.setText(badge);
+        if (live) chip.setLetterSpacing(0.06f);   // the one tracked label this screen allows
+        GradientDrawable pill = new GradientDrawable();
+        pill.setCornerRadius(dp(8));
+        pill.setColor(0xB3000000);
+        chip.setBackground(pill);
+        chip.setPadding(dp(12), dp(6), dp(12), dp(6));
+        info.addView(chip, new LinearLayout.LayoutParams(-2, -2));
+
         if (logo != null) {
             ImageView lv = new ImageView(this);
             lv.setImageBitmap(logo);
             lv.setAdjustViewBounds(true);
             lv.setScaleType(ImageView.ScaleType.FIT_START);
-            lv.setMaxHeight(dp(40));
-            lv.setMaxWidth(dp(260));
+            lv.setMaxHeight(dp(56));
+            lv.setMaxWidth(dp(420));
             lv.setContentDescription(it.title);
-            info.addView(lv);
+            LinearLayout.LayoutParams lvp = new LinearLayout.LayoutParams(-2, -2);
+            lvp.setMargins(0, dp(10), 0, 0);
+            info.addView(lv, lvp);
         } else {
-            TextView title = text(Typo.HEADING, "sans-serif-semibold", Color.WHITE);
+            TextView title = text(48, "sans-serif-semibold", Color.WHITE);
             title.setSingleLine(true);
             title.setEllipsize(android.text.TextUtils.TruncateAt.END);
             title.setText(it.title);
-            title.setShadowLayer(dp(8), 0, dp(1), 0x99000000);
-            info.addView(title);
+            title.setShadowLayer(dp(12), 0, dp(2), 0xB3000000);
+            LinearLayout.LayoutParams tvp = new LinearLayout.LayoutParams(-2, -2);
+            tvp.setMargins(0, dp(6), 0, 0);
+            info.addView(title, tvp);
         }
-        TextView meta = text(Typo.CAPTION, "sans-serif", 0xD9FFFFFF);
+
+        TextView meta = text(20, "sans-serif", 0xD9FFFFFF);
         meta.setSingleLine(true);
         meta.setEllipsize(android.text.TextUtils.TruncateAt.END);
         meta.setText(heroMeta(it));
-        info.addView(meta, llp(-1, -2, 0, dp(2), 0, 0));
-        layer.addView(info, lp(-1, -2, Gravity.BOTTOM, dp(20), 0, dp(20), dp(18)));
+        meta.setShadowLayer(dp(10), 0, dp(1), 0x99000000);
+        if (meta.length() > 0) {
+            LinearLayout.LayoutParams mvp = new LinearLayout.LayoutParams(-2, -2);
+            mvp.setMargins(0, dp(6), 0, 0);
+            info.addView(meta, mvp);
+        }
 
-        double prog = it.progress;
-        if (prog > 0) {
+        if (it.progress > 0) {
             FrameLayout track = new FrameLayout(this);
             View groove = new View(this);
             GradientDrawable gg = new GradientDrawable();
@@ -603,30 +640,29 @@ public class MainActivity extends Activity {
             fb.setColor(0xFFFFFFFF);
             bar.setBackground(fb);
             track.addView(bar, new FrameLayout.LayoutParams(
-                    Math.max(dp(6), (int) (dp(HERO_W_DP - 40) * Math.min(1.0, prog))), dp(3)));
-            layer.addView(track, lp(-1, dp(3), Gravity.BOTTOM, dp(20), 0, dp(20), dp(10)));
+                    Math.max(dp(6), (int) (dp(320) * Math.min(1.0, it.progress))), dp(3)));
+            LinearLayout.LayoutParams pvp = new LinearLayout.LayoutParams(dp(320), dp(3));
+            pvp.setMargins(0, dp(12), 0, 0);
+            info.addView(track, pvp);
         }
+
+        copy.addView(info, lp(-1, -2, Gravity.BOTTOM | Gravity.START, dp(48), 0, dp(260), dp(18)));
         return layer;
     }
 
-    /** The one line under the title: where it comes from, and either when it ends or how long is left. */
+    /** The one line under the title: when it ends, or what it is. */
     private String heroMeta(Feed.Item it) {
         if (it.live()) {
-            String channel = it.channel;
-            long until = it.until;
-            StringBuilder sb = new StringBuilder("LIVE");
-            if (!channel.isEmpty()) sb.append("  \u00B7  ").append(channel);
-            if (until > 0) sb.append("  \u00B7  Ends ").append(
-                    Times.clockTime(until, android.text.format.DateFormat.is24HourFormat(this), java.time.ZoneId.systemDefault()));
-            return sb.toString();
+            return it.until > 0 ? "Ends " + Times.clockTime(it.until,
+                    android.text.format.DateFormat.is24HourFormat(this),
+                    java.time.ZoneId.systemDefault()) : "";
         }
-        String app = (it.app.isEmpty() ? "Plex" : it.app).toUpperCase(Locale.getDefault());
-        return it.sub.isEmpty() ? app : app + "  \u00B7  " + it.sub;
+        return it.sub;
     }
 
     private void advanceHero() {
         handler.removeCallbacks(heroTick);
-        if (heroLayers.size() < 2 || heroCard == null || heroCard.isFocused()) return;
+        if (heroLayers.size() < 2 || heroTarget == null || heroTarget.isFocused()) return;
         int next = nextHeroFrame();
         if (next < 0) return;
         showHeroFrame(next);
@@ -640,7 +676,7 @@ public class MainActivity extends Activity {
         if (next == heroCur) return;
         showHeroFrame(next);
         handler.removeCallbacks(heroTick);
-        if (heroCard != null && !heroCard.isFocused()) handler.postDelayed(heroTick, HERO_EVERY_MS);
+        if (heroTarget != null && !heroTarget.isFocused()) handler.postDelayed(heroTick, HERO_EVERY_MS);
     }
 
     private void showHeroFrame(int next) {
@@ -650,8 +686,30 @@ public class MainActivity extends Activity {
         in.setAlpha(0f);
         in.animate().alpha(1f).setDuration(HERO_FADE_MS).start();
         out.animate().alpha(0f).setDuration(HERO_FADE_MS).start();
+        stopHeroZoom(out);
+        zoomHeroLayer(in);
         heroCur = next;
         updateHeroDots();
+    }
+
+    /** The slow push while a frame is up: motion, without a jump. Text is never scaled with it. */
+    private void zoomHeroLayer(View layer) {
+        if (!(layer.getTag() instanceof ImageView)) return;
+        ImageView art = (ImageView) layer.getTag();
+        art.animate().cancel();
+        art.setScaleX(1f);
+        art.setScaleY(1f);
+        art.animate().scaleX(1.05f).scaleY(1.05f)
+                .setInterpolator(new android.view.animation.LinearInterpolator())
+                .setDuration(HERO_EVERY_MS + HERO_FADE_MS).start();
+    }
+
+    private void stopHeroZoom(View layer) {
+        if (!(layer.getTag() instanceof ImageView)) return;
+        ImageView art = (ImageView) layer.getTag();
+        art.animate().cancel();
+        art.setScaleX(1f);
+        art.setScaleY(1f);
     }
 
     private void updateHeroDots() {
@@ -681,7 +739,7 @@ public class MainActivity extends Activity {
 
     private void startHeroRotation() {
         handler.removeCallbacks(heroTick);
-        if (heroLayers.size() > 1 && (heroCard == null || !heroCard.isFocused()))
+        if (heroLayers.size() > 1 && (heroTarget == null || !heroTarget.isFocused()))
             handler.postDelayed(heroTick, HERO_EVERY_MS);
     }
 
@@ -690,7 +748,7 @@ public class MainActivity extends Activity {
         heroItems.clear();
         heroLayers.clear();
         heroDotsView.clear();
-        if (heroBox != null) heroBox.setVisibility(View.GONE);
+        if (heroArt != null) heroArt.setVisibility(View.GONE);
         handler.removeCallbacks(heroTick);
     }
 
@@ -698,22 +756,183 @@ public class MainActivity extends Activity {
         if (i < 0 || i >= heroItems.size()) return;
         Feed.Item it = heroItems.get(i);
         if (expired(it)) return;
-        String uri = it.uri, pkg = it.pkg;
-        if (!uri.isEmpty()) {
-            Intent in = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(uri));
-            if (!pkg.isEmpty()) in.setPackage(pkg);
-            if (launch(in)) return;
-        }
-        if (!pkg.isEmpty() && openPackage(pkg)) return;
+        openItem(it);
     }
 
-    /** The banner sits above the dock: Up from the dock lands on it, Down from it returns. */
+    /** Opens a Plex item's own URI when the app accepts it, otherwise the app itself. */
+    private void openItem(Feed.Item it) {
+        if (!it.uri.isEmpty()) {
+            Intent in = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(it.uri));
+            if (!it.pkg.isEmpty()) in.setPackage(it.pkg);
+            if (launch(in)) return;
+        }
+        if (!it.pkg.isEmpty()) openPackage(it.pkg);
+    }
+
+    /** The backdrop sits above the dock: Up from the dock lands on it, Down returns. */
     private void rewireHero() {
-        if (heroCard == null) return;
-        int topId = pills.isEmpty() ? View.NO_ID : pills.get(0).getId();
-        heroCard.setNextFocusUpId(topId);
-        heroCard.setNextFocusDownId(dockCards.isEmpty() ? heroCard.getId() : dockCards.get(0).getId());
-        if (!dockCards.isEmpty()) dockCards.get(0).setNextFocusUpId(heroCard.getId());
+        if (heroTarget == null) return;
+        View up = pills.isEmpty() ? null : pills.get(0);
+        heroTarget.setNextFocusUpId(up == null ? heroTarget.getId() : up.getId());
+        heroTarget.setNextFocusDownId(dockCards.isEmpty() ? heroTarget.getId() : dockCards.get(0).getId());
+    }
+
+    // ---------------------------------------------------------------- continue watching
+
+    /** The row under the dock: what is part-watched, side-scrolling, never mixed into the hero. */
+    private View buildContinue() {
+        cwBlock = new LinearLayout(this);
+        cwBlock.setOrientation(LinearLayout.VERTICAL);
+        cwBlock.setClipChildren(false);
+        cwBlock.setVisibility(View.GONE);
+
+        TextView head = text(22, "sans-serif-semibold", 0xE6FFFFFF);
+        head.setText("Continue Watching");
+        cwBlock.addView(head, llp(-2, -2, dp(48), 0, 0, dp(10)));
+
+        cwScroll = new android.widget.HorizontalScrollView(this);
+        cwScroll.setHorizontalScrollBarEnabled(false);
+        cwScroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        cwScroll.setClipToPadding(false);
+        cwScroll.setPadding(dp(48), 0, dp(48), 0);
+        cwScroll.setFocusable(false);
+        cwScroll.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
+        cwRow = new LinearLayout(this);
+        cwRow.setOrientation(LinearLayout.HORIZONTAL);
+        cwRow.setClipChildren(false);
+        cwScroll.addView(cwRow, new FrameLayout.LayoutParams(-2, -2));
+        cwBlock.addView(cwScroll, llp(-1, -2, 0, 0, 0, 0));
+        return cwBlock;
+    }
+
+    /** Rebuilds only when the list really changed: every rebuild downloads its artwork again. */
+    private void showContinue(List<Feed.Item> items) {
+        cwItems.clear();
+        cwItems.addAll(items);
+        if (items.isEmpty()) {
+            cwRow.removeAllViews();
+            cwCards.clear();
+            cwSig = "";
+            cwBlock.setVisibility(View.GONE);
+            wireFocus();
+            return;
+        }
+        StringBuilder sig = new StringBuilder();
+        for (Feed.Item it : items) {
+            sig.append(it.title).append('|').append(it.sub).append('|')
+                    .append(it.image).append('|').append(it.progress).append('|');
+        }
+        if (sig.toString().equals(cwSig)) return;
+        cwSig = sig.toString();
+        cwRow.removeAllViews();
+        cwCards.clear();
+        for (int i = 0; i < items.size(); i++) {
+            View tile = cwTile(items.get(i));
+            // 16:9, not the image's own height: a MATCH_PARENT image inside a wrap-content frame
+            // measures as tall as its source and drags the whole home screen up with it.
+            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(dp(184), dp(104));
+            p.setMargins(i == 0 ? 0 : dp(12), 0, 0, 0);
+            cwRow.addView(tile, p);
+            cwCards.add(tile);
+        }
+        cwBlock.setVisibility(View.VISIBLE);
+        wireFocus();
+    }
+
+    /** A 16:9 resume tile: backdrop, title, the one metadata line, and how far through. */
+    private View cwTile(Feed.Item it) {
+        FrameLayout card = new FrameLayout(this);
+        card.setId(View.generateViewId());
+        card.setFocusable(true);
+        card.setClickable(true);
+        card.setTag(it);
+        card.setClipToOutline(true);
+        card.setOutlineProvider(new ViewOutlineProvider() {
+            @Override public void getOutline(View v, Outline o) {
+                o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), dp(12));
+            }
+        });
+        card.setBackgroundColor(0xFF14161C);
+
+        if (!it.image.isEmpty()) {
+            ImageView art = new ImageView(this);
+            art.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            card.addView(art, new FrameLayout.LayoutParams(-1, -1));
+            loadArt(art, it.image);
+        } else if (!it.logo.isEmpty()) {   // no still: the show's own mark, contained
+            ImageView mark = new ImageView(this);
+            mark.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            mark.setPadding(dp(28), dp(12), dp(28), dp(36));
+            mark.setAlpha(0.92f);
+            card.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                    new int[]{0xFF2A2E38, 0xFF101116}));
+            card.addView(mark, new FrameLayout.LayoutParams(-1, -1));
+            loadArt(mark, it.logo);
+        } else {
+            card.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                    new int[]{darken(0xFFE5A00D, 0.4f), 0xFF14161C}));
+        }
+
+        View shade = new View(this);
+        shade.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{0x00000000, 0x59000000, 0xD9000000}));
+        card.addView(shade, new FrameLayout.LayoutParams(-1, -1));
+
+        LinearLayout lines = new LinearLayout(this);
+        lines.setOrientation(LinearLayout.VERTICAL);
+        TextView title = text(18, "sans-serif-semibold", Color.WHITE);
+        title.setText(it.title);
+        title.setSingleLine(true);
+        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        lines.addView(title);
+        TextView meta = text(18, "sans-serif", 0xC7FFFFFF);
+        meta.setText(it.sub);
+        meta.setSingleLine(true);
+        meta.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        lines.addView(meta);
+        card.addView(lines, lp(-1, -2, Gravity.BOTTOM, dp(10), 0, dp(10), dp(10)));
+
+        if (it.progress > 0) {
+            View groove = new View(this);
+            GradientDrawable gg = new GradientDrawable();
+            gg.setColor(0x4DFFFFFF);
+            groove.setBackground(gg);
+            card.addView(groove, lp(-1, dp(3), Gravity.BOTTOM, 0, 0, 0, 0));
+            View bar = new View(this);
+            GradientDrawable fb = new GradientDrawable();
+            fb.setColor(0xFFFFFFFF);
+            bar.setBackground(fb);
+            card.addView(bar, lp(Math.max(dp(4), (int) (dp(184) * Math.min(1.0, it.progress))), dp(3),
+                    Gravity.BOTTOM | Gravity.START, 0, 0, 0, 0));
+        }
+
+        GradientDrawable rim = new GradientDrawable();
+        rim.setCornerRadius(dp(12));
+        rim.setStroke(dp(1), 0x33FFFFFF);
+        View edge = new View(this);
+        edge.setBackground(rim);
+        card.addView(edge, new FrameLayout.LayoutParams(-1, -1));
+
+        card.setOnFocusChangeListener((v, has) -> {
+            rim.setStroke(dp(has ? 2 : 1), has ? 0xE6FFFFFF : 0x33FFFFFF);
+            v.animate().scaleX(has ? 1.06f : 1f).scaleY(has ? 1.06f : 1f)
+                    .translationZ(has ? dp(8) : 0).setDuration(has ? 170 : 200).start();
+            if (has) {
+                lastFocusedId = v.getId();
+                cwScroll.smoothScrollTo(Math.max(0, v.getLeft() - dp(48)), 0);
+            }
+        });
+        card.setOnClickListener(v -> openItem(it));
+        return card;
+    }
+
+    /** Artwork arrives off the main thread; a missing image costs the picture, not the row. */
+    private void loadArt(ImageView into, String url) {
+        if (url.isEmpty()) return;
+        new Thread(() -> {
+            final Bitmap bm = Net.image(url, 4000, 4000, 1, Net.MAX_PANEL_PIXELS);
+            if (bm != null) runOnUiThread(() -> into.setImageBitmap(bm));
+        }).start();
     }
 
     // ---------------------------------------------------------------- full-screen settings
@@ -990,9 +1209,34 @@ public class MainActivity extends Activity {
         t.setVisibility(sb.length() == 0 ? View.GONE : View.VISIBLE);
     }
 
+    /** One glance slot: hidden until it has a value, so the strip never shows an empty icon. */
+    private void setGlance(int i, String value, boolean alert) {
+        boolean show = !value.isEmpty();
+        glanceBox[i].setVisibility(show ? View.VISIBLE : View.GONE);
+        if (!show) return;
+        glanceValue[i].setText(value);
+        glanceValue[i].setTextColor(alert ? HA_ALERT : Color.WHITE);
+    }
+
     private void showHa(JSONObject j) {
         long now = System.currentTimeMillis() / 1000L;
         JSONObject ages = j.optJSONObject("ages");
+
+        // Four values at the top of the screen: the panel is for detail, not for the basics.
+        String gTemp = j.optString("temp", "");
+        String gSolar = j.optString("solar", "");
+        String gBattery = j.optString("battery", "");
+        String gBins = j.optString("bins", "");
+        boolean binsDue = !gBins.isEmpty() && !"BINS".equals(binsWhen(gBins));
+        setGlance(0, gTemp.isEmpty() ? "" : gTemp + "\u00B0", false);
+        setGlance(1, gSolar.isEmpty() ? "" : Times.kw(gSolar) + " kW", false);
+        setGlance(2, gBattery.isEmpty() ? "" : gBattery + "%", false);
+        setGlance(3, binsDue ? "Bins" : "", binsDue);
+        boolean any = false;
+        for (LinearLayout b : glanceBox) if (b != null && b.getVisibility() == View.VISIBLE) any = true;
+        if (haGlance != null) haGlance.setVisibility(any ? View.VISIBLE : View.GONE);
+
+        if (haBig == null) return;   // the detail panel is optional; the glance works without it
 
         haBig.setText(j.optString("temp", "--") + "\u00B0");
         String cond = j.optString("condition", "");
@@ -1030,105 +1274,120 @@ public class MainActivity extends Activity {
         haNextRow.setVisibility(next.isEmpty() ? View.GONE : View.VISIBLE);
         haNext.setText(next);
 
-        if (haPanel.getVisibility() != View.VISIBLE) {
-            haPanel.setVisibility(View.VISIBLE);
-            if (!haShown) {   // settle in on the first refresh only; later ones are just new numbers
-                haShown = true;
-                haPanel.setAlpha(0f);
-                haPanel.setTranslationY(dp(8));
-                haPanel.animate().alpha(1f).translationY(0)
-                        .setInterpolator(new DecelerateInterpolator(2f)).setDuration(240).start();
-            }
-        }
     }
 
     private View buildHeader() {
-        FrameLayout header = new FrameLayout(this);
-        header.setClipChildren(false);
+        LinearLayout bar = new LinearLayout(this);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setClipChildren(false);
 
-        LinearLayout left = new LinearLayout(this);
-        left.setOrientation(LinearLayout.VERTICAL);
-        greeting = text(Typo.CAPTION, "sans-serif-medium", 0xB3FFFFFF);
-        greeting.setLetterSpacing(Typo.LABEL_TRACKING);
+        // Sentence case, 70% white: a person greeting you, not a label shouting at you.
+        greeting = text(20, "sans-serif-medium", 0xB3FFFFFF);
         greeting.setSingleLine(true);
-        greeting.setPadding(0, 0, dp(16), 0);
-        left.addView(greeting);
-
-        LinearLayout clockRow = new LinearLayout(this);
-        clockRow.setGravity(Gravity.BOTTOM);
-        clock = text(Typo.CLOCK, "sans-serif-light", Color.WHITE);
-        clock.setIncludeFontPadding(false);
-        Typo.numbers(clock);
-        clockRow.addView(clock);
-        ampm = text(Typo.CAPTION, "sans-serif-light", 0xCCFFFFFF);
-        clockRow.addView(ampm, llp(-2, -2, dp(6), 0, 0, dp(8)));
-        left.addView(clockRow, llp(-2, -2, 0, dp(2), 0, dp(2)));
-
-        date = text(Typo.CAPTION, "sans-serif-medium", 0x99FFFFFF);
-        date.setSingleLine(true);
-        date.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        date.setPadding(0, 0, dp(16), 0); // letterSpacing is not counted in the measured width
-        date.setLetterSpacing(Typo.LABEL_TRACKING);
-        left.addView(date);
-        for (TextView t : new TextView[]{greeting, clock, ampm, date}) t.setShadowLayer(dp(10), 0, dp(1), 0xB3000000);
-        // 448dp is everything left of the weather panel: 960 - 48 - 400 - 48 - 16 of breathing room.
-        header.addView(left, new FrameLayout.LayoutParams(dp(448), -2, Gravity.START | Gravity.TOP));
+        greeting.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        bar.addView(greeting, new LinearLayout.LayoutParams(0, -2, 1f));
 
         LinearLayout right = new LinearLayout(this);
         right.setGravity(Gravity.CENTER_VERTICAL);
         right.setClipChildren(false);
-        wifiPill = pill("Wi-Fi", "");
+
+        // Four values at a glance. One focus target: OK opens the detail panel.
+        haGlance = new LinearLayout(this);
+        haGlance.setOrientation(LinearLayout.HORIZONTAL);
+        haGlance.setGravity(Gravity.CENTER_VERTICAL);
+        haGlance.setFocusable(true);
+        haGlance.setId(View.generateViewId());
+        haGlance.setPadding(dp(6), dp(4), dp(6), dp(4));
+        haGlance.setVisibility(View.GONE);   // until the first snapshot arrives
+        GradientDrawable gbg = new GradientDrawable();
+        gbg.setCornerRadius(dp(10));
+        gbg.setColor(Color.TRANSPARENT);
+        haGlance.setBackground(gbg);
+        haGlance.setOnFocusChangeListener((v, has) -> {
+            gbg.setColor(has ? 0x1FFFFFFF : Color.TRANSPARENT);
+            v.animate().scaleX(has ? 1.04f : 1f).scaleY(has ? 1.04f : 1f).setDuration(170).start();
+        });
+        int[] glanceIcons = {R.drawable.ic_thermo, R.drawable.ic_solar,
+                R.drawable.ic_battery, R.drawable.ic_bins};
+        for (int i = 0; i < 4; i++) {
+            LinearLayout item = new LinearLayout(this);
+            item.setGravity(Gravity.CENTER_VERTICAL);
+            ImageView icon = new ImageView(this);
+            icon.setImageResource(glanceIcons[i]);
+            icon.setImageTintList(android.content.res.ColorStateList.valueOf(0x99FFFFFF));
+            item.addView(icon, new LinearLayout.LayoutParams(dp(16), dp(16)));
+            TextView value = text(20, "sans-serif-medium", Color.WHITE);
+            value.setSingleLine(true);
+            Typo.numbers(value);
+            LinearLayout.LayoutParams vp = new LinearLayout.LayoutParams(-2, -2);
+            vp.setMargins(dp(6), 0, 0, 0);
+            item.addView(value, vp);
+            item.setVisibility(View.GONE);
+            LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(-2, -2);
+            ip.setMargins(i == 0 ? 0 : dp(6), 0, 0, 0);
+            haGlance.addView(item, ip);
+            glanceBox[i] = item;
+            glanceValue[i] = value;
+        }
+        right.addView(haGlance, llp(-2, dp(44), 0, 0, 0, 0));
+        pills.add(haGlance);
+
+        clock = text(28, "sans-serif-light", Color.WHITE);
+        Typo.numbers(clock);
+        clock.setIncludeFontPadding(false);
+        right.addView(clock, llp(-2, -2, dp(6), 0, 0, 0));
+
+        if (hasPassthroughInputs()) {   // HDMI-in devices only (Fire TV Cube, TVs); sticks have none
+            inputsChip = chip(R.drawable.ic_input, "Inputs", v -> showInputs(v));
+            right.addView(inputsChip, llp(-2, dp(40), dp(10), 0, 0, 0));
+            pills.add(inputsChip);
+        }
+        wifiPill = chip(R.drawable.ic_wifi, "Wi-Fi", v -> openWifiSettings());
         setNet("Wi-Fi", false);
-        wifiPill.setOnClickListener(v -> openWifiSettings());
-        TextView settings = pill("Settings", "⚙");
-        settingsPill = settings;
-        settings.setOnClickListener(v -> openFullSettings());
-        settings.setOnLongClickListener(v -> {
+        right.addView(wifiPill, llp(-2, dp(40), dp(10), 0, 0, 0));
+        pills.add(wifiPill);
+
+        settingsPill = chip(R.drawable.ic_settings, "Settings", v -> openFullSettings());
+        settingsPill.setOnLongClickListener(v -> {
             getSharedPreferences("launcher", MODE_PRIVATE).edit().remove("hidden").remove("dock_order").apply();
             android.widget.Toast.makeText(this, "Hidden apps and main row reset", android.widget.Toast.LENGTH_SHORT).show();
             buildApps();
             return true;
         });
-        List<TextView> bar = new ArrayList<>();
-        if (hasPassthroughInputs()) {   // HDMI-in devices only (Fire TV Cube, TVs); sticks have none
-            TextView inputs = pill("Inputs", "");
-            inputs.setText("Inputs");
-            android.graphics.drawable.Drawable ic = getDrawable(R.drawable.ic_input);
-            ic.setBounds(0, 0, dp(16), dp(16));
-            inputs.setCompoundDrawables(ic, null, null, null);
-            inputs.setCompoundDrawablePadding(dp(8));
-            inputs.setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(0xE6FFFFFF));
-            inputs.setOnClickListener(v -> showInputs(v));
-            bar.add(inputs);
-        }
-        bar.add(wifiPill);
-        bar.add(settings);
-        for (TextView p : bar) {
-            right.addView(p, llp(-2, dp(44), dp(10), 0, 0, 0));
-            pills.add(p);
-        }
-        header.addView(right, new FrameLayout.LayoutParams(-2, -2, Gravity.END | Gravity.TOP));
-        return header;
+        right.addView(settingsPill, llp(-2, dp(40), dp(10), 0, 0, 0));
+        pills.add(settingsPill);
+
+        bar.addView(right, new LinearLayout.LayoutParams(-2, -2));
+        return bar;
     }
 
-    private TextView pill(String label, String glyph) {
-        TextView p = text(11, "sans-serif-medium", 0xE6FFFFFF);
-        p.setText(glyph + "  " + label);
+    /**
+     * An icon-only chip. Its label appears while it has focus, so the bar stays quiet at rest but
+     * a focused chip still says what it does - and the network one can say "Link 1201 Mbps".
+     */
+    private TextView chip(int iconRes, String label, View.OnClickListener click) {
+        TextView p = text(18, "sans-serif-medium", 0xE6FFFFFF);
         p.setGravity(Gravity.CENTER);
-        p.setPadding(dp(18), 0, dp(18), 0);
+        p.setPadding(dp(6), 0, dp(6), 0);
+        p.setMinWidth(dp(30));
         p.setFocusable(true);
         p.setId(View.generateViewId());
+        p.setTag(label);
+        android.graphics.drawable.Drawable ic = getDrawable(iconRes);
+        ic.setBounds(0, 0, dp(18), dp(18));
+        p.setCompoundDrawables(ic, null, null, null);
+        p.setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(0xE6FFFFFF));
         GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(dp(22));
-        bg.setColor(0x66000000);
-        bg.setStroke(dp(1), 0x33FFFFFF);
+        bg.setCornerRadius(dp(20));
+        bg.setColor(Color.TRANSPARENT);
         p.setBackground(bg);
+        p.setOnClickListener(click);
         p.setOnFocusChangeListener((v, has) -> {
-            bg.setColor(has ? 0xF2FFFFFF : 0x66000000);
-            ((TextView) v).setTextColor(has ? 0xFF111111 : 0xE6FFFFFF);
-            ((TextView) v).setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(has ? 0xFF111111 : 0xE6FFFFFF));
-            v.animate().scaleX(has ? 1.08f : 1f).scaleY(has ? 1.08f : 1f)
-                    .setInterpolator(new OvershootInterpolator(2f)).setDuration(220).start();
+            bg.setColor(has ? 0x26FFFFFF : Color.TRANSPARENT);
+            p.setText(has ? String.valueOf(v.getTag()) : "");
+            p.setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(has ? 0xFFFFFFFF : 0xE6FFFFFF));
+            v.animate().scaleX(has ? 1.06f : 1f).scaleY(has ? 1.06f : 1f).setDuration(180).start();
             if (has) { lastFocusedId = v.getId(); glideTo(0); fadeGlow(1f); }
         });
         return p;
@@ -1331,7 +1590,10 @@ public class MainActivity extends Activity {
 
     /** Explicit D-pad targets: one row per press, ends of rows and of the top bar don't wrap. */
     private void wireFocus() {
-        int d = dockCards.size(), g = gridCards.size();
+        int d = dockCards.size(), g = gridCards.size(), c = cwCards.size();
+        boolean hasCw = c > 0 && cwBlock != null && cwBlock.getVisibility() == View.VISIBLE;
+        boolean hasHero = heroArt != null && heroArt.getVisibility() == View.VISIBLE;
+        int topId = pills.isEmpty() ? View.NO_ID : pills.get(0).getId();
         for (int i = 0; i < pills.size(); i++) {
             View p = pills.get(i);
             p.setNextFocusLeftId(i == 0 ? p.getId() : pills.get(i - 1).getId());
@@ -1339,26 +1601,34 @@ public class MainActivity extends Activity {
             p.setNextFocusUpId(p.getId());
             p.setNextFocusDownId(d > 0 ? dockCards.get(Math.min(d - 1, d / 2)).getId() : p.getId());
         }
-        int topId = pills.get(0).getId();
         for (int i = 0; i < d; i++) {
-            View c = dockCards.get(i);
-            c.setNextFocusUpId(heroCard != null ? heroCard.getId() : topId);
-            c.setNextFocusLeftId(i == 0 ? c.getId() : dockCards.get(i - 1).getId());
-            c.setNextFocusRightId(i == d - 1 ? c.getId() : dockCards.get(i + 1).getId());
-            c.setNextFocusDownId(g > 0 ? gridCards.get(Math.min(i, g - 1)).getId() : c.getId());
+            View card = dockCards.get(i);
+            card.setNextFocusUpId(hasHero ? heroTarget.getId() : topId);
+            card.setNextFocusLeftId(i == 0 ? card.getId() : dockCards.get(i - 1).getId());
+            card.setNextFocusRightId(i == d - 1 ? card.getId() : dockCards.get(i + 1).getId());
+            card.setNextFocusDownId(hasCw ? cwCards.get(Math.min(i, c - 1)).getId()
+                    : g > 0 ? gridCards.get(Math.min(i, g - 1)).getId() : card.getId());
+        }
+        for (int i = 0; i < c; i++) {
+            View tile = cwCards.get(i);
+            tile.setNextFocusUpId(d > 0 ? dockCards.get(Math.min(i, d - 1)).getId() : topId);
+            tile.setNextFocusLeftId(i == 0 ? tile.getId() : cwCards.get(i - 1).getId());
+            tile.setNextFocusRightId(i == c - 1 ? tile.getId() : cwCards.get(i + 1).getId());
+            tile.setNextFocusDownId(g > 0 ? gridCards.get(Math.min(i, g - 1)).getId() : tile.getId());
         }
         rewireHero();
         int lastRow = (g - 1) / cols;
         for (int j = 0; j < g; j++) {
-            View c = gridCards.get(j);
+            View card = gridCards.get(j);
             int r = j / cols, col = j % cols;
-            c.setNextFocusUpId(r == 0
-                    ? (d > 0 ? dockCards.get(Math.min(col, d - 1)).getId() : topId)
+            card.setNextFocusUpId(r == 0
+                    ? (hasCw ? cwCards.get(Math.min(col, c - 1)).getId()
+                       : d > 0 ? dockCards.get(Math.min(col, d - 1)).getId() : topId)
                     : gridCards.get(j - cols).getId());
-            c.setNextFocusDownId(j + cols < g ? gridCards.get(j + cols).getId()
-                    : r < lastRow ? gridCards.get(g - 1).getId() : c.getId());
-            c.setNextFocusLeftId(col == 0 ? c.getId() : gridCards.get(j - 1).getId());
-            c.setNextFocusRightId(col == cols - 1 || j == g - 1 ? c.getId() : gridCards.get(j + 1).getId());
+            card.setNextFocusDownId(j + cols < g ? gridCards.get(j + cols).getId()
+                    : r < lastRow ? gridCards.get(g - 1).getId() : card.getId());
+            card.setNextFocusLeftId(col == 0 ? card.getId() : gridCards.get(j - 1).getId());
+            card.setNextFocusRightId(col == cols - 1 || j == g - 1 ? card.getId() : gridCards.get(j + 1).getId());
         }
     }
 
@@ -1370,11 +1640,9 @@ public class MainActivity extends Activity {
         View row = (View) tileBox.getParent();
         int y = grid.getTop() + row.getTop();
         int screenH = getResources().getDisplayMetrics().heightPixels;
-        // First grid row: slide the dock band up to the top edge; later rows centre on screen.
-        View band = (View) dockRow.getParent();
-        int target = grid.indexOfChild(row) == 0
-                ? hero.getTop() + band.getTop() + dockRow.getTop() - dp(22)
-                : y - (int) (screenH * 0.42f);
+        // First grid row: slide the home screen up just enough to show it under the dock;
+        // later rows centre on screen.
+        int target = grid.indexOfChild(row) == 0 ? y - dp(250) : y - (int) (screenH * 0.42f);
         glideTo(target);
     }
 
@@ -1595,29 +1863,30 @@ public class MainActivity extends Activity {
     private void updateClock() {
         Calendar now = Calendar.getInstance();
         int h = now.get(Calendar.HOUR_OF_DAY);
-        greeting.setText((h < 5 ? "GOOD NIGHT" : h < 12 ? "GOOD MORNING" : h < 17 ? "GOOD AFTERNOON" : "GOOD EVENING")
-                + (familyName.isEmpty() ? "" : ",  " + familyName.toUpperCase(Locale.getDefault())));
+        String g = h < 5 ? "Good night" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+        String full = familyName.isEmpty() ? g : g + ", " + familyName;
+        greeting.setText(full);
+        // On a narrower top bar the name is dropped cleanly rather than cut mid-word.
+        greeting.post(() -> {
+            if (familyName.isEmpty()) return;
+            android.text.Layout l = greeting.getLayout();
+            if (l != null && l.getEllipsisCount(0) > 0) greeting.setText(g);
+        });
         timeTint.setBackgroundColor(h >= 18 || h < 5 ? 0x26FF7A2E : h < 10 ? 0x1A7FB8FF : 0x00000000);
-        boolean is24 = android.text.format.DateFormat.is24HourFormat(this);
         // One formatter for every time on this screen, in the device's own zone.
-        clock.setText(Times.clockDigits(now.getTimeInMillis() / 1000L, is24, java.time.ZoneId.systemDefault()));
-        ampm.setText(is24 ? "" : (h < 12 ? "AM" : "PM"));
-        String day = new SimpleDateFormat("EEEE  d MMMM", Locale.getDefault()).format(now.getTime())
-                .toUpperCase(Locale.getDefault());
-        String full = day + (deviceName.isEmpty() ? "" : "   \u00B7   " + deviceName.toUpperCase(Locale.getDefault()));
-        // Letter-spacing is not counted in measureText, so leave a margin for it. A long device
-        // name drops rather than turning the line into "LIVING R...".
-        date.setText(date.getPaint().measureText(full) <= dp(424) * 0.92f ? full : day);
+        clock.setText(Times.clockTime(now.getTimeInMillis() / 1000L,
+                android.text.format.DateFormat.is24HourFormat(this), java.time.ZoneId.systemDefault()));
     }
 
     private void setNet(String label, boolean ethernet) {
-        wifiPill.setText(label);
+        netLabel = label;
+        wifiPill.setTag(label);
         android.graphics.drawable.Drawable ic = getDrawable(ethernet ? R.drawable.ic_ethernet : R.drawable.ic_wifi);
-        int sz = dp(16);
+        int sz = dp(18);
         ic.setBounds(0, 0, sz, sz);
         wifiPill.setCompoundDrawables(ic, null, null, null);
-        wifiPill.setCompoundDrawablePadding(dp(8));
-        wifiPill.setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(wifiPill.isFocused() ? 0xFF111111 : 0xE6FFFFFF));
+        wifiPill.setCompoundDrawablePadding(0);
+        if (wifiPill.isFocused()) wifiPill.setText(label);   // the chip is icon-only at rest
     }
 
     private void updateWifi() {
@@ -1791,10 +2060,9 @@ public class MainActivity extends Activity {
     // ---------------------------------------------------------------- entrance
 
     private void playEntrance() {
-        View header = hero.getChildAt(0);
-        header.setAlpha(0f);
-        header.setTranslationY(-dp(12));
-        header.animate().alpha(1f).translationY(0).setDuration(500).setStartDelay(80).start();
+        topBar.setAlpha(0f);
+        topBar.setTranslationY(-dp(12));
+        topBar.animate().alpha(1f).translationY(0).setDuration(500).setStartDelay(80).start();
         for (int i = 0; i < dockRow.getChildCount(); i++) {
             View t = dockRow.getChildAt(i);
             t.setAlpha(0f);
@@ -1869,13 +2137,13 @@ public class MainActivity extends Activity {
         kickIdle();
         // The banner <-> dock hop is routed here rather than by nextFocusUpId: the framework's
         // focus search kept falling back to the top bar even with the ids set correctly.
-        if (e.getAction() == KeyEvent.ACTION_DOWN && heroCard != null && heroBox.getVisibility() == View.VISIBLE) {
+        if (e.getAction() == KeyEvent.ACTION_DOWN && heroTarget != null && heroArt.getVisibility() == View.VISIBLE) {
             View now = getCurrentFocus();
             if (dockCards.contains(now) && e.getKeyCode() == KeyEvent.KEYCODE_DPAD_UP) {
-                heroCard.requestFocus();
+                heroTarget.requestFocus();
                 return true;
             }
-            if (now == heroCard) {
+            if (now == heroTarget) {
                 if (e.getKeyCode() == KeyEvent.KEYCODE_DPAD_DOWN) {
                     if (!dockCards.isEmpty()) dockCards.get(0).requestFocus();
                     return true;
