@@ -97,36 +97,40 @@ matching.
 
 ## Sources: Fire TV, Live TV and TV Plus
 
-The dock opens with the sources, then the apps. A web page cannot switch the TV's input or open
-the tuner, so **Fire TV** and **Live TV** press a remote key instead: `KEY_HDMI1` (the port the
-Fire TV is on; change it in `config.js`) and `KEY_TV` for the aerial. The tile posts
-`?key=KEY_...` to `controlUrl`, and Home Assistant presses the key through its Samsung TV
-integration. The TV's own viewer then takes over, so channels, the guide and HDMI-CEC behave
-exactly as they do from the Samsung remote.
+The dock opens with the sources, then the apps. **Fire TV** and **Live TV** post
+`?key=KEY_HDMI1` / `?key=KEY_TV` to `controlUrl`, and Home Assistant sets the TV's input.
 
-In HA, with the Samsung Smart TV integration set up (it creates `remote.<your_tv>`):
+It has to be **SmartThings**. On the 2020 75TU8000 every local route was tried and failed while an
+app is in front: `KEY_HDMI1` does nothing, the local Samsung integration's "HDMI" opens TV Plus,
+and the Fire TV's own HDMI-CEC "active source" is ignored (it only works when the TV is turning
+on). SmartThings' input source is honoured. Add the **SmartThings** integration in Home Assistant
+(the TV must show as online in the SmartThings phone app; if it says offline, delete it there and
+add it again), then:
 
 ```yaml
 automation:
-  - alias: TV Home - press a source key
+  - alias: TV Home - Samsung source key
+    mode: queued
     trigger:
       - platform: webhook
         webhook_id: tvhome_key_x7Rq2      # make up your own; it is the only secret
         allowed_methods: [POST]
         local_only: true
+    variables:
+      inputs: { KEY_HDMI1: HDMI1, KEY_HDMI2: HDMI2, KEY_HDMI3: HDMI3, KEY_TV: digitalTv }
     condition:
-      # Only the keys the dock sends, so the webhook cannot power the set off.
+      # Only these inputs, so the webhook cannot power the set off.
       - condition: template
-        value_template: "{{ trigger.query.key in ['KEY_HDMI1','KEY_HDMI2','KEY_HDMI3','KEY_TV'] }}"
+        value_template: "{{ trigger.query.key in inputs }}"
     action:
-      - service: remote.send_command
-        target: { entity_id: remote.samsung_tv }
-        data: { command: "{{ trigger.query.key }}" }
+      - service: media_player.select_source
+        target: { entity_id: media_player.samsung_75tu8000 }   # the SmartThings entity
+        data: { source: "{{ inputs[trigger.query.key] }}" }
 ```
 
-and in `config.js`: `controlUrl: "http://<ha-ip>:8123/api/webhook/tvhome_key_x7Rq2"`. Without HA,
-anything that forwards the key to [`tools/tizen.py`](../tools/tizen.py) works
-(`python tools/tizen.py key KEY_HDMI1`).
+`digitalTv` is the aerial; `HDMI1` is the Fire TV's port (change `keyAction` in `config.js` if
+yours differs). Package with `--control-url http://<ha-ip>:8123/api/webhook/<your-id>` so the id
+only lands in the TV's copy.
 
 TV Plus is a normal app, so it is resolved by name like the rest (`"TV Plus"` /
 `"Samsung TV Plus"`) and hides itself if this set does not have it.
