@@ -304,11 +304,12 @@
   }
 
   /* tvhome.yaml sends seconds since each entity last updated; anything older
-     than 15 minutes is dimmed, the same rule the Fire TV panel uses. */
+     than 15 minutes is dimmed, the same rule the Fire TV panel uses. The weather
+     gets an hour: forecast sources only publish every 30 to 60 minutes. */
   function isOld(snap, key) {
     var ages = snap.ages || {};
     var age = num(ages[key]);
-    return age !== null && age > 900;
+    return age !== null && age > (key === "temp" ? 3600 : 900);
   }
 
   function span(value, dim) {

@@ -690,6 +690,12 @@ public class MainActivity extends Activity {
         void advance() {
             handler.removeCallbacks(tick);
             if (items.size() < 2 || root.isFocused()) return;
+            // A full-card crossfade landing under a focus move was the slow tenth of frames:
+            // while the remote is in use, wait for a pause instead of turning mid-move.
+            if (SystemClock.uptimeMillis() - lastKeyAt < KEY_QUIET_MS) {
+                handler.postDelayed(tick, KEY_QUIET_MS);
+                return;
+            }
             int next = nextFrame();
             if (next < 0) return;
             render(next);
@@ -1933,7 +1939,7 @@ public class MainActivity extends Activity {
             weather.append(Times.kw(inside)).append("\u00B0 inside");
         }
         setStatusLine(statusWeatherRow, statusWeather, weather.toString(), HomeTheme.TEXT_90,
-                Batteries.alpha(Times.stale(age(ages, "temp"))));
+                Batteries.alpha(Times.staleWeather(age(ages, "temp"))));
 
         String bat = j.optString("battery", "");
         if (bat.isEmpty()) {
@@ -2946,6 +2952,9 @@ public class MainActivity extends Activity {
 
     /** Last horizontal D-pad step, -1 left or +1 right: which way a newly focused tile leans. */
     private int lastStep;
+    /** When the remote was last pressed, and how long the cards wait after it before turning. */
+    private long lastKeyAt;
+    private static final long KEY_QUIET_MS = 1200;
 
     /**
      * The focus lift the dock and the apps grid share: a small overshoot in, an ease out, and on a
@@ -3033,6 +3042,7 @@ public class MainActivity extends Activity {
         if (e.getAction() == KeyEvent.ACTION_DOWN) {
             int k = e.getKeyCode();
             lastStep = k == KeyEvent.KEYCODE_DPAD_LEFT ? -1 : k == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : 0;
+            lastKeyAt = SystemClock.uptimeMillis();
             if (k == KeyEvent.KEYCODE_DPAD_UP || k == KeyEvent.KEYCODE_DPAD_DOWN
                     || k == KeyEvent.KEYCODE_DPAD_LEFT || k == KeyEvent.KEYCODE_DPAD_RIGHT
                     || k == KeyEvent.KEYCODE_DPAD_CENTER || k == KeyEvent.KEYCODE_ENTER) userNavigated = true;
