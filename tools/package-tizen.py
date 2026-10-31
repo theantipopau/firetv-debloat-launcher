@@ -95,8 +95,8 @@ def png_size(path):
     return struct.unpack(">II", head[16:24])
 
 
-def snapshot_line(js):
-    """Index of the real `snapshotUrl:` line, skipping the /* ... */ example above it."""
+def snapshot_line(js, key="snapshotUrl"):
+    """Index of the real `<key>:` line, skipping the /* ... */ examples above it."""
     in_comment = False
     for i, line in enumerate(js.splitlines()):
         if in_comment:
@@ -107,7 +107,7 @@ def snapshot_line(js):
             if "*/" not in line.split("/*", 1)[1]:
                 in_comment = True
             continue
-        if re.match(r"^\s*snapshotUrl:", line):
+        if re.match(r"^\s*" + key + r":", line):
             return i
     return -1
 
@@ -131,7 +131,18 @@ def set_snapshot(js, url):
     return "".join(lines)
 
 
-def stage(url):
+def set_control(js, url):
+    """The source tiles' key URL, e.g. an HA webhook. Staged copy only: the id is a secret."""
+    i = snapshot_line(js, "controlUrl")
+    if i < 0:
+        die("tizen/config.js has no controlUrl line to replace")
+    lines = js.splitlines(True)
+    lines[i] = re.sub(r'(controlUrl:\s*)"[^"]*"', lambda m: m.group(1) + json.dumps(url),
+                      lines[i], count=1)
+    return "".join(lines)
+
+
+def stage(url, control=None):
     # Rebuild the staged project from scratch; never leave a stale .wgt behind.
     shutil.rmtree(BUILD, ignore_errors=True)
     if os.path.exists(WGT):
@@ -151,6 +162,11 @@ def stage(url):
         if not re.match(r"^https?://", url):
             die("--snapshot-url must start with http:// or https://")
         cfg = set_snapshot(cfg, url)
+    if control:
+        if not re.match(r"^https?://", control):
+            die("--control-url must start with http:// or https://")
+        cfg = set_control(cfg, control)
+    if url or control:
         with open(cfg_path, "w", encoding="utf-8") as f:
             f.write(cfg)
 
@@ -321,6 +337,8 @@ def main():
     ap.add_argument("--check", action="store_true", help="stage and validate only; do not sign")
     ap.add_argument("--snapshot-url", metavar="URL",
                     help="Home Assistant tvhome.json URL baked into the staged copy")
+    ap.add_argument("--control-url", metavar="URL",
+                    help="where the Fire TV / Live TV tiles post their key (an HA webhook)")
     ap.add_argument("--profile", metavar="NAME",
                     default=os.environ.get("TIZEN_PROFILE", ""),
                     help="Tizen certificate profile name (or TIZEN_PROFILE)")
@@ -333,7 +351,7 @@ def main():
         uninstall(args.uninstall)
         return
 
-    url = stage(args.snapshot_url)
+    url = stage(args.snapshot_url, args.control_url)
     check(url)
 
     if args.check:
