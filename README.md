@@ -5,7 +5,7 @@
 A clean, fast, ad-free home screen for **Amazon Fire TV**, plus a reversible debloat script. No ads, no sponsored rows, no
 account, no cloud. Works on its own; [Home Assistant](docs/HOME-ASSISTANT.md) is optional.
 
-Current release: **v1.5** — see the [changelog](CHANGELOG.md).
+Current release: **v1.5.1** — see the [changelog](CHANGELOG.md).
 
 ![Home screen](docs/img/home.jpg)
 

@@ -3,6 +3,16 @@
 All notable changes to the Fire TV Debloat Launcher. Versions match `versionName` in
 [`launcher/AndroidManifest.xml`](launcher/AndroidManifest.xml).
 
+## 1.5.1 — 2026-10-31
+
+### Fixed
+- **The weather no longer dims as stale while it is current.** Forecast sources publish every 30-60
+  minutes, so the 15-minute rule greyed the outside temperature most of the time. Weather gets an
+  hour (launcher and Samsung); everything else keeps 15 minutes.
+- **The Live now / Plex cards wait for the remote to pause** before turning, instead of crossfading
+  a full-card picture under a focus move. Moving along the dock on the Cube: frames over 16 ms fell
+  from 24 to between 2 and 13 per pass.
+
 ## 1.5 — 2026-10-31
 
 An Apple TV-style pass over the whole home screen, and the Samsung dashboard brought up to match.
