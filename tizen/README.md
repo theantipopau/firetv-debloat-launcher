@@ -24,7 +24,8 @@ snapshotUrl: "http://192.168.1.10:8123/local/tvhome.json"   // config.js
 ```
 
 Until that is set it reads `data/tvhome.sample.json` and says **sample data** in the corner. If
-the URL cannot be read it says **no data** and draws only the clock and the dock. Nothing on the
+the URL cannot be read it says **no data** and draws only the clock and the dock; once a read has
+worked, a missed one keeps that snapshot on screen at 55% and says **offline**. Nothing on the
 screen is invented: every element is a key from the snapshot, and an empty key removes its own
 element, exactly like the Fire TV panel. The packaged widget does not ship the sample, so on the
 TV that corner says **no data** until the URL is set.

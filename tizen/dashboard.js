@@ -87,6 +87,10 @@
   var back = $("wallB");
   var wallIndex = 0;
   var tileIndex = 0;
+  /* The last snapshot that read cleanly: a missed poll keeps it on screen, dimmed,
+     instead of blanking the panel until the next good read. */
+  var lastSnap = null;
+  var loading = false;
 
   /* ---------- helpers ---------- */
 
@@ -117,7 +121,16 @@
       h = h % 12;
       if (!h) { h = 12; }
     }
-    $("clock").textContent = (hour12 ? h : pad(h)) + ":" + pad(d.getMinutes());
+    var text = (hour12 ? h : pad(h)) + ":" + pad(d.getMinutes());
+    var el = $("clock");
+    if (el.textContent === text) { return; }
+    // The minute turns over like the Lock Screen's: the old time lifts away, the new one rises.
+    if (!el.textContent || document.hidden) { el.textContent = text; return; }
+    el.className = "clock out";
+    setTimeout(function () {
+      el.textContent = text;
+      el.className = "clock in";
+    }, 160);
   }
 
   /* ---------- background ---------- */
@@ -128,10 +141,36 @@
     var url = list[index % list.length];
     back.style.backgroundImage = "url('" + url + "')";
     back.className = "wall on";
+    tintGlass(url);
     front.className = "wall";
     var swap = front;
     front = back;
     back = swap;
+  }
+
+  /* The glass takes a little of the photo's colour, as tvOS glass does: the
+     wallpaper's average, at a fifth of its brightness. Two strengths, because the
+     2020 set has no backdrop blur and needs a denser tint to keep text legible. */
+  function tintGlass(url) {
+    var img = new Image();
+    img.onload = function () {
+      try {
+        var c = document.createElement("canvas");
+        c.width = 16;
+        c.height = 9;
+        var ctx = c.getContext("2d");
+        ctx.drawImage(img, 0, 0, 16, 9);
+        var px = ctx.getImageData(0, 0, 16, 9).data;
+        var r = 0, g = 0, b = 0;
+        for (var i = 0; i < px.length; i += 4) { r += px[i]; g += px[i + 1]; b += px[i + 2]; }
+        var n = px.length / 4;
+        var rgb = Math.round(r / n * 0.2) + "," + Math.round(g / n * 0.2) + "," + Math.round(b / n * 0.2);
+        var root = document.documentElement.style;
+        root.setProperty("--glass", "rgba(" + rgb + ",.42)");
+        root.setProperty("--glass-solid", "rgba(" + rgb + ",.66)");
+      } catch (e) { /* a tainted canvas keeps the neutral glass */ }
+    };
+    img.src = url;
   }
 
   function setRotation(on) {
@@ -453,13 +492,23 @@
       return;
     }
 
+    // One read at a time, and none that hangs: the TV's network can stall a request
+    // for minutes, and a 15-second poll would otherwise stack them up.
+    if (loading) { return; }
+    loading = true;
     var busted = url + (url.indexOf("?") < 0 ? "?" : "&") + "_=" + Date.now();
-    fetch(busted, { cache: "no-store" })
+    var timeout = new Promise(function (resolve, reject) {
+      setTimeout(function () { reject(new Error("timed out")); }, 10000);
+    });
+    Promise.race([fetch(busted, { cache: "no-store" }), timeout])
       .then(function (r) {
         if (!r || !r.ok) { throw new Error("HTTP " + (r ? r.status : "error")); }
         return r.json();
       })
       .then(function (snap) {
+        loading = false;
+        lastSnap = snap;
+        $("info").className = "info";
         render(snap);
         if (chip) {
           chip.hidden = !usingSample;
@@ -470,11 +519,17 @@
           " · read " + pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds()));
       })
       .catch(function (err) {
-        // Nothing invented on screen: an unreachable snapshot leaves the clock and the dock.
-        render({});
+        // Nothing invented on screen. A missed read keeps the last good snapshot, dimmed,
+        // so one dropped poll does not blank the panel; with none yet, only the clock and dock.
+        loading = false;
+        if (lastSnap) {
+          $("info").className = "info stale";
+        } else {
+          render({});
+        }
         if (chip) {
           chip.hidden = false;
-          chip.textContent = "no data";
+          chip.textContent = lastSnap ? "offline · last read kept" : "no data";
         }
         note("Could not read " + url + " — " + (err && err.message ? err.message : "error") +
           ". Set snapshotUrl in config.js and allow this origin in HA (http.cors_allowed_origins).");
@@ -511,7 +566,10 @@
       // The name shows under the focused tile only, as on tvOS (style.css .name).
       b.innerHTML = markFor(app) + '<span class="name">' + app.label + "</span>";
       b.addEventListener("click", function () { launch(app); });
-      b.addEventListener("focus", function () { spot(b); });
+      b.addEventListener("focus", function () { if (b.className.indexOf("focused") < 0) { spot(b); } });
+      // Left to right, half a beat apart, after the glass itself has risen.
+      b.className = "tile enter";
+      b.style.webkitAnimationDelay = b.style.animationDelay = (160 + dock.children.length * 20) + "ms";
       dock.appendChild(b);
     });
   }
@@ -538,18 +596,20 @@
 
   /* The TV sets the spotlight from the remote, so do not rely on :focus alone:
      an inactive browser window can leave :focus unmatched. */
-  function spot(element) {
+  /* dir: "l" or "r" when the cursor arrived sideways, so the tile leans the way it
+     travelled and levels out (style.css .lean-l / .lean-r). */
+  function spot(element, dir) {
     Array.prototype.forEach.call(document.querySelectorAll(".tile.focused"), function (t) {
       t.className = "tile";
     });
-    if (element) { element.className = "tile focused"; }
+    if (element) { element.className = "tile focused" + (dir ? " lean-" + dir : ""); }
   }
 
-  function focusTile(index) {
+  function focusTile(index, dir) {
     var all = tiles();
     if (!all.length) { return; }
     tileIndex = (index + all.length) % all.length;
-    spot(all[tileIndex]);
+    spot(all[tileIndex], dir);
     all[tileIndex].focus();
   }
 
@@ -726,6 +786,7 @@
     resolveApps(function () {
       buildDock();
       buildGrid();
+      focusTile(0);
     });
     load();
     setInterval(load, Math.max(15, cfg.refreshSeconds || 15) * 1000);
@@ -771,11 +832,17 @@
         return;
       }
 
-      if (k === 37 || k === 39) {
+      var top = [$("allAppsBtn"), $("settingsBtn")];
+      var t = top.indexOf(document.activeElement);
+      if (t >= 0 && (k === 37 || k === 39)) {
+        // Left and right move between the round buttons; they used to drop into the dock.
+        e.preventDefault();
+        top[Math.max(0, Math.min(top.length - 1, t + (k === 39 ? 1 : -1)))].focus();
+      } else if (k === 37 || k === 39) {
         e.preventDefault();
         var i = tiles().indexOf(document.activeElement);
-        if (k === 37) { focusTile(i <= 0 ? tiles().length - 1 : i - 1); }
-        else { focusTile(i < 0 ? 0 : i + 1); }
+        if (k === 37) { focusTile(i <= 0 ? tiles().length - 1 : i - 1, "l"); }
+        else { focusTile(i < 0 ? 0 : i + 1, "r"); }
       } else if (k === 38) {
         e.preventDefault();
         spot(null);
