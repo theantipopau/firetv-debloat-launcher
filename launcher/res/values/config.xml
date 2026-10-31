@@ -42,6 +42,11 @@
          then new on Plex. Empty = no tile. Example: http://homeassistant.local:8123/local/tvhome_new.json -->
     <string name="new_json_url" translatable="false"></string>
 
+    <!-- Free-to-air TV: a round button up top that switches the TV to its aerial through Home
+         Assistant (the SmartThings webhook in tizen/README.md, "Sources"); ?key=KEY_TV is added.
+         Empty = no button. Example: http://homeassistant.local:8123/api/webhook/tvhome_key_x7Rq2 -->
+    <string name="aerial_url" translatable="false"></string>
+
     <!-- Greeting shows "Good evening, <family_name>"; the date line ends with <device_name>. Both optional. -->
     <string name="family_name" translatable="false"></string>
     <string name="device_name" translatable="false"></string>

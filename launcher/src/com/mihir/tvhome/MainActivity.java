@@ -113,7 +113,13 @@ public class MainActivity extends Activity {
     private View topActions;
     private View actionApps, actionSettings;
     /** Wi-Fi or Ethernet, back where it always was: icon at rest, the network's name on focus. */
-    private TextView netChip;
+    private TextView netChip, aerialChip;
+    /** The extra stop past the last app in the dock: All apps, without a trip to the top. */
+    private View dockAppsSlot;
+    private TextView statusRain;
+    private View statusRainRow;
+    /** The small house after the battery percentage while the battery is powering it. */
+    private ImageView statusBatteryFlow;
     /** The glass colour, tinted by the wallpaper: the dock, the cards and the round buttons share it. */
     private int glassColor = HomeTheme.GLASS;
     private final List<GradientDrawable> glasses = new ArrayList<>();
@@ -516,9 +522,24 @@ public class MainActivity extends Activity {
 
         statusWeather = lineText();
         statusWeatherRow = statusLine(R.drawable.ic_thermo, statusWeather);
+        // Rain gets a line only while it is coming; the sheet keeps the whole forecast.
+        statusRain = lineText();
+        statusRainRow = statusLine(R.drawable.ic_rain, statusRain);
+        ((ImageView) ((LinearLayout) statusRainRow).getChildAt(0))
+                .setImageTintList(android.content.res.ColorStateList.valueOf(0xFF64D2FF));
         statusBattery = lineText();
         statusBatteryRow = statusLine(R.drawable.ic_battery, statusBattery);
         statusBatteryIcon = (ImageView) ((LinearLayout) statusBatteryRow).getChildAt(0);
+        // Charging shows as a bolt in the battery mark; powering the house as this house after
+        // the number. Words and marks instead of the old up and down arrows.
+        statusBatteryFlow = new ImageView(this);
+        statusBatteryFlow.setImageResource(R.drawable.ic_house);
+        statusBatteryFlow.setImageTintList(android.content.res.ColorStateList.valueOf(HomeTheme.TEXT_70));
+        statusBatteryFlow.setVisibility(View.GONE);
+        LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(
+                dp(HomeTheme.LINE_ICON), dp(HomeTheme.LINE_ICON));
+        fp.leftMargin = dp(8);
+        ((LinearLayout) statusBatteryRow).addView(statusBatteryFlow, fp);
         // Producing solar joins the battery's own line: the two numbers belong together, and the
         // block has no room for a fifth row. Hidden at night, so the line is just the battery.
         statusSolar = lineText();
@@ -527,8 +548,8 @@ public class MainActivity extends Activity {
         statusSolarGroup.setGravity(Gravity.CENTER_VERTICAL);
         statusSolarGroup.setVisibility(View.GONE);
         ImageView solarMark = new ImageView(this);
-        solarMark.setImageResource(R.drawable.ic_sun);
-        solarMark.setImageTintList(android.content.res.ColorStateList.valueOf(HomeTheme.TEXT_70));
+        solarMark.setImageResource(R.drawable.ic_solar);   // the sheet's Solar tile mark
+        solarMark.setImageTintList(android.content.res.ColorStateList.valueOf(0xFFFFD60A));   // sun yellow
         LinearLayout.LayoutParams smp = new LinearLayout.LayoutParams(
                 dp(HomeTheme.LINE_ICON), dp(HomeTheme.LINE_ICON));
         smp.leftMargin = dp(14);
@@ -594,6 +615,11 @@ public class MainActivity extends Activity {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setClipChildren(false);
+        String aerial = getString(R.string.aerial_url);
+        if (!aerial.isEmpty()) {
+            aerialChip = chip(R.drawable.ic_aerial, () -> "Free-to-air TV", v -> switchToAerial(aerial));
+            row.addView(aerialChip, llp(-2, dp(HomeTheme.ACTION_SIZE), 0, 0, dp(HomeTheme.ACTION_GAP), 0));
+        }
         netChip = chip(isEthernet() ? R.drawable.ic_ethernet : R.drawable.ic_wifi,
                 () -> netLabel, v -> openWifiSettings());
         row.addView(netChip, llp(-2, dp(HomeTheme.ACTION_SIZE), 0, 0, dp(HomeTheme.ACTION_GAP), 0));
@@ -640,6 +666,32 @@ public class MainActivity extends Activity {
             if (has) lastFocusedId = v.getId();
         });
         return b;
+    }
+
+    /**
+     * The TV's own tuner, through Home Assistant: on the 2020 Samsung only SmartThings can change
+     * its input (keys and HDMI-CEC are ignored while an app is in front), and the webhook does that.
+     */
+    private void switchToAerial(String url) {
+        final String target = url + (url.contains("?") ? "&" : "?") + "key=KEY_TV";
+        new Thread(() -> {
+            boolean ok = false;
+            try {
+                java.net.HttpURLConnection c =
+                        (java.net.HttpURLConnection) new java.net.URL(target).openConnection();
+                c.setRequestMethod("POST");
+                c.setConnectTimeout(4000);
+                c.setReadTimeout(4000);
+                c.setDoOutput(true);
+                c.getOutputStream().close();
+                ok = c.getResponseCode() < 300;
+                c.disconnect();
+            } catch (java.io.IOException ignored) { }
+            final boolean sent = ok;
+            runOnUiThread(() -> android.widget.Toast.makeText(this,
+                    sent ? "Switching to free-to-air TV" : "Could not reach Home Assistant",
+                    android.widget.Toast.LENGTH_SHORT).show());
+        }).start();
     }
 
     private void paintChip(TextView chip, int iconRes, boolean focused, String label) {
@@ -820,7 +872,8 @@ public class MainActivity extends Activity {
             p.root.setAlpha(0f);
             // On a layer: a full-bleed still fading over glass is otherwise redrawn every frame.
             p.root.animate().alpha(1f).setDuration(NOW_FADE_MS).withLayer().start();
-            out.root.animate().alpha(0f).setDuration(NOW_FADE_MS).withLayer().start();
+            // The old card leaves quickly so two titles never sit on top of each other.
+            out.root.animate().alpha(0f).setDuration(HomeTheme.MS_FOCUS).withLayer().start();
             front = back;
             cur = i;
         }
@@ -1280,6 +1333,56 @@ public class MainActivity extends Activity {
             if (!opened) pressUndo(v, HomeTheme.DOCK_FOCUS_SCALE);
         });
         holder.setOnLongClickListener(v -> { showAppMenu(v, app); return true; });
+        return holder;
+    }
+
+    private View dockAppsSlot() {
+        FrameLayout holder = new FrameLayout(this);
+        holder.setId(View.generateViewId());
+        holder.setFocusable(true);
+        holder.setClickable(true);
+        holder.setClipChildren(false);
+        holder.setClipToPadding(false);
+        holder.setPadding(dp(6), dp(3), dp(6), dp(9));   // the app slots' own shift
+
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setGravity(Gravity.CENTER_HORIZONTAL);
+        col.setClipChildren(false);
+        col.setClipToPadding(false);
+        FrameLayout frame = new FrameLayout(this);
+        frame.setClipChildren(false);
+        final float density = getResources().getDisplayMetrics().density;
+        final ImageView shadow = AppTile.shadow(this, density, HomeTheme.DOCK_H, HomeTheme.DOCK_H,
+                HomeTheme.DOCK_ICON_RADIUS);
+        frame.addView(shadow, AppTile.shadowParams(density));
+        frame.addView(AppTile.appsMark(this, density), new FrameLayout.LayoutParams(-1, -1));
+        final View rim = AppTile.focusRim(this, density);
+        rim.setAlpha(0f);
+        frame.addView(rim, new FrameLayout.LayoutParams(-1, -1));
+        col.addView(frame, new LinearLayout.LayoutParams(dp(HomeTheme.DOCK_H), dp(HomeTheme.DOCK_H)));
+
+        final TextView name = text(Typo.CAPTION, "sans-serif-medium", Color.WHITE);
+        name.setTextSize(TypedValue.COMPLEX_UNIT_SP, HomeTheme.DOCK_NAME);
+        name.setText("All apps");
+        name.setSingleLine(true);
+        name.setGravity(Gravity.CENTER);
+        name.setShadowLayer(dp(6), 0, dp(1), 0x99000000);
+        name.setAlpha(0f);
+        col.addView(name, llp(dp(HomeTheme.DOCK_H + 12), -2, 0, dp(HomeTheme.DOCK_NAME_GAP), 0, 0));
+        holder.addView(col, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER));
+
+        holder.setOnFocusChangeListener((v, has) -> {
+            lift(v, has, HomeTheme.DOCK_FOCUS_SCALE);
+            shadow.animate().alpha(has ? 1f : 0f).setDuration(HomeTheme.MS_FOCUS).start();
+            rim.animate().alpha(has ? 1f : 0f).setDuration(HomeTheme.MS_FOCUS).start();
+            name.animate().alpha(has ? 1f : 0f).setDuration(HomeTheme.MS_FOCUS).start();
+            if (has) lastFocusedId = v.getId();
+        });
+        holder.setOnClickListener(v -> {
+            pressDip(v, HomeTheme.DOCK_FOCUS_SCALE);
+            showAllApps();
+        });
         return holder;
     }
 
@@ -1954,6 +2057,9 @@ public class MainActivity extends Activity {
         }
         setStatusLine(statusWeatherRow, statusWeather, weather.toString(), HomeTheme.TEXT_90,
                 Batteries.alpha(Times.staleWeather(age(ages, "temp"))));
+        String rain = Cards.rainShort(j.optString("rain", ""));
+        boolean coming = !rain.isEmpty() && !rain.toLowerCase(Locale.US).startsWith("no rain");
+        setStatusLine(statusRainRow, statusRain, coming ? rain : "", HomeTheme.TEXT_90, 1f);
 
         String bat = j.optString("battery", "");
         if (bat.isEmpty()) {
@@ -1970,9 +2076,12 @@ public class MainActivity extends Activity {
             String name = j.optString("battery_name", "Battery");
             // The words stay white like every other line; the mark carries the state, so a
             // charging battery is green and a draining one orange without tinting the sentence.
-            setStatusLine(statusBatteryRow, statusBattery, Batteries.line(name, soc, state),
+            setStatusLine(statusBatteryRow, statusBattery, Batteries.label(name, soc),
                     HomeTheme.TEXT_90, Batteries.alpha(stale));
+            statusBatteryIcon.setImageResource(state == Batteries.CHARGING && !stale
+                    ? R.drawable.ic_battery_charging : R.drawable.ic_battery);
             tintBatteryIcon(stale ? Batteries.GREY : Batteries.color(state));
+            statusBatteryFlow.setVisibility(state == Batteries.DISCHARGING && !stale ? View.VISIBLE : View.GONE);
             // "Battery 66% ↑  ☀ 5.3 kW" while the roof is producing; the sun mark is the same
             // one the sheet's Solar tile uses. At night the whole segment is gone, not a "0 kW".
             String solar = j.optString("solar", "");
@@ -2154,6 +2263,13 @@ public class MainActivity extends Activity {
             p.setMargins(i == 0 ? 0 : gap, 0, i == dock.size() - 1 ? 0 : gap, 0);
             dockPillRow.addView(slot, p);
         }
+        // Past the last app, one more stop: All apps, so the far right of the row reaches it
+        // without a trip to the top buttons. Square, so it reads as a control, not an app.
+        dockAppsSlot = dockAppsSlot();
+        LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(
+                dp(HomeTheme.DOCK_H + 12), dp(HomeTheme.DOCK_SLOT_H));
+        ap.leftMargin = Math.max(0, dp(HomeTheme.DOCK_GAP) - dp(12));
+        dockPillRow.addView(dockAppsSlot, ap);
 
         LinearLayout row = null;
         for (int i = 0; i < rest.size(); i++) {
@@ -2269,11 +2385,19 @@ public class MainActivity extends Activity {
         if (statusBlock != null) {
             statusBlock.setNextFocusUpId(statusBlock.getId());
             statusBlock.setNextFocusLeftId(statusBlock.getId());
-            statusBlock.setNextFocusRightId(netChip == null ? statusBlock.getId() : netChip.getId());
+            statusBlock.setNextFocusRightId(aerialChip != null ? aerialChip.getId()
+                    : netChip == null ? statusBlock.getId() : netChip.getId());
             statusBlock.setNextFocusDownId(cardId == View.NO_ID ? firstId : cardId);
         }
         if (netChip != null) {
-            netChip.setNextFocusLeftId(statusBlock == null ? netChip.getId() : statusBlock.getId());
+            netChip.setNextFocusLeftId(aerialChip != null ? aerialChip.getId()
+                    : statusBlock == null ? netChip.getId() : statusBlock.getId());
+            if (aerialChip != null) {
+                aerialChip.setNextFocusLeftId(statusBlock == null ? aerialChip.getId() : statusBlock.getId());
+                aerialChip.setNextFocusRightId(netChip.getId());
+                aerialChip.setNextFocusUpId(aerialChip.getId());
+                aerialChip.setNextFocusDownId(cardId == View.NO_ID ? firstId : cardId);
+            }
             netChip.setNextFocusRightId(actionApps == null ? netChip.getId() : actionApps.getId());
             netChip.setNextFocusUpId(netChip.getId());
             netChip.setNextFocusDownId(cardId == View.NO_ID ? firstId : cardId);
@@ -2315,10 +2439,19 @@ public class MainActivity extends Activity {
                     : statusBlock == null ? firstId : statusBlock.getId();
             card.setNextFocusUpId(up);
             card.setNextFocusLeftId(i == 0 ? card.getId() : dockCards.get(i - 1).getId());
-            card.setNextFocusRightId(i == d - 1 ? card.getId() : dockCards.get(i + 1).getId());
+            card.setNextFocusRightId(i < d - 1 ? dockCards.get(i + 1).getId()
+                    : dockAppsSlot != null ? dockAppsSlot.getId() : card.getId());
             card.setNextFocusDownId(c > 0 && cwOpen
                     ? cwCards.get(Math.min(i, c - 1)).getId()
                     : g > 0 ? gridCards.get(Math.min(i, g - 1)).getId() : card.getId());
+        }
+        if (dockAppsSlot != null) {
+            int id = dockAppsSlot.getId();
+            dockAppsSlot.setNextFocusLeftId(d > 0 ? dockCards.get(d - 1).getId() : id);
+            dockAppsSlot.setNextFocusRightId(id);
+            dockAppsSlot.setNextFocusUpId(hasPlex ? plexDeck.root.getId()
+                    : cardId != View.NO_ID ? cardId : statusBlock == null ? id : statusBlock.getId());
+            dockAppsSlot.setNextFocusDownId(g > 0 ? gridCards.get(Math.min(cols - 1, g - 1)).getId() : id);
         }
         for (int i = 0; i < c; i++) {
             View tile = cwCards.get(i);
@@ -2945,6 +3078,7 @@ public class MainActivity extends Activity {
         // Tiles fade only: the focused one is already lifted, and its lift is a translation.
         for (int i = 0; i < dockCards.size(); i++)
             rise(dockCards.get(i), 0, beat + i * 0.5f);
+        if (dockAppsSlot != null) rise(dockAppsSlot, 0, beat + dockCards.size() * 0.5f);
     }
 
     private void rise(View v, float fromY, float beat) {

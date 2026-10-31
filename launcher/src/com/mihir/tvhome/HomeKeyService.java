@@ -440,6 +440,17 @@ public class HomeKeyService extends AccessibilityService {
                 p.setMargins(i == 0 ? 0 : gap, 0, i == apps.size() - 1 ? 0 : gap, 0);
                 pill.addView(slot, p);
             }
+            // The launcher's All apps stop, so the pill is the same width when it arrives.
+            FrameLayout appsSlot = new FrameLayout(this);
+            appsSlot.setPadding(px(d, 6), px(d, 3), px(d, 6), px(d, 9));
+            FrameLayout.LayoutParams mp = new FrameLayout.LayoutParams(
+                    px(d, HomeTheme.DOCK_H), px(d, HomeTheme.DOCK_H), Gravity.CENTER_HORIZONTAL);
+            mp.topMargin = px(d, 2);
+            appsSlot.addView(AppTile.appsMark(this, d), mp);
+            LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(
+                    px(d, HomeTheme.DOCK_H + 12), px(d, HomeTheme.DOCK_SLOT_H));
+            ap.leftMargin = gap;
+            pill.addView(appsSlot, ap);
         }
 
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-2, -2,

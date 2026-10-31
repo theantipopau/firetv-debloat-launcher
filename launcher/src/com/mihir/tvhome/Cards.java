@@ -67,6 +67,22 @@ final class Cards {
      * only when it carries nothing else: "0.0 mm today - next rain about 2pm" becomes "Next rain about
      * 2pm", because that is the part worth reading on a TV.
      */
+    /**
+     * The status block's rain line: the headline and the amount, "Rain on the way · 0.8 mm in 3 h".
+     * The chance and anything after it stay in the sheet, and "~" is noise at this size.
+     */
+    static String rainShort(String raw) {
+        String[] parts = rainLine(raw).split("\\s*[-\u2013\u2014\u00B7|]\\s+");
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < parts.length && i < 2; i++) {
+            String p = parts[i].replace("~", "").trim();
+            if (p.isEmpty()) continue;
+            if (sb.length() > 0) sb.append(" · ");
+            sb.append(p);
+        }
+        return sb.toString();
+    }
+
     static String rainLine(String raw) {
         if (raw == null) return "";
         String s = raw.trim();
