@@ -131,18 +131,19 @@ def set_snapshot(js, url):
     return "".join(lines)
 
 
-def set_control(js, url):
-    """The source tiles' key URL, e.g. an HA webhook. Staged copy only: the id is a secret."""
-    i = snapshot_line(js, "controlUrl")
+def set_value(js, key, value):
+    """One string setting in the staged config.js: the household's name, or the source tiles'
+    key URL (an HA webhook id is a secret, so it never goes into the repo copy)."""
+    i = snapshot_line(js, key)
     if i < 0:
-        die("tizen/config.js has no controlUrl line to replace")
+        die("tizen/config.js has no %s line to replace" % key)
     lines = js.splitlines(True)
-    lines[i] = re.sub(r'(controlUrl:\s*)"[^"]*"', lambda m: m.group(1) + json.dumps(url),
+    lines[i] = re.sub(r'(' + key + r':\s*)"[^"]*"', lambda m: m.group(1) + json.dumps(value),
                       lines[i], count=1)
     return "".join(lines)
 
 
-def stage(url, control=None):
+def stage(url, control=None, family=None):
     # Rebuild the staged project from scratch; never leave a stale .wgt behind.
     shutil.rmtree(BUILD, ignore_errors=True)
     if os.path.exists(WGT):
@@ -165,8 +166,10 @@ def stage(url, control=None):
     if control:
         if not re.match(r"^https?://", control):
             die("--control-url must start with http:// or https://")
-        cfg = set_control(cfg, control)
-    if url or control:
+        cfg = set_value(cfg, "controlUrl", control)
+    if family:
+        cfg = set_value(cfg, "family", family)
+    if url or control or family:
         with open(cfg_path, "w", encoding="utf-8") as f:
             f.write(cfg)
 
@@ -339,6 +342,7 @@ def main():
                     help="Home Assistant tvhome.json URL baked into the staged copy")
     ap.add_argument("--control-url", metavar="URL",
                     help="where the Fire TV / Live TV tiles post their key (an HA webhook)")
+    ap.add_argument("--family", metavar="NAME", help='the household in "Good evening, NAME"')
     ap.add_argument("--profile", metavar="NAME",
                     default=os.environ.get("TIZEN_PROFILE", ""),
                     help="Tizen certificate profile name (or TIZEN_PROFILE)")
@@ -351,7 +355,7 @@ def main():
         uninstall(args.uninstall)
         return
 
-    url = stage(args.snapshot_url, args.control_url)
+    url = stage(args.snapshot_url, args.control_url, args.family)
     check(url)
 
     if args.check:

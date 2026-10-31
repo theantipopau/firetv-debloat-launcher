@@ -21,6 +21,10 @@ window.TVH = {
      sunrise/sunset, wind. Raise this only if your snapshot is quiet. */
   maxLines: 3,
 
+  /* "Good evening, <family>" above the clock. Empty shows the greeting alone.
+     tools/package-tizen.py --family sets it in the TV's copy only. */
+  family: "",
+
   /* 12-hour clock, and 12-hour sunrise/sunset times. Set false for 19:55. */
   hour12: true,
 

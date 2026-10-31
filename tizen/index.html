@@ -14,7 +14,8 @@
   <div class="scrim"></div>
 
   <header class="hud">
-    <div class="left">
+    <div class="left" id="block" tabindex="0">
+      <div class="greet" id="greet"></div>
       <div class="clock" id="clock">1:55</div>
       <div class="info" id="info"></div>
       <div class="now" id="now" hidden>
@@ -41,6 +42,11 @@
   <div class="decks" id="decks" hidden></div>
   <div class="dock" id="dock"></div>
   <div class="sample" id="sampleChip" hidden></div>
+
+  <!-- OK on the clock block: the Home Assistant detail, as on the Fire TV. -->
+  <section class="sheet ha" id="haSheet">
+    <div class="ha-panel" id="haPanel"></div>
+  </section>
 
   <section class="sheet" id="appsSheet">
     <h2>All apps</h2>

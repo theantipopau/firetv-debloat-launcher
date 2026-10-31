@@ -66,6 +66,9 @@
     bolt: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.4 2 4.8 13.4h5.8l-1 8.6 8.6-11.4h-5.8z" fill="currentColor"/></svg>',
     person: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.6" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M5 20c.6-3.6 3.4-5.6 7-5.6s6.4 2 7 5.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
     music: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 17.5V6.2l9-1.7v11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="6.6" cy="17.6" r="2.9" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="15.6" cy="15.6" r="2.9" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>',
+    battery: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="4.5" width="10" height="17" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M10 2.6h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><rect x="9.2" y="11" width="5.6" height="8.2" rx="1" fill="currentColor"/></svg>',
+    home: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.4 12 3.4l8 7M6.4 9.4v10.2h11.2V9.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    thermo: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4.6a2 2 0 0 1 4 0v9.2a4 4 0 1 1-4 0z" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="16.8" r="1.7" fill="currentColor"/></svg>',
     dot: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>',
     cal: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.2" y="5" width="17.6" height="15.6" rx="3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M3.2 9.8h17.6M8.4 3v3.6M15.6 3v3.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
     wind: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8.4h10.2a2.6 2.6 0 1 0-2.5-3.3M3 12.4h14.6a2.7 2.7 0 1 1-2.6 3.4M3 16.4h6.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>'
@@ -130,6 +133,11 @@
       h = h % 12;
       if (!h) { h = 12; }
     }
+    var hr = d.getHours();
+    var hello = hr >= 5 && hr < 12 ? "Good morning" : hr >= 12 && hr < 18 ? "Good afternoon" : "Good evening";
+    $("greet").textContent = cfg.family ? hello + ", " + cfg.family : hello;
+    driftWall(d);
+
     var text = (hour12 ? h : pad(h)) + ":" + pad(d.getMinutes());
     var el = $("clock");
     if (el.textContent === text) { return; }
@@ -143,6 +151,15 @@
   }
 
   /* ---------- background ---------- */
+
+  /* A slow 1.02 -> 1.09 -> 1.02 zoom over three minutes, set once a second: at
+     1920px that is a fraction of a pixel per step, so it reads as continuous
+     without the GPU redrawing the screen every frame. */
+  function driftWall(d) {
+    var t = (d.getTime() / 1000 % 180) / 180;
+    var tri = t < 0.5 ? t * 2 : 2 - t * 2;
+    front.style.transform = "scale(" + (1.02 + 0.07 * tri).toFixed(4) + ")";
+  }
 
   function applyWall(index) {
     var list = cfg.wallpapers || [];
@@ -390,6 +407,10 @@
      the things you can act on come first: bins, then the next event, then
      weather, then who is home, then power. Nothing is shown twice. */
   function snapshotLines(snap) {
+    return allLines(snap).slice(0, cfg.maxLines || 3);
+  }
+
+  function allLines(snap) {
     var out = [];
 
     if (words(snap.bins)) {
@@ -418,7 +439,71 @@
     var wind = windText(snap);
     if (wind) { out.push({ icon: "wind", text: wind }); }
 
-    return out.slice(0, cfg.maxLines || 3);
+    return out;
+  }
+
+  /* ---------- Home Assistant sheet ---------- */
+
+  function haTile(icon, value, label, stale) {
+    var t = document.createElement("div");
+    t.className = "ha-tile" + (stale ? " stale" : "");
+    t.innerHTML = '<span class="ic">' + (ICONS[icon] || ICONS.dot) + "</span>";
+    var v = document.createElement("div");
+    v.className = "v";
+    v.textContent = value;
+    var l = document.createElement("div");
+    l.className = "l";
+    l.textContent = label;
+    t.appendChild(v);
+    t.appendChild(l);
+    return t;
+  }
+
+  function renderHa(snap) {
+    snap = snap || {};
+    var ages = snap.ages || {};
+    var old = function (key) { return (ages[key] || 0) > 900; };
+    var panel = $("haPanel");
+    panel.innerHTML = "";
+    var temp = num(snap.temp);
+    if (temp !== null) {
+      var big = document.createElement("div");
+      big.className = "ha-big";
+      big.textContent = Math.round(temp) + "\u00b0";
+      panel.appendChild(big);
+    }
+    var sub = [words(snap.condition), num(snap.feels) !== null ? "Feels " + Math.round(num(snap.feels)) + "\u00b0" : ""]
+      .filter(Boolean).join(" \u00b7 ");
+    if (sub) {
+      var s = document.createElement("div");
+      s.className = "ha-sub";
+      s.textContent = sub.charAt(0).toUpperCase() + sub.slice(1);
+      panel.appendChild(s);
+    }
+    var tiles = document.createElement("div");
+    tiles.className = "ha-tiles";
+    if (num(snap.solar) !== null) { tiles.appendChild(haTile("sun", num(snap.solar).toFixed(1) + " kW", "Solar", old("solar"))); }
+    if (num(snap.battery) !== null) { tiles.appendChild(haTile("battery", Math.round(num(snap.battery)) + "%", "Battery", old("battery"))); }
+    if (num(snap.house) !== null) { tiles.appendChild(haTile("home", num(snap.house).toFixed(1) + " kW", "Home", old("house"))); }
+    if (num(snap.inside) !== null) { tiles.appendChild(haTile("thermo", num(snap.inside).toFixed(1) + "\u00b0", "Inside", old("inside"))); }
+    if (words(snap.ac)) { tiles.appendChild(haTile("snow", words(snap.ac), "AC", old("ac"))); }
+    if (tiles.children.length) {
+      var rule = document.createElement("div");
+      rule.className = "ha-rule";
+      panel.appendChild(rule);
+      panel.appendChild(tiles);
+    }
+    var lines = document.createElement("div");
+    lines.className = "ha-lines";
+    allLines(snap).forEach(function (line) {
+      var r = row(line.icon);
+      var t = document.createElement("span");
+      t.textContent = line.text;
+      if (line.accent) { t.style.color = "#f0c45a"; }
+      r.appendChild(t);
+      lines.appendChild(r);
+    });
+    panel.appendChild(lines);
   }
 
   /* The card is the same idea as the Fire TV panel's Plex line: audio first
@@ -857,8 +942,9 @@
 
   function openSheet(el) {
     lastFocus = document.activeElement;
-    [$("appsSheet"), $("settingsSheet")].forEach(function (s) { s.className = "sheet"; });
-    el.className = "sheet open";
+    [$("appsSheet"), $("settingsSheet"), $("haSheet")].forEach(function (s) { s.classList.remove("open"); });
+    if (el === $("haSheet")) { renderHa(lastSnap); }
+    el.classList.add("open");
     sheet = el;
     var first = el.querySelector("button");
     if (first) { first.focus(); }
@@ -866,7 +952,7 @@
 
   function closeSheet() {
     if (!sheet) { return; }
-    sheet.className = "sheet";
+    sheet.classList.remove("open");
     sheet = null;
     if (lastFocus && lastFocus.focus) { lastFocus.focus(); } else { focusTile(tileIndex); }
   }
@@ -958,7 +1044,8 @@
       var k = e.keyCode;
 
       if (sheet) {
-        if (k === 27 || k === 8 || k === 461) {
+        // 10009 is the Samsung remote's Back; the others are keyboards and other remotes.
+        if (k === 27 || k === 8 || k === 461 || k === 10009) {
           e.preventDefault();
           closeSheet();
         }
@@ -968,7 +1055,21 @@
       var top = [$("allAppsBtn"), $("settingsBtn")];
       var t = top.indexOf(document.activeElement);
       var di = deckEls().indexOf(document.activeElement);
-      if (di >= 0 && (k === 37 || k === 39)) {
+      var onBlock = document.activeElement === $("block");
+      if (onBlock) {
+        // The clock block: OK opens the detail, right goes to the buttons, down to the cards.
+        if (k === 13) { e.preventDefault(); openSheet($("haSheet")); }
+        else if (k === 39) { e.preventDefault(); $("allAppsBtn").focus(); }
+        else if (k === 40) {
+          e.preventDefault();
+          if (decks.length) { decks[0].el.focus(); } else { focusTile(tileIndex); }
+        }
+        return;
+      }
+      if (t === 0 && k === 37) {
+        e.preventDefault();
+        $("block").focus();
+      } else if (di >= 0 && (k === 37 || k === 39)) {
         e.preventDefault();
         var dn = di + (k === 39 ? 1 : -1);
         if (dn >= 0 && dn < decks.length) { decks[dn].el.focus(); }
