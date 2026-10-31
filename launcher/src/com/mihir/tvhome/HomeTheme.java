@@ -27,9 +27,9 @@ final class HomeTheme {
      * The date hangs under the clock inside the line box's own descent, so it costs no height and
      * the card below does not move.
      */
-    static final int DATE_TOP = -12;
+    static final int DATE_TOP = -8;
     /** Gap from the clock's baseline to the first line. */
-    static final int CLOCK_GAP = 10;
+    static final int CLOCK_GAP = 6;
     static final int LINE_GAP = 6;
     static final int LINE_ICON = 14;
     static final int LINE_ICON_GAP = 8;
@@ -113,7 +113,6 @@ final class HomeTheme {
      */
     static final float DOCK_FOCUS_SCALE = 1.10f;
     static final int DOCK_FOCUS_LIFT = 4;
-    static final int DOCK_FOCUS_Z = 12;         // dp of elevation: the shadow under a focused tile
     static final int FOCUS_RIM = 0x80FFFFFF;    // 50% white on the tile's edge
 
     /**

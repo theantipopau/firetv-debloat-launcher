@@ -1,7 +1,12 @@
 package com.mihir.tvhome;
 
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BlurMaskFilter;
+import android.graphics.Canvas;
 import android.graphics.Outline;
+import android.graphics.Paint;
+import android.graphics.RectF;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
@@ -135,6 +140,45 @@ final class AppTile {
         View v = new View(c);
         v.setBackground(rim);
         return v;
+    }
+
+    /** Room the blur needs around the tile, and how far the shadow falls below it, in dp. */
+    static final int SHADOW_PAD = 16;
+    static final int SHADOW_DROP = 7;
+    private static final java.util.Map<String, Bitmap> SHADOWS = new java.util.HashMap<>();
+
+    /**
+     * A focus shadow drawn once and reused as a picture. Elevation shadows are recomputed by the
+     * GPU every frame a tile scales or leans, and that was the slow tenth of frames while moving
+     * along the dock; fading a cached bitmap costs a texture blit. Add it behind the tile with
+     * {@link #shadowParams}, at alpha 0, and fade it with focus.
+     */
+    static ImageView shadow(Context c, float d, int wDp, int hDp, int radiusDp) {
+        String key = wDp + "x" + hDp + "r" + radiusDp + "@" + d;
+        Bitmap bm = SHADOWS.get(key);
+        if (bm == null) {
+            int pad = px(d, SHADOW_PAD);
+            bm = Bitmap.createBitmap(px(d, wDp) + pad * 2, px(d, hDp) + pad * 2, Bitmap.Config.ARGB_8888);
+            Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+            p.setColor(0x99000000);
+            p.setMaskFilter(new BlurMaskFilter(px(d, 9), BlurMaskFilter.Blur.NORMAL));
+            float r = px(d, radiusDp);
+            new Canvas(bm).drawRoundRect(new RectF(pad, pad, pad + px(d, wDp), pad + px(d, hDp)), r, r, p);
+            SHADOWS.put(key, bm);
+        }
+        ImageView v = new ImageView(c);
+        v.setImageBitmap(bm);
+        v.setScaleType(ImageView.ScaleType.FIT_XY);
+        v.setAlpha(0f);
+        return v;
+    }
+
+    /** Lays a {@link #shadow} out around a tile that fills its parent, dropped below it. */
+    static FrameLayout.LayoutParams shadowParams(float d) {
+        FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(-1, -1);
+        int pad = px(d, SHADOW_PAD), drop = px(d, SHADOW_DROP);
+        p.setMargins(-pad, -pad + drop, -pad, -pad - drop);
+        return p;
     }
 
     /** A soft band of light that crosses a tile once when it takes focus; see {@link #sweep}. */

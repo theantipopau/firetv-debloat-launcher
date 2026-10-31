@@ -35,6 +35,38 @@ def shell(dev, cmd, timeout=120):
     return out
 
 
+def wait_home(tv, minutes=4):
+    """After the reboot: wait for the box, press Home, and say whether the launcher took it."""
+    deadline = time.time() + minutes * 60
+    time.sleep(60)
+    while time.time() < deadline:
+        try:
+            dev = tv.connect()
+            if dev.shell("getprop sys.boot_completed").strip() == "1":
+                break
+            dev.close()
+        except Exception:
+            pass
+        time.sleep(5)
+    else:
+        print("The TV did not come back in time; press Home once it is up.")
+        return False
+    try:
+        time.sleep(20)   # the accessibility service binds a little after boot completes
+        dev.shell("input keyevent HOME")
+        time.sleep(6)
+        bound = "label=Home" in dev.shell("dumpsys accessibility")
+        focus = dev.shell("dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'")
+        ours = PKG + "/" in focus
+        print(f"Home-key service bound: {bound} | launcher in front: {ours}")
+        if ours and "mCurrentFocus=Window{" in focus and " android}" in focus:
+            # Fire OS often shows "Unable to Detect Your Remote" after a reboot; it is not ours.
+            print("A Fire OS dialog is over the launcher (usually the remote check); OK dismisses it.")
+        return bound and ours
+    finally:
+        dev.close()
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("apk")
@@ -79,12 +111,13 @@ def main():
         except Exception:
             pass   # the connection dies with the TV; that is the reboot
         time.sleep(5)
-        print("Installed. Home works once the TV is back (about a minute).")
     finally:
         try:
             dev.close()
         except Exception:
             pass
+    print("Waiting for it to come back...")
+    return 0 if wait_home(tv) else 1
 
 
 if __name__ == "__main__":

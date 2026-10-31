@@ -10,7 +10,6 @@ public final class CardsTest {
         weatherWording();
         rainWording();
         peopleWording();
-        plexWording();
         glanceStaleness();
         System.out.println("CardsTest: " + checks + " checks passed");
     }
@@ -91,16 +90,6 @@ public final class CardsTest {
         eq("today only", "46.7 kWh today", Cards.solarLine("46.7", ""));
         eq("battery only", "Battery 8 h 38 m left", Cards.solarLine("", "8 h 38 m"));
         eq("no energy", "", Cards.solarLine("", ""));
-    }
-
-    private static void plexWording() {
-        eq("episode", "Plex \u00B7 Chuck \u00B7 S01E02",
-                Cards.plexLine("Chuck - s01e02 - Chuck Versus the Helicopter"));
-        eq("short code padded", "Plex \u00B7 The Bear \u00B7 S03E04", Cards.plexLine("The Bear - s3e4 - Tomorrow"));
-        eq("a film keeps its name", "Plex \u00B7 Inception (2010)", Cards.plexLine("Inception (2010)"));
-        eq("nobody watching", "", Cards.plexLine(""));
-        eq("unknown", "", Cards.plexLine("unknown"));
-        eq("null", "", Cards.plexLine(null));
     }
 
     private static void glanceStaleness() {

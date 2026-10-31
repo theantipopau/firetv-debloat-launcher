@@ -123,36 +123,6 @@ final class Cards {
     }
 
     /**
-     * Plex, from Tautulli's "who is watching" sensor. Its attribute value is Plex's own title
-     * string, "Chuck - s01e02 - Chuck Versus the Helicopter"; the sheet has one line, so the
-     * episode's title goes and the code is capitalised: "Plex · Chuck · S01E02". A film, which
-     * carries no code, keeps its whole name. Empty when nobody is watching.
-     */
-    static String plexLine(String raw) {
-        if (raw == null) return "";
-        String s = raw.trim();
-        if (s.isEmpty() || s.equalsIgnoreCase("unknown") || s.equalsIgnoreCase("unavailable")) return "";
-        String[] parts = s.split("\\s+-\\s+");
-        for (int i = 1; i < parts.length; i++) {
-            String code = episodeCode(parts[i]);
-            if (!code.isEmpty()) return "Plex \u00B7 " + parts[0].trim() + " \u00B7 " + code;
-        }
-        return "Plex \u00B7 " + parts[0].trim();
-    }
-
-    /** "s01e02" -> "S01E02"; empty when the part carries no episode code. */
-    private static String episodeCode(String part) {
-        java.util.regex.Matcher m = java.util.regex.Pattern
-                .compile("(?i)^s(\\d{1,2})[ ._-]?e(\\d{1,3})$").matcher(part.trim());
-        if (!m.matches()) return "";
-        return "S" + pad2(m.group(1)) + "E" + pad2(m.group(2));
-    }
-
-    private static String pad2(String n) {
-        return n.length() >= 2 ? n : "0" + n;
-    }
-
-    /**
      * The day's solar, and how long the battery can carry the house: "46.7 kWh today · 8 h 38 m left".
      * Either half can be missing; empty when both are.
      */

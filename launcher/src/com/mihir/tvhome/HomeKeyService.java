@@ -397,6 +397,9 @@ public class HomeKeyService extends AccessibilityService {
                 col.setClipToPadding(false);
                 FrameLayout frame = new FrameLayout(this);
                 frame.setClipChildren(false);
+                ImageView shadow = AppTile.shadow(this, d, HomeTheme.DOCK_W, HomeTheme.DOCK_H,
+                        HomeTheme.DOCK_ICON_RADIUS);
+                frame.addView(shadow, AppTile.shadowParams(d));
                 FrameLayout tile = AppTile.dock(this, apps.get(i), d);
                 frame.addView(tile, new FrameLayout.LayoutParams(-1, -1));
                 View rim = AppTile.focusRim(this, d);
@@ -427,7 +430,7 @@ public class HomeKeyService extends AccessibilityService {
                     slot.setScaleX(HomeTheme.DOCK_FOCUS_SCALE);
                     slot.setScaleY(HomeTheme.DOCK_FOCUS_SCALE);
                     slot.setTranslationY(-px(d, HomeTheme.DOCK_FOCUS_LIFT));
-                    tile.setTranslationZ(px(d, HomeTheme.DOCK_FOCUS_Z));
+                    shadow.setAlpha(1f);
                     rim.setAlpha(1f);
                     name.setAlpha(1f);
                 }

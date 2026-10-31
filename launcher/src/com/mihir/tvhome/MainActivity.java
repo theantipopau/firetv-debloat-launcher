@@ -1211,6 +1211,9 @@ public class MainActivity extends Activity {
         frame.setClipChildren(false);
         final float density = getResources().getDisplayMetrics().density;
         // The tile carries the elevation: its rounded outline is what casts the focus shadow.
+        final ImageView shadow = AppTile.shadow(this, density, HomeTheme.DOCK_W, HomeTheme.DOCK_H,
+                HomeTheme.DOCK_ICON_RADIUS);
+        frame.addView(shadow, AppTile.shadowParams(density));
         final FrameLayout tile = AppTile.dock(this, app, density);
         final View sheen = AppTile.sheen(this);
         tile.addView(sheen, new FrameLayout.LayoutParams(-1, -1));
@@ -1237,8 +1240,7 @@ public class MainActivity extends Activity {
 
         holder.setOnFocusChangeListener((v, has) -> {
             lift(v, has, HomeTheme.DOCK_FOCUS_SCALE);
-            tile.animate().translationZ(has ? dp(HomeTheme.DOCK_FOCUS_Z) : 0)
-                    .setInterpolator(HomeTheme.ease()).setDuration(HomeTheme.MS_FOCUS).start();
+            shadow.animate().alpha(has ? 1f : 0f).setDuration(HomeTheme.MS_FOCUS).start();
             rim.animate().alpha(has ? 1f : 0f).setDuration(HomeTheme.MS_FOCUS).start();
             name.animate().alpha(has ? 1f : 0f).setDuration(HomeTheme.MS_FOCUS).start();
             if (has) AppTile.sweep(sheen, tile.getWidth() > 0 ? tile.getWidth() : dp(HomeTheme.DOCK_W));
@@ -1425,6 +1427,10 @@ public class MainActivity extends Activity {
             }
         });
         card.setBackgroundColor(0xFF14161C);
+        final float density = getResources().getDisplayMetrics().density;
+        final ImageView shadow = AppTile.shadow(this, density, HomeTheme.CW_W, HomeTheme.CW_H,
+                HomeTheme.CW_RADIUS);
+        holder.addView(shadow, AppTile.shadowParams(density));
         holder.addView(card, new FrameLayout.LayoutParams(-1, -1));
 
         int art = Cards.art(it.image, it.logo);
@@ -1508,14 +1514,19 @@ public class MainActivity extends Activity {
                     dp(HomeTheme.PROGRESS_INSET), 0, 0, dp(HomeTheme.PROGRESS_INSET)));
         }
 
+        // The dock's focus language: a light 1dp edge, a dropped shadow and one sheen across.
+        final View sheen = AppTile.sheen(this);
+        card.addView(sheen, new FrameLayout.LayoutParams(-1, -1));
         holder.setOnFocusChangeListener((v, has) -> {
-            rim.setStroke(dp(has ? 2 : 1), has ? 0xE6FFFFFF : HomeTheme.RIM);
+            rim.setStroke(dp(1), has ? HomeTheme.FOCUS_RIM : HomeTheme.RIM);
             // setScale, not animate(): inside the scroll view the property animator never produced a
             // visible scale change (the rim moved, the tile did not). Setting it is what renders.
             float s = has ? HomeTheme.CW_FOCUS_SCALE : 1f;
             v.setScaleX(s);
             v.setScaleY(s);
-            v.animate().translationZ(has ? dp(8) : 0).setDuration(HomeTheme.MS_FOCUS).start();
+            shadow.animate().alpha(has ? 1f : 0f).setDuration(HomeTheme.MS_FOCUS).start();
+            if (has) AppTile.sweep(sheen, card.getWidth() > 0 ? card.getWidth() : dp(HomeTheme.CW_W));
+            else { sheen.animate().cancel(); sheen.setAlpha(0f); }
             if (has) {
                 lastFocusedId = v.getId();
                 cwScroll.smoothScrollTo(Math.max(0, v.getLeft() - dp(HomeTheme.SAFE)), 0);
@@ -2590,23 +2601,25 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * The wired link's rate, in Mbps.
+     * What the pill can honestly say about a wired link.
      *
-     * The driver publishes it in /sys/class/net/<iface>/speed, which Fire OS 7 denies to apps as well
-     * as to the shell (measured on the Cube: EACCES), so the next view is Android's own: the Ethernet
-     * network agent carries its link bandwidth (100000 Kbps on the Cube), and reading that needs no
-     * permission. But Fire OS advertises that flat 100 Mbps for every Ethernet agent, including the
-     * Cube's Realtek RTL8153 gigabit adapter - it is a floor, not the link's own rate. When a known
-     * gigabit USB adapter is attached, its class is the better answer; a firmware that allows the
-     * sysfs read still wins, because that is the interface's own number.
+     * The negotiated rate lives in /sys/class/net/<iface>/speed, which Fire OS 7 denies to apps and
+     * the shell alike (measured on the Cube: EACCES); a firmware that allows it gets "Link 1 Gbps".
+     * Next is a rate the snapshot supplies (eth_mbps, e.g. the router's port). Fire OS's own network
+     * agent advertises a flat 100 Mbps for every Ethernet link, so that number is a floor and only a
+     * higher one is printed. A recognised USB adapter is a rating, not a negotiated link - an RTL8153
+     * on a 100 Mbps switch is still a "gigabit adapter", and the Cube's USB 2.0 port carries about
+     * 300 Mbps whatever the adapter - so it says so: "Gigabit adapter".
      */
-    private int ethernetMbps() {
+    private String ethernetDetail() {
         int direct = ethernetMbpsSysfs();
-        if (direct > 0) return direct;
-        int capability = ethernetMbpsCapability();
+        if (direct > 0) return "Link " + linkRate(direct);
+        int fromHa = (int) number(haEthMbps, 0);
+        if (fromHa > 0) return "Link " + linkRate(fromHa);
         int usb = usbEthernetMbps();
-        if (usb > 0 && capability <= 100) return usb;   // the advertised floor, not a negotiated rate
-        return capability > 0 ? capability : usb;
+        if (usb > 0) return (usb == 1000 ? "Gigabit" : linkRate(usb)) + " adapter";
+        int capability = ethernetMbpsCapability();
+        return capability > 100 ? "Link " + linkRate(capability) : "";
     }
 
     /** What the Ethernet network agent advertises, in Mbps. Often a floor; see {@link #ethernetMbps}. */
@@ -2704,13 +2717,8 @@ public class MainActivity extends Activity {
         android.net.ConnectivityManager cm = (android.net.ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
         android.net.NetworkInfo ni = cm == null ? null : cm.getActiveNetworkInfo();
         if (ni != null && ni.isConnected() && ni.getType() == android.net.ConnectivityManager.TYPE_ETHERNET) {
-            int mbps = ethernetMbps();
-            // Optional override from the snapshot, for a firmware whose only answer is the flat
-            // 100 Mbps floor and an adapter the USB ids do not know. A real sysfs rate or a
-            // recognised gigabit part is better and is not overridden.
-            int fromHa = (int) number(haEthMbps, 0);
-            if (fromHa > 0 && (mbps <= 0 || mbps <= 100)) mbps = fromHa;
-            setNet(mbps > 0 ? "Ethernet  \u00B7  Link " + linkRate(mbps) : "Ethernet");
+            String detail = ethernetDetail();
+            setNet(detail.isEmpty() ? "Ethernet" : "Ethernet  \u00B7  " + detail);
             return;
         }
         try {
