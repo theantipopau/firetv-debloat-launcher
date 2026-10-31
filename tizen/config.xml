@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Tizen web widget manifest for the dashboard.
+
+  The package id must be exactly 10 letters/digits and start with a letter.
+  The app id is <package>.<name>; both are what `sdb uninstall` and
+  `tizen run -p` take. If you change them, change PACKAGE/APP_ID in
+  tools/package-tizen.py too.
+
+  Privileges, and why each one is here:
+    internet            read the snapshot from Home Assistant (and artwork)
+    application.launch  open the apps in the dock
+    application.info    list this TV's installed apps, so the dock finds the
+                        right ids instead of relying on ones pasted from
+                        another region
+-->
+<widget xmlns="http://www.w3.org/ns/widgets"
+        xmlns:tizen="http://tizen.org/ns/widgets"
+        id="http://tvhome.local/widget"
+        version="1.0.0"
+        viewmodes="maximized">
+
+  <name>TV Home</name>
+  <description>The dashboard: clock, weather, power, and one dock for this TV.</description>
+  <author href="http://tvhome.local" email="tvhome@example.com">TV Home</author>
+
+  <content src="index.html"/>
+  <icon src="icon.png"/>
+
+  <!-- A Tizen widget's fetch() is filtered by this whitelist, not by CORS alone.
+       "*" keeps the Home Assistant address a config.js change rather than a
+       repackage, which is what you want on a LAN. -->
+  <access origin="*" subdomains="true"/>
+
+  <!-- tv-samsung: 2020 consumer sets. The profile ships with the TV extensions
+       in Tizen Studio; without them packaging stops with "profile not found". -->
+  <tizen:profile name="tv-samsung"/>
+  <tizen:application id="TVHOME0001.TVHome" package="TVHOME0001" required_version="3.0"/>
+
+  <feature name="http://tizen.org/feature/screen.size.all"/>
+
+  <tizen:privilege name="http://tizen.org/privilege/internet"/>
+  <tizen:privilege name="http://tizen.org/privilege/application.launch"/>
+  <tizen:privilege name="http://tizen.org/privilege/application.info"/>
+
+  <!-- Full screen, no context menu, nothing left running in the background,
+       installed to whichever storage the set prefers. hwkey-event stays off so
+       the remote's volume/power keys keep going to the TV, not the widget. -->
+  <tizen:setting screen-orientation="landscape"
+                 context-menu="disable"
+                 background-support="disable"
+                 encryption="disable"
+                 install-location="auto"
+                 hwkey-event="disable"/>
+</widget>

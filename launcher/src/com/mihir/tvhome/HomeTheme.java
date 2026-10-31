@@ -1,6 +1,9 @@
 package com.mihir.tvhome;
 
+import android.animation.TimeInterpolator;
 import android.graphics.drawable.GradientDrawable;
+import android.view.animation.DecelerateInterpolator;
+import android.view.animation.OvershootInterpolator;
 
 /**
  * The home screen's geometry and light, in one place.
@@ -24,9 +27,9 @@ final class HomeTheme {
      * The date hangs under the clock inside the line box's own descent, so it costs no height and
      * the card below does not move.
      */
-    static final int DATE_TOP = -12;
+    static final int DATE_TOP = -8;
     /** Gap from the clock's baseline to the first line. */
-    static final int CLOCK_GAP = 10;
+    static final int CLOCK_GAP = 6;
     static final int LINE_GAP = 6;
     static final int LINE_ICON = 14;
     static final int LINE_ICON_GAP = 8;
@@ -35,15 +38,17 @@ final class HomeTheme {
     static final int BLOCK_PAD_H = 12;
     static final int BLOCK_PAD_V = 6;
     /**
-     * The focus highlight stops this far above the block's last pixel, so the glass behind the block
-     * sits a full GUTTER above the card row instead of 5dp above it. The text does not move: the
-     * inset is in the background layer, not in the layout.
+     * The focus highlight is the block's own box, so its bottom edge has to clear the last line by
+     * sight, not by an inset: 12dp below the text, which still clears the card row when the bins
+     * line is showing and leaves more air when it is not. Text sits at the same place either way.
      */
-    static final int BLOCK_INSET_BOTTOM = 17;
+    static final int BLOCK_PAD_BOTTOM = 12;
 
     // ---- top-right actions
     static final int ACTION_TOP = 46;
-    static final int ACTION_GAP = 28;
+    /** Between the round top-right buttons: tvOS spaces its controls by their own radius or so. */
+    static final int ACTION_GAP = 14;
+    static final int ACTION_SIZE = 44;
 
     // ---- Now Showing card
     /**
@@ -63,18 +68,23 @@ final class HomeTheme {
     static final int NOW_RADIUS = 16;
     /** From the last status line to the card. */
     static final int NOW_GAP = 12;
-    static final int NOW_PAD = 12;
-    static final int NOW_ART_W = 120;      // 16:9 inside the 96dp card
-    static final int NOW_ART_H = 68;
-    static final int NOW_ART_RADIUS = 10;
-    static final int NOW_TEXT_GAP = 14;
+    static final int NOW_PAD = 16;
+    /**
+     * The artwork fills the card, Apple TV "Up Next" style, under a scrim that darkens the left
+     * where the words sit. A logo or a transparent mark cannot be cropped that way, so it is
+     * contained in this much of the card's right end instead; the text stops short of it.
+     */
+    static final int NOW_MARK_W = 140;
 
     // ---- dock: one glass pill of banner tiles, name under each
     /** 8dp above the 48dp safe margin: the pill sits lower now that the greeting needs the room. */
     static final int DOCK_BOTTOM = SAFE + 8;
-    /** Eight 16:9 tiles and their gaps fit inside 960dp at this size. */
-    static final int DOCK_W = 100;
-    static final int DOCK_H = 56;
+    /**
+     * Eight 16:9 tiles, their gaps and the pill's padding fit inside the 48dp safe margins
+     * (8 * 102 + 7 * 2 + 24 = 854 of 864dp), so the dock lines up with the clock and the cards.
+     */
+    static final int DOCK_W = 90;
+    static final int DOCK_H = 51;
     static final int DOCK_GAP = 14;
     static final int DOCK_PAD = 12;
     static final int DOCK_NAME = 12;      // sp
@@ -95,9 +105,15 @@ final class HomeTheme {
      */
     static final int DOCK_PAD_TOP = 6;
     static final int DOCK_PAD_BOTTOM = 2;
-    /** Focus is a lift, not a new size: 1.06 with a soft white glow behind the tile. */
-    static final float DOCK_FOCUS_SCALE = 1.06f;
-    static final int DOCK_FOCUS_LIFT = 2;
+    /**
+     * Focus is depth, the way tvOS does it: the tile grows 1.10, rises, casts a shadow onto the
+     * wallpaper and a sheen crosses it once. No outline and no glow - a shadow reads on a bright
+     * wallpaper and under a white app plate alike. A 1dp light rim on the tile's own edge is all
+     * that marks a white plate against a white sky.
+     */
+    static final float DOCK_FOCUS_SCALE = 1.10f;
+    static final int DOCK_FOCUS_LIFT = 4;
+    static final int FOCUS_RIM = 0x80FFFFFF;    // 50% white on the tile's edge
 
     /**
      * The cover's loading line sits on the floor below the pill, not at the pill's own height: at the
@@ -121,7 +137,25 @@ final class HomeTheme {
     static final float CW_FOCUS_SCALE = 1.06f;
     /** The tile's floor gradient covers the lower 60%: title, metadata and bar all sit on it. */
     static final float CW_SHADE = 0.60f;
-    static final int CW_REVEAL_MS = 220;
+
+    // ---- motion: three speeds, one cadence and two curves, so every movement on the screen agrees
+    static final int MS_FOCUS = 160;      // focus arriving and leaving
+    static final int MS_REVEAL = 240;     // rows, sheets, panels and the dimming around them
+    static final int MS_FADE = 400;       // crossfades: the Now cards and the entrance
+    static final int STAGGER = 40;        // between the pieces of one entrance
+    /** Focus arrives leaning this many degrees the way the cursor travelled, then levels out. */
+    static final float TILT = 4f;
+    static final int MS_TILT = 320;
+
+    /** Arriving focus overshoots a touch and settles back: the lift reads as a spring, not a slide. */
+    static TimeInterpolator settle() {
+        return new OvershootInterpolator(0.6f);
+    }
+
+    /** Everything else decelerates into place. */
+    static TimeInterpolator ease() {
+        return new DecelerateInterpolator(1.8f);
+    }
 
     // ---- Home Assistant sheet
     static final int HA_W = 336;           // 35% of a 960dp screen
@@ -129,6 +163,14 @@ final class HomeTheme {
     static final int HA_RADIUS = 24;
     /** 98% #0E0E10 over the sampled blur: nothing behind the sheet reads through it. */
     static final int HA_TINT = 0xFA0E0E10;
+
+    // ---- type
+    /** Display sizes track tighter, as Apple's do: Inter Light at 56sp reads loose at 0. */
+    static final float CLOCK_TRACKING = -0.02f;
+    static final float TITLE_TRACKING = -0.01f;
+
+    /** A value whose sensor has gone quiet: dimmed, but still readable on a bright wallpaper. */
+    static final float STALE = 0.55f;
 
     // ---- glass
     /** The dock pill and the Now Showing card: black 35% plus a 1dp white 12% hairline. */
@@ -151,11 +193,20 @@ final class HomeTheme {
 
     // ---- backdrop: two gradients, nothing else
     static GradientDrawable leftWash() {
-        return horizontal(new int[]{0x73000000, 0x1F000000, 0x00000000});
+        return horizontal(new int[]{0x8C000000, 0x26000000, 0x00000000});
     }
 
+    /** Deep enough that the dock and the card text hold up over snow, sky and surf. */
     static GradientDrawable bottomWash() {
-        return vertical(new int[]{0x00000000, 0x33000000, 0x80000000});
+        return vertical(new int[]{0x00000000, 0x4D000000, 0xB3000000});
+    }
+
+    /**
+     * The glass over a given wallpaper, as tvOS tints its own: the photo's average colour at a fifth
+     * of its brightness, 42% strong. Grey glass on a warm sunset is what made the dock look pasted on.
+     */
+    static int glassFor(int average) {
+        return withAlpha(darken(average, 0.2f), 0.42f);
     }
 
     /** Deeper floor behind a revealed Continue Watching row; drawn in, never at rest. */

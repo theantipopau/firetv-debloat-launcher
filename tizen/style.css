@@ -2,6 +2,14 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+:root {
+  /* Glass, tinted from the wallpaper by dashboard.js tintGlass(). */
+  --glass: rgba(38,38,42,.40);
+  --glass-solid: rgba(24,24,28,.62);
+  --spring: cubic-bezier(.3, 1.45, .55, 1);
+  --ease: cubic-bezier(.2, .8, .2, 1);
+}
+
 html, body {
   height: 100%;
   background: #000;
@@ -24,29 +32,32 @@ html, body {
 
 .wall {
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   background-size: cover;
   background-position: center;
   opacity: 0;
+  /* The slow zoom is stepped once a second from dashboard.js (driftWall): a CSS animation
+     redrew the whole screen every frame on the 2020 set's weak GPU for 0.1px of movement. */
   transition: opacity 1.4s ease;
-  animation: drift 54s ease-in-out infinite alternate;
-  will-change: transform, opacity;
+  will-change: opacity;
 }
 
 .wall.on { opacity: 1; }
 
-@keyframes drift {
-  from { transform: scale(1.02); }
-  to   { transform: scale(1.09); }
-}
 
 .scrim {
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   pointer-events: none;
   background:
-    linear-gradient(180deg, rgba(0,0,0,.40) 0%, rgba(0,0,0,0) 30%, rgba(0,0,0,0) 62%, rgba(0,0,0,.52) 100%),
-    linear-gradient(96deg, rgba(0,0,0,.44) 0%, rgba(0,0,0,.16) 34%, rgba(0,0,0,0) 62%);
+    linear-gradient(180deg, rgba(0,0,0,.40) 0%, rgba(0,0,0,0) 30%, rgba(0,0,0,0) 58%, rgba(0,0,0,.68) 100%),
+    linear-gradient(96deg, rgba(0,0,0,.52) 0%, rgba(0,0,0,.18) 34%, rgba(0,0,0,0) 62%);
 }
 
 /* ---------- top left ---------- */
@@ -55,11 +66,32 @@ html, body {
   position: absolute;
   top: 76px;
   left: 120px;
-  right: 100px;
+  right: 120px;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
 }
+
+/* The clock block is one focus target: OK opens the Home Assistant sheet. */
+.left {
+  margin: -16px -20px;
+  padding: 16px 20px;
+  border-radius: 24px;
+  outline: none;
+  transition: background .16s var(--ease);
+}
+
+.left:focus { background: rgba(255,255,255,.10); }
+
+.greet {
+  margin-bottom: 6px;
+  font-size: 26px;
+  font-weight: 500;
+  color: rgba(255,255,255,.72);
+  text-shadow: 0 1px 12px rgba(0,0,0,.45);
+}
+
+.greet:empty { display: none; }
 
 .clock {
   font-size: 76px;
@@ -67,9 +99,28 @@ html, body {
   letter-spacing: -1.5px;
   line-height: 1;
   text-shadow: 0 2px 26px rgba(0,0,0,.42);
+  transition: opacity .16s var(--ease), transform .16s var(--ease);
 }
 
+.clock.out { opacity: 0; transform: translateY(-6px); }
+.clock.in  { -webkit-animation: rise .24s var(--ease) both; animation: rise .24s var(--ease) both; }
+
+/* ---------- entrance: top to bottom, one beat apart ---------- */
+
+@-webkit-keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@-webkit-keyframes riseDock { from { opacity: 0; transform: translate(-50%, 16px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@keyframes riseDock { from { opacity: 0; transform: translate(-50%, 16px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@-webkit-keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.hud .left { -webkit-animation: rise .4s var(--ease) both; animation: rise .4s var(--ease) both; }
+.nav { -webkit-animation: rise .4s var(--ease) 40ms both; animation: rise .4s var(--ease) 40ms both; }
+.dock { -webkit-animation: riseDock .4s var(--ease) 120ms both; animation: riseDock .4s var(--ease) 120ms both; }
+.tile.enter { -webkit-animation: fadeIn .4s var(--ease) both; animation: fadeIn .4s var(--ease) both; }
+
 .info {
+  transition: opacity .4s var(--ease);
   margin-top: 22px;
   font-size: 23px;
   line-height: 1.3;
@@ -119,16 +170,33 @@ html, body {
 .pill.warn svg { color: #f0c45a; }
 .pill.low svg  { color: #ef6a6a; }
 
+/* Solar and house load are not batteries, so their glyphs are not squashed
+   into the battery's 26x15 box, and they carry no level colour. */
+.pill svg.g { width: 18px; height: 18px; margin-right: 9px; }
+.pill.solar svg { color: rgba(255,255,255,.9); }
+.pill.using svg { color: rgba(255,255,255,.6); }
+
+/* Quiet sensors and a missed read dim, but stay readable on a bright wallpaper. */
+.pill.stale { opacity: .55; }
+.row .dim { color: rgba(255,255,255,.6); }
+.info.stale { opacity: .55; }
+
 /* ---------- now playing ---------- */
 
+/* Apple TV "Up Next": the artwork fills the card and the words sit on its
+   darkened left. A missing still leaves the colour wash, edge to edge. */
 .now {
+  position: relative;
+  overflow: hidden;
   display: flex;
   align-items: center;
   width: 470px;
-  margin-top: 27px;
-  padding: 14px 16px;
+  min-height: 124px;
+  margin-top: 17px;
+  padding: 18px 120px 18px 24px;
   border-radius: 19px;
-  background: rgba(16,16,19,.58);
+  background: var(--glass-solid);
+  transition: background 2s ease;
   border: 1px solid rgba(255,255,255,.07);
   -webkit-backdrop-filter: blur(28px) saturate(1.15);
   backdrop-filter: blur(28px) saturate(1.15);
@@ -138,16 +206,28 @@ html, body {
 .now[hidden] { display: none; }
 
 .now .art {
-  width: 88px;
-  height: 88px;
-  border-radius: 15px;
-  margin-right: 19px;
-  flex: 0 0 auto;
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   background: linear-gradient(140deg, #f0b47a, #9a7bd6);
   background-size: cover;
   background-position: center;
-  box-shadow: 0 6px 18px rgba(0,0,0,.28);
 }
+
+.now .art::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: linear-gradient(90deg, rgba(0,0,0,.85) 0%, rgba(0,0,0,.5) 45%, rgba(0,0,0,0) 78%);
+}
+
+.now .meta { position: relative; min-width: 0; }
+.now .t, .now .s { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .now .t {
   font-size: 24px;
@@ -158,7 +238,7 @@ html, body {
 .now .s {
   margin-top: 6px;
   font-size: 18px;
-  color: rgba(255,255,255,.62);
+  color: rgba(255,255,255,.72);
 }
 
 /* ---------- top right ---------- */
@@ -169,35 +249,49 @@ html, body {
   margin-top: 6px;
 }
 
+/* The top-right controls, the way tvOS draws its own: an icon in a glass circle
+   at rest, and under the cursor a white capsule with dark ink and its label. */
 .nav-btn {
   display: flex;
   align-items: center;
-  margin-left: 14px;
-  padding: 9px 12px;
-  border: 0;
-  border-radius: 13px;
-  background: transparent;
-  color: rgba(255,255,255,.86);
+  justify-content: center;
+  min-width: 76px;
+  height: 76px;
+  margin-left: 20px;
+  padding: 0 26px;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 38px;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(24px) saturate(1.2);
+  backdrop-filter: blur(24px) saturate(1.2);
+  color: rgba(255,255,255,.95);
   font: inherit;
-  font-size: 22px;
+  font-size: 24px;
+  font-weight: 600;
   cursor: pointer;
-  transition: background .16s ease, color .16s ease;
-  text-shadow: 0 1px 10px rgba(0,0,0,.4);
+  transition: background .16s var(--ease), color .16s var(--ease), transform .2s var(--spring);
 }
 
 .nav-btn svg {
-  width: 24px;
-  height: 24px;
-  margin-right: 10px;
+  width: 30px;
+  height: 30px;
   fill: currentColor;
+  flex: 0 0 auto;
 }
+
+.nav-btn span { display: none; margin-left: 12px; white-space: nowrap; }
 
 .nav-btn:hover,
 .nav-btn:focus {
   outline: none;
-  color: #fff;
-  background: rgba(255,255,255,.11);
+  color: #111114;
+  background: rgba(255,255,255,.95);
+  transform: scale(1.06);
+  box-shadow: 0 12px 26px rgba(0,0,0,.35);
 }
+
+.nav-btn:focus span,
+.nav-btn:hover span { display: inline; }
 
 /* ---------- dock ---------- */
 
@@ -209,13 +303,20 @@ html, body {
   display: flex;
   align-items: center;
   height: 94px;
+  max-width: 1680px;    /* 120px safe margin either side, the same as the clock */
   padding: 0 40px;
   border-radius: 47px;
-  background: rgba(38,38,42,.40);
+  background: var(--glass);
   border: 1px solid rgba(255,255,255,.16);
   -webkit-backdrop-filter: blur(30px) saturate(1.25);
   backdrop-filter: blur(30px) saturate(1.25);
   box-shadow: 0 1px 0 rgba(255,255,255,.20) inset, 0 14px 38px rgba(0,0,0,.30);
+  transition: background 2s ease;
+}
+
+/* No backdrop blur (the 2020 set's Chromium 69): the denser tint carries the legibility. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .dock, .nav-btn { background: var(--glass-solid); }
 }
 
 .tile {
@@ -234,7 +335,8 @@ html, body {
   font: inherit;
   cursor: pointer;
   opacity: .94;
-  transition: transform .18s ease, background .18s ease, box-shadow .18s ease, opacity .18s ease;
+  /* Spring in: a touch of overshoot that settles, so the lift reads as physical. */
+  transition: transform .22s var(--spring), background .16s var(--ease), box-shadow .16s var(--ease), opacity .16s var(--ease);
 }
 
 .tile .mark {
@@ -247,15 +349,77 @@ html, body {
 
 .tile .mark svg { height: 100%; width: 100%; display: block; fill: currentColor; }
 
+/* optical sizes: a badge and a letter do not want the same box */
+.tile .mark svg.g-netflix { height: 34px; width: auto; }
+.tile .mark svg.g-youtube { width: 42px; height: auto; }
+.tile .mark svg.g-spotify { width: 36px; height: 36px; }
+.tile .mark svg.g-prime   { width: 44px; height: auto; }
+
+/* Focus is depth, the way tvOS does it: the tile rises onto a light plate,
+   casts a shadow, a sheen crosses it once and its name appears underneath.
+   No white glow: a shadow reads on a bright wallpaper, a glow does not. */
 .tile:focus,
 .tile:hover,
 .tile.focused {
   outline: none;
-  transform: scale(1.16);
+  transform: translateY(-6px) scale(1.12);
   opacity: 1;
-  background: rgba(255,255,255,.11);
-  box-shadow: 0 0 0 1px rgba(255,255,255,.22), 0 16px 36px rgba(0,0,0,.45);
+  background-color: rgba(255,255,255,.16);
+  background-image: linear-gradient(105deg, rgba(255,255,255,0) 38%, rgba(255,255,255,.26) 50%, rgba(255,255,255,0) 62%);
+  background-size: 260% 100%;
+  background-repeat: no-repeat;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.32) inset, 0 16px 28px rgba(0,0,0,.42);
+  -webkit-animation: sheen .6s ease-out 1 both;
+  animation: sheen .6s ease-out 1 both;
 }
+
+@-webkit-keyframes sheen { from { background-position: 130% 0; } to { background-position: -30% 0; } }
+@keyframes sheen { from { background-position: 130% 0; } to { background-position: -30% 0; } }
+
+/* Sideways arrival: the tile leans the way the cursor travelled and levels out. */
+@-webkit-keyframes leanR {
+  0%   { transform: perspective(600px) translateY(0) scale(1) rotateY(-5deg); }
+  60%  { transform: perspective(600px) translateY(-7px) scale(1.14) rotateY(-1deg); }
+  100% { transform: perspective(600px) translateY(-6px) scale(1.12) rotateY(0); }
+}
+@keyframes leanR {
+  0%   { transform: perspective(600px) translateY(0) scale(1) rotateY(-5deg); }
+  60%  { transform: perspective(600px) translateY(-7px) scale(1.14) rotateY(-1deg); }
+  100% { transform: perspective(600px) translateY(-6px) scale(1.12) rotateY(0); }
+}
+@-webkit-keyframes leanL {
+  0%   { transform: perspective(600px) translateY(0) scale(1) rotateY(5deg); }
+  60%  { transform: perspective(600px) translateY(-7px) scale(1.14) rotateY(1deg); }
+  100% { transform: perspective(600px) translateY(-6px) scale(1.12) rotateY(0); }
+}
+@keyframes leanL {
+  0%   { transform: perspective(600px) translateY(0) scale(1) rotateY(5deg); }
+  60%  { transform: perspective(600px) translateY(-7px) scale(1.14) rotateY(1deg); }
+  100% { transform: perspective(600px) translateY(-6px) scale(1.12) rotateY(0); }
+}
+
+/* The sheen rides on background-position, so the lean only animates the transform. */
+.tile.focused.lean-r { -webkit-animation: sheen .6s ease-out 1 both, leanR .34s var(--ease) both; animation: sheen .6s ease-out 1 both, leanR .34s var(--ease) both; }
+.tile.focused.lean-l { -webkit-animation: sheen .6s ease-out 1 both, leanL .34s var(--ease) both; animation: sheen .6s ease-out 1 both, leanL .34s var(--ease) both; }
+
+.tile .name {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-top: 22px;
+  transform: translateX(-50%);
+  font-size: 17px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: #fff;
+  text-shadow: 0 1px 10px rgba(0,0,0,.6);
+  opacity: 0;
+  transition: opacity .16s ease;
+  pointer-events: none;
+}
+
+.tile:focus .name,
+.tile.focused .name { opacity: 1; }
 
 .tile .word {
   font-weight: 800;
@@ -268,6 +432,9 @@ html, body {
 .word.plex   { font-size: 31px; letter-spacing: -1px; }
 .word.disney { font-size: 24px; font-weight: 600; font-style: italic; letter-spacing: -.3px; }
 .word.iview  { font-size: 19px; font-weight: 700; letter-spacing: -.3px; }
+.word.sbs    { font-size: 22px; font-weight: 800; letter-spacing: -.7px; }
+.word.nine   { font-size: 22px; font-weight: 800; letter-spacing: -.6px; }
+.word.firetv { font-size: 22px; font-weight: 700; letter-spacing: -.5px; }
 
 .divider {
   width: 1px;
@@ -290,21 +457,142 @@ html, body {
   text-indent: 1.5px;
 }
 
+.tile .mark svg.g-aerial { width: 42px; height: auto; }
+
 .badge.tvplus {
   font-size: 15px;
   letter-spacing: .3px;
   text-indent: 0;
 }
 
+/* ---------- live now / new on Plex ---------- */
+
+/* Two rotating cards above the dock, as on the Fire TV: the artwork fills each card
+   and the words sit on its darkened left. Same 120px margins as the clock. */
+.decks {
+  position: absolute;
+  left: 120px;
+  right: 120px;
+  bottom: 170px;
+  display: flex;
+  -webkit-animation: rise .4s var(--ease) 80ms both;
+  animation: rise .4s var(--ease) 80ms both;
+}
+
+.decks[hidden] { display: none; }
+
+.deck {
+  position: relative;
+  flex: 1 1 0;
+  height: 150px;
+  margin-left: 28px;
+  padding: 0;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 22px;
+  overflow: hidden;
+  background: var(--glass-solid);
+  color: #fff;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform .22s var(--spring), box-shadow .16s var(--ease), border-color .16s var(--ease);
+}
+
+.deck:first-child { margin-left: 0; }
+.deck[hidden] { display: none; }
+
+.deck:focus {
+  outline: none;
+  border-color: rgba(255,255,255,.85);
+  transform: translateY(-4px);
+  box-shadow: 0 18px 34px rgba(0,0,0,.45);
+}
+
+.pane {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  opacity: 0;
+  transition: opacity .4s var(--ease);
+}
+
+.pane.on { opacity: 1; }
+
+.pane .art {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background-size: cover;
+  background-position: center;
+}
+
+.pane .art::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: linear-gradient(90deg, rgba(0,0,0,.86) 0%, rgba(0,0,0,.52) 48%, rgba(0,0,0,0) 80%);
+}
+
+.pane .words {
+  position: absolute;
+  left: 30px;
+  right: 30px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.pane .eyebrow {
+  display: flex;
+  align-items: center;
+  font-size: 22px;
+  font-weight: 500;
+  color: rgba(255,255,255,.85);
+}
+
+.pane .dot {
+  width: 12px;
+  height: 12px;
+  margin-right: 12px;
+  border-radius: 50%;
+  background: #ff453a;
+}
+
+.pane.plex .dot { background: #e5a00d; }
+
+.pane .t {
+  margin-top: 6px;
+  font-size: 32px;
+  font-weight: 600;
+  letter-spacing: -.3px;
+}
+
+.pane .s {
+  margin-top: 6px;
+  font-size: 22px;
+  color: rgba(255,255,255,.75);
+}
+
+.pane .t, .pane .s { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 /* ---------- sheets ---------- */
 
 .sheet {
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   display: flex;
   flex-direction: column;
   padding: 96px 132px;
-  background: rgba(8,8,10,.66);
+  background: linear-gradient(180deg, rgba(6,6,8,.86), rgba(6,6,8,.94));
   -webkit-backdrop-filter: blur(40px) saturate(1.1);
   backdrop-filter: blur(40px) saturate(1.1);
   opacity: 0;
@@ -340,17 +628,18 @@ html, body {
   align-items: center;
   justify-content: center;
   height: 158px;
-  border-radius: 20px;
-  border: 1px solid rgba(255,255,255,.08);
-  background: rgba(255,255,255,.055);
+  border-radius: 24px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(255,255,255,.07);
   color: #fff;
   font: inherit;
   cursor: pointer;
-  transition: background .16s ease, transform .16s ease;
+  transition: background .16s var(--ease), color .16s var(--ease), transform .22s var(--spring), box-shadow .16s var(--ease);
 }
 
 .card .mark { min-width: 92px; height: 56px; }
 .card .mark svg { height: 100%; width: 100%; display: block; fill: currentColor; }
+.card .mark svg.g-prime { width: 64px; height: auto; }
 .card .word { font-size: 26px; }
 
 .card .label {
@@ -359,18 +648,26 @@ html, body {
   color: rgba(255,255,255,.72);
 }
 
+/* The same white-plate focus as the round buttons: dark ink on white, lifted. */
 .card:hover,
 .card:focus {
   outline: none;
-  background: rgba(255,255,255,.13);
-  transform: translateY(-2px);
+  color: #111114;
+  background: rgba(255,255,255,.95);
+  transform: translateY(-4px) scale(1.04);
+  box-shadow: 0 16px 30px rgba(0,0,0,.45);
 }
+
+.card:focus .label { color: rgba(17,17,20,.7); }
 
 /* ---------- settings ---------- */
 
 .rows { width: 900px; }
 
 .setting {
+  padding-left: 24px !important;
+  padding-right: 24px !important;
+  border-radius: 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -406,7 +703,7 @@ html, body {
 
 .switch[aria-checked="true"] { background: #3aa0ff; }
 .switch[aria-checked="true"] span { transform: translateX(32px); }
-.switch:focus { outline: 2px solid rgba(255,255,255,.5); outline-offset: 3px; }
+.switch:focus { outline: none; box-shadow: 0 0 0 4px rgba(255,255,255,.9); }
 
 .ghost {
   padding: 14px 22px;
@@ -420,9 +717,65 @@ html, body {
 }
 
 .ghost:hover,
-.ghost:focus { outline: none; background: rgba(255,255,255,.18); }
+.ghost:focus { outline: none; color: #111114; background: rgba(255,255,255,.95); }
+
+/* ---------- Home Assistant sheet ---------- */
+
+.sheet.ha {
+  padding: 0;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0,0,0,.45);
+}
+
+.ha-panel {
+  width: 640px;
+  margin-right: 60px;
+  padding: 44px 48px 40px;
+  border-radius: 40px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(14,14,16,.97);
+  box-shadow: 0 30px 60px rgba(0,0,0,.5);
+}
+
+.ha-big { font-size: 112px; font-weight: 300; letter-spacing: -3px; line-height: 1; }
+.ha-sub { margin-top: 12px; font-size: 32px; font-weight: 500; color: rgba(255,255,255,.92); }
+
+.ha-rule { height: 1px; margin: 26px 0 20px; background: rgba(255,255,255,.12); }
+
+.ha-tiles { display: flex; flex-wrap: wrap; justify-content: center; }
+
+.ha-tile {
+  width: 33.33%;
+  margin-bottom: 18px;
+  text-align: center;
+}
+
+.ha-tile .ic { display: block; width: 28px; height: 28px; margin: 0 auto 8px; color: rgba(255,255,255,.75); }
+.ha-tile .ic svg { width: 100%; height: 100%; }
+.ha-tile .v { font-size: 38px; font-weight: 700; }
+.ha-tile .l { font-size: 24px; color: rgba(255,255,255,.6); }
+.ha-tile.stale { opacity: .55; }
+
+.ha-lines { margin-top: 6px; font-size: 26px; color: rgba(255,255,255,.95); }
+.ha-lines .row { height: 46px; }
+.ha-lines .row .ic { width: 26px; height: 26px; margin-right: 18px; }
 
 /* ---------- toast ---------- */
+
+/* Only shown while on the sample file, or when the snapshot cannot be read. */
+.sample {
+  position: absolute;
+  left: 120px;
+  bottom: 46px;
+  font-size: 12px;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.34);
+  text-shadow: 0 1px 8px rgba(0,0,0,.5);
+}
+
+.sample[hidden] { display: none; }
 
 .toast {
   position: absolute;

@@ -211,12 +211,14 @@ public class HomeKeyService extends AccessibilityService {
         }
         List<MainActivity.App> apps = new ArrayList<>();
         android.content.pm.PackageManager pm = getPackageManager();
+        String liveTv = getString(R.string.live_tv_package);
         for (String p : order) {
             try {
                 ApplicationInfo ai = pm.getApplicationInfo(p, 0);
                 MainActivity.App a = new MainActivity.App();
                 a.pkg = p;
                 a.label = String.valueOf(pm.getApplicationLabel(ai));
+                if (!liveTv.isEmpty() && p.equals(liveTv)) a.label = "Live TV";
                 Drawable banner = ai.loadBanner(pm);
                 a.icon = ai.loadIcon(pm);
                 a.isBanner = banner != null;
@@ -295,10 +297,10 @@ public class HomeKeyService extends AccessibilityService {
         String hello = Times.greeting(System.currentTimeMillis() / 1000L,
                 java.time.ZoneId.systemDefault());
         TextView g = new TextView(this);
-        g.setText(family.isEmpty() ? hello : hello + " " + family);
-        g.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
+        g.setText(Typo.hello(hello, family));
+        g.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
         g.setTypeface(Typo.medium(this));
-        g.setTextColor(0xD9FFFFFF);
+        g.setTextColor(HomeTheme.TEXT_70);
         g.setIncludeFontPadding(false);
         g.setShadowLayer(px(d, 8), 0, px(d, 1), 0x80000000);
         LinearLayout.LayoutParams gp = new LinearLayout.LayoutParams(-2, -2);
@@ -313,6 +315,7 @@ public class HomeKeyService extends AccessibilityService {
         clk.setTextColor(Color.WHITE);
         clk.setIncludeFontPadding(false);
         clk.setFontFeatureSettings("tnum");
+        clk.setLetterSpacing(HomeTheme.CLOCK_TRACKING);
         clk.setShadowLayer(px(d, 8), 0, px(d, 1), 0x80000000);
         block.addView(clk);
 
@@ -372,7 +375,10 @@ public class HomeKeyService extends AccessibilityService {
         pill.setClipToPadding(false);
         pill.setPadding(px(d, HomeTheme.DOCK_PAD), px(d, HomeTheme.DOCK_PAD_TOP),
                 px(d, HomeTheme.DOCK_PAD), px(d, HomeTheme.DOCK_PAD_BOTTOM));
-        pill.setBackground(HomeTheme.glassPill(HomeTheme.DOCK_PILL_RADIUS, d));
+        // The launcher saves the glass it tinted from the wallpaper, so this dock wears it too.
+        GradientDrawable glass = HomeTheme.glassPill(HomeTheme.DOCK_PILL_RADIUS, d);
+        glass.setColor(getSharedPreferences("launcher", MODE_PRIVATE).getInt("glass", HomeTheme.GLASS));
+        pill.setBackground(glass);
 
         List<MainActivity.App> apps = MainActivity.dockSnapshot != null
                 ? MainActivity.dockSnapshot : coverDock;
@@ -384,22 +390,21 @@ public class HomeKeyService extends AccessibilityService {
                 slot.setClipToPadding(false);
                 slot.setPadding(px(d, 6), px(d, 3), px(d, 6), px(d, 9));   // same shift as the launcher
 
-                View halo = new View(this);
-                GradientDrawable gd = new GradientDrawable();
-                gd.setGradientType(GradientDrawable.RADIAL_GRADIENT);
-                gd.setGradientRadius(px(d, 74));
-                gd.setGradientCenter(0.5f, 0.5f);
-                gd.setColors(new int[]{0x40FFFFFF, 0x0DFFFFFF, 0x00000000});
-                halo.setBackground(gd);
-                halo.setAlpha(0f);
-                slot.addView(halo, new FrameLayout.LayoutParams(-1, -1));
-
                 LinearLayout col = new LinearLayout(this);
                 col.setOrientation(LinearLayout.VERTICAL);
                 col.setGravity(Gravity.CENTER_HORIZONTAL);
+                col.setClipChildren(false);
+                col.setClipToPadding(false);
                 FrameLayout frame = new FrameLayout(this);
-                frame.addView(AppTile.dock(this, apps.get(i), d),
-                        new FrameLayout.LayoutParams(-1, -1));
+                frame.setClipChildren(false);
+                ImageView shadow = AppTile.shadow(this, d, HomeTheme.DOCK_W, HomeTheme.DOCK_H,
+                        HomeTheme.DOCK_ICON_RADIUS);
+                frame.addView(shadow, AppTile.shadowParams(d));
+                FrameLayout tile = AppTile.dock(this, apps.get(i), d);
+                frame.addView(tile, new FrameLayout.LayoutParams(-1, -1));
+                View rim = AppTile.focusRim(this, d);
+                rim.setAlpha(0f);
+                frame.addView(rim, new FrameLayout.LayoutParams(-1, -1));
                 col.addView(frame, new LinearLayout.LayoutParams(
                         px(d, HomeTheme.DOCK_W), px(d, HomeTheme.DOCK_H)));
 
@@ -407,22 +412,27 @@ public class HomeKeyService extends AccessibilityService {
                 name.setText(apps.get(i).label);
                 name.setTextSize(TypedValue.COMPLEX_UNIT_SP, HomeTheme.DOCK_NAME);   // a label, not a caption
                 name.setTypeface(Typo.medium(this));
-                name.setTextColor(0xCCFFFFFF);
+                name.setTextColor(0xFFFFFFFF);
+                name.setAlpha(0f);   // only the focused app is named, as on the real dock
                 name.setSingleLine(true);
                 name.setGravity(Gravity.CENTER);
                 name.setEllipsize(TextUtils.TruncateAt.END);
                 name.setShadowLayer(px(d, 6), 0, px(d, 1), 0x99000000);
                 LinearLayout.LayoutParams np = new LinearLayout.LayoutParams(
-                        px(d, HomeTheme.DOCK_W), -2);
+                        px(d, HomeTheme.DOCK_W + 12), -2);
                 np.topMargin = px(d, HomeTheme.DOCK_NAME_GAP);
                 col.addView(name, np);
                 slot.addView(col, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER));
 
-                // The launcher hands the cursor to the first slot, so the cover draws it lifted.
+                // The launcher hands the cursor to the first slot, so the cover draws it lifted
+                // with the same lift, shadow, rim and name the real dock shows under focus.
                 if (i == 0) {
                     slot.setScaleX(HomeTheme.DOCK_FOCUS_SCALE);
                     slot.setScaleY(HomeTheme.DOCK_FOCUS_SCALE);
-                    halo.setAlpha(1f);
+                    slot.setTranslationY(-px(d, HomeTheme.DOCK_FOCUS_LIFT));
+                    shadow.setAlpha(1f);
+                    rim.setAlpha(1f);
+                    name.setAlpha(1f);
                 }
                 LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
                         px(d, HomeTheme.DOCK_W + 12), px(d, HomeTheme.DOCK_SLOT_H));

@@ -12,23 +12,23 @@
   var MARKS = {
     plex: '<span class="mark"><span class="word plex">plex</span></span>',
 
-    netflix: '<span class="mark"><svg viewBox="0 0 24 34" aria-hidden="true">' +
+    netflix: '<span class="mark"><svg class="g-netflix" viewBox="0 0 24 34" aria-hidden="true">' +
       '<path d="M2 0h5.6l8.8 22.6V0H22v34h-5.2L7.9 10.6V34H2z"/></svg></span>',
 
-    prime: '<span class="mark"><svg viewBox="0 0 40 15" aria-hidden="true">' +
+    prime: '<span class="mark"><svg class="g-prime" viewBox="0 0 40 15" aria-hidden="true">' +
       '<path d="M2 3.9c8.4 7 23.8 7.4 33.8 1.3" fill="none" stroke="currentColor" ' +
       'stroke-width="2.5" stroke-linecap="round"/>' +
       '<path d="M33.6 2.5 37.2 5.0 33.0 8.2" fill="none" stroke="currentColor" ' +
       'stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>',
 
-    youtube: '<span class="mark"><svg viewBox="0 0 34 24" aria-hidden="true">' +
+    youtube: '<span class="mark"><svg class="g-youtube" viewBox="0 0 34 24" aria-hidden="true">' +
       '<rect x="1.3" y="1.3" width="31.4" height="21.4" rx="6" fill="none" ' +
       'stroke="currentColor" stroke-width="2.4"/>' +
       '<path d="M13 7.1 23.8 12 13 16.9z"/></svg></span>',
 
     disney: '<span class="mark"><span class="word disney">Disney+</span></span>',
 
-    spotify: '<span class="mark"><svg viewBox="0 0 32 32" aria-hidden="true">' +
+    spotify: '<span class="mark"><svg class="g-spotify" viewBox="0 0 32 32" aria-hidden="true">' +
       '<circle cx="16" cy="16" r="13.6" fill="none" stroke="currentColor" stroke-width="2.6"/>' +
       '<path d="M9.2 12.2c4.7-1.4 9.9-1 14 1.2" fill="none" stroke="currentColor" ' +
       'stroke-width="2.9" stroke-linecap="round"/>' +
@@ -37,11 +37,21 @@
       '<path d="M11.6 21.5c2.9-.8 6.1-.5 8.5.9" fill="none" stroke="currentColor" ' +
       'stroke-width="2.3" stroke-linecap="round"/></svg></span>',
 
-    livetv: '<span class="mark"><span class="badge">LIVE</span></span>',
+    firetv: '<span class="mark"><span class="word firetv">fire tv</span></span>',
+
+    // An aerial on a set: the tile switches to the TV's own tuner.
+    livetv: '<span class="mark"><svg class="g-aerial" viewBox="0 0 34 30" aria-hidden="true">' +
+      '<path d="M10 2.5l7 8 7-8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '<rect x="2.5" y="11" width="29" height="16.5" rx="3.5" fill="none" stroke="currentColor" stroke-width="2.2"/>' +
+      '<path d="M12 30h10" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></span>',
 
     tvplus: '<span class="mark"><span class="badge tvplus">TV+</span></span>',
 
-    iview: '<span class="mark"><span class="word iview">abc iview</span></span>'
+    iview: '<span class="mark"><span class="word iview">abc iview</span></span>',
+
+    sbs: '<span class="mark"><span class="word sbs">SBS</span></span>',
+
+    nine: '<span class="mark"><span class="word nine">9now</span></span>'
   };
 
   /* ---------- info icons ---------- */
@@ -56,20 +66,24 @@
     bolt: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.4 2 4.8 13.4h5.8l-1 8.6 8.6-11.4h-5.8z" fill="currentColor"/></svg>',
     person: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.6" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M5 20c.6-3.6 3.4-5.6 7-5.6s6.4 2 7 5.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
     music: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 17.5V6.2l9-1.7v11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="6.6" cy="17.6" r="2.9" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="15.6" cy="15.6" r="2.9" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>',
-    dot: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>'
+    battery: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="4.5" width="10" height="17" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M10 2.6h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><rect x="9.2" y="11" width="5.6" height="8.2" rx="1" fill="currentColor"/></svg>',
+    home: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.4 12 3.4l8 7M6.4 9.4v10.2h11.2V9.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    thermo: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4.6a2 2 0 0 1 4 0v9.2a4 4 0 1 1-4 0z" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="16.8" r="1.7" fill="currentColor"/></svg>',
+    dot: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>',
+    cal: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.2" y="5" width="17.6" height="15.6" rx="3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M3.2 9.8h17.6M8.4 3v3.6M15.6 3v3.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+    wind: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8.4h10.2a2.6 2.6 0 1 0-2.5-3.3M3 12.4h14.6a2.7 2.7 0 1 1-2.6 3.4M3 16.4h6.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>'
   };
 
   /* ---------- state ---------- */
 
-  var FALLBACK = {
-    weather: { temp: 23, condition: "Partly cloudy", inside: 20 },
-    batteries: [{ name: "House", level: 84 }, { name: "Cottage", level: 62 }],
-    lines: [
-      { icon: "snow", text: "Air con cooling to 22°" },
-      { icon: "spa", text: "Spa 36° · heating to 38.5°" }
-    ],
-    now_playing: { title: "Sample song", subtitle: "Sample artist · Lounge + Kitchen", tint: ["#e8a06a", "#8f6fd0"] }
-  };
+  /* True while the page is reading the sample file because config.js has no
+     snapshotUrl yet; it drives the small "sample data" chip. */
+  var usingSample = true;
+
+  /* False until the TV answers with its installed apps. While false the dock
+     cannot know what exists (a desktop browser, or the API failed), so it
+     shows everything in config.js rather than hiding the lot. */
+  var appsKnown = false;
 
   var hour12 = cfg.hour12 !== false;
   var sheet = null;
@@ -80,6 +94,15 @@
   var back = $("wallB");
   var wallIndex = 0;
   var tileIndex = 0;
+  /* The last snapshot that read cleanly: a missed poll keeps it on screen, dimmed,
+     instead of blanking the panel until the next good read. */
+  var lastSnap = null;
+  var loading = false;
+
+  /* The Fire TV's two rotating cards, read from the same tvhome_new.json:
+     what is on live now (TiviMate on the Fire TV) and the newest on Plex. */
+  var decks = [];
+  var DECK_EVERY = 10000;
 
   /* ---------- helpers ---------- */
 
@@ -110,10 +133,33 @@
       h = h % 12;
       if (!h) { h = 12; }
     }
-    $("clock").textContent = (hour12 ? h : pad(h)) + ":" + pad(d.getMinutes());
+    var hr = d.getHours();
+    var hello = hr >= 5 && hr < 12 ? "Good morning" : hr >= 12 && hr < 18 ? "Good afternoon" : "Good evening";
+    $("greet").textContent = cfg.family ? hello + ", " + cfg.family : hello;
+    driftWall(d);
+
+    var text = (hour12 ? h : pad(h)) + ":" + pad(d.getMinutes());
+    var el = $("clock");
+    if (el.textContent === text) { return; }
+    // The minute turns over like the Lock Screen's: the old time lifts away, the new one rises.
+    if (!el.textContent || document.hidden) { el.textContent = text; return; }
+    el.className = "clock out";
+    setTimeout(function () {
+      el.textContent = text;
+      el.className = "clock in";
+    }, 160);
   }
 
   /* ---------- background ---------- */
+
+  /* A slow 1.02 -> 1.09 -> 1.02 zoom over three minutes, set once a second: at
+     1920px that is a fraction of a pixel per step, so it reads as continuous
+     without the GPU redrawing the screen every frame. */
+  function driftWall(d) {
+    var t = (d.getTime() / 1000 % 180) / 180;
+    var tri = t < 0.5 ? t * 2 : 2 - t * 2;
+    front.style.transform = "scale(" + (1.02 + 0.07 * tri).toFixed(4) + ")";
+  }
 
   function applyWall(index) {
     var list = cfg.wallpapers || [];
@@ -121,10 +167,36 @@
     var url = list[index % list.length];
     back.style.backgroundImage = "url('" + url + "')";
     back.className = "wall on";
+    tintGlass(url);
     front.className = "wall";
     var swap = front;
     front = back;
     back = swap;
+  }
+
+  /* The glass takes a little of the photo's colour, as tvOS glass does: the
+     wallpaper's average, at a fifth of its brightness. Two strengths, because the
+     2020 set has no backdrop blur and needs a denser tint to keep text legible. */
+  function tintGlass(url) {
+    var img = new Image();
+    img.onload = function () {
+      try {
+        var c = document.createElement("canvas");
+        c.width = 16;
+        c.height = 9;
+        var ctx = c.getContext("2d");
+        ctx.drawImage(img, 0, 0, 16, 9);
+        var px = ctx.getImageData(0, 0, 16, 9).data;
+        var r = 0, g = 0, b = 0;
+        for (var i = 0; i < px.length; i += 4) { r += px[i]; g += px[i + 1]; b += px[i + 2]; }
+        var n = px.length / 4;
+        var rgb = Math.round(r / n * 0.2) + "," + Math.round(g / n * 0.2) + "," + Math.round(b / n * 0.2);
+        var root = document.documentElement.style;
+        root.setProperty("--glass", "rgba(" + rgb + ",.42)");
+        root.setProperty("--glass-solid", "rgba(" + rgb + ",.66)");
+      } catch (e) { /* a tainted canvas keeps the neutral glass */ }
+    };
+    img.src = url;
   }
 
   function setRotation(on) {
@@ -152,20 +224,56 @@
     return r;
   }
 
-  function batteryPill(battery) {
-    var level = Math.max(0, Math.min(100, Number(battery.level) || 0));
-    var cls = "pill";
-    if (level <= 20) { cls += " low"; } else if (level <= 45) { cls += " warn"; }
-    var fill = (16.6 * level / 100).toFixed(1);
+  function pill(kind, label, level) {
     var el = document.createElement("span");
-    el.className = cls;
-    el.innerHTML =
-      '<svg viewBox="0 0 26 15" aria-hidden="true">' +
-      '<rect x="1" y="2.4" width="21" height="10.2" rx="2.8" fill="none" stroke="currentColor" stroke-width="1.5"/>' +
-      '<rect x="2.9" y="4.4" width="' + fill + '" height="6.2" rx="1.5" fill="currentColor"/>' +
-      '<rect x="23.4" y="5.6" width="2.2" height="3.8" rx="1.1" fill="currentColor"/></svg>' +
-      '<span>' + battery.name + " " + level + '%</span>';
+    el.className = "pill " + kind;
+    var icon;
+    if (kind === "battery") {
+      var pct = Math.max(0, Math.min(100, level));
+      if (pct <= 20) { el.className += " low"; } else if (pct <= 45) { el.className += " warn"; }
+      var fill = (16.6 * pct / 100).toFixed(1);
+      icon = '<svg viewBox="0 0 26 15" aria-hidden="true">' +
+        '<rect x="1" y="2.4" width="21" height="10.2" rx="2.8" fill="none" stroke="currentColor" stroke-width="1.5"/>' +
+        '<rect x="2.9" y="4.4" width="' + fill + '" height="6.2" rx="1.5" fill="currentColor"/>' +
+        '<rect x="23.4" y="5.6" width="2.2" height="3.8" rx="1.1" fill="currentColor"/></svg>';
+    } else if (kind === "solar") {
+      icon = '<svg class="g" viewBox="0 0 24 24" aria-hidden="true">' +
+        '<path d="M13.4 2 4.8 13.2h5.9l-1 8.8 8.6-11.4h-5.9z" fill="currentColor"/></svg>';
+    } else {
+      icon = '<svg class="g" viewBox="0 0 24 24" aria-hidden="true">' +
+        '<path d="M4 10.4 12 3.4l8 7M6.4 9.4v10.2h11.2V9.4" fill="none" stroke="currentColor" ' +
+        'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    }
+    el.innerHTML = icon + "<span>" + label + "</span>";
     return el;
+  }
+
+  function pillsRow(snap) {
+    var battery = num(snap.battery);
+    var solar = num(snap.solar);
+    var house = num(snap.house);
+    var made = [];
+
+    if (battery !== null) {
+      var b = pill("battery", "Battery " + Math.round(battery) + "%", battery);
+      if (isOld(snap, "battery")) { b.className += " stale"; }
+      made.push(b);
+    }
+    if (solar !== null) {
+      var s = pill("solar", "Solar " + one(solar) + " kW");
+      if (isOld(snap, "solar")) { s.className += " stale"; }
+      made.push(s);
+    }
+    if (house !== null) {
+      var h = pill("using", "Using " + one(house) + " kW");
+      if (isOld(snap, "house")) { h.className += " stale"; }
+      made.push(h);
+    }
+
+    if (!made.length) { return null; }
+    var r = row(null);
+    made.forEach(function (p) { r.appendChild(p); });
+    return r;
   }
 
   function weatherIcon(condition) {
@@ -176,92 +284,455 @@
     return "cloud";
   }
 
-  function render(data) {
+  /* ---------- snapshot -> screen ---------- */
+
+  function num(value) {
+    if (value === null || value === undefined || value === "") { return null; }
+    var n = Number(value);
+    return isFinite(n) ? n : null;
+  }
+
+  function words(value) {
+    return value === null || value === undefined ? "" : String(value).trim();
+  }
+
+  function one(n) { return (Math.round(n * 10) / 10).toFixed(1); }
+
+  function titleCase(s) {
+    s = s.replace(/_/g, " ").toLowerCase();
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : "";
+  }
+
+  /* tvhome.yaml sends seconds since each entity last updated; anything older
+     than 15 minutes is dimmed, the same rule the Fire TV panel uses. */
+  function isOld(snap, key) {
+    var ages = snap.ages || {};
+    var age = num(ages[key]);
+    return age !== null && age > 900;
+  }
+
+  function span(value, dim) {
+    var s = document.createElement("span");
+    s.textContent = value;
+    if (dim) { s.className = "dim"; }
+    return s;
+  }
+
+  function weatherRow(snap) {
+    var temp = num(snap.temp);
+    var inside = num(snap.inside);
+    var condition = titleCase(words(snap.condition));
+    if (temp === null && inside === null && !condition) { return null; }
+
+    var r = row(weatherIcon(condition));
+    if (temp !== null) {
+      r.appendChild(span(temp + "°" + (condition ? " " + condition : ""), isOld(snap, "temp")));
+    } else if (condition) {
+      r.appendChild(span(condition, false));
+    }
+    if (inside !== null) {
+      var sep = document.createElement("span");
+      sep.className = "sep";
+      sep.textContent = "·";
+      r.appendChild(sep);
+      r.appendChild(span(inside + "° inside", isOld(snap, "inside")));
+    }
+    return r;
+  }
+
+  function clockTime(epoch) {
+    var at = num(epoch);
+    if (at === null || at <= 0) { return ""; }
+    var d = new Date(at * 1000);
+    var h = d.getHours();
+    var m = d.getMinutes();
+    if (!hour12) { return pad(h) + ":" + pad(m); }
+    var hh = h % 12;
+    if (!hh) { hh = 12; }
+    return hh + ":" + pad(m) + (h < 12 ? " AM" : " PM");
+  }
+
+  function inText(epoch) {
+    var at = num(epoch);
+    if (at === null || at <= 0) { return ""; }
+    var mins = Math.round((at * 1000 - Date.now()) / 60000);
+    if (mins <= 0) { return ""; }
+    if (mins < 60) { return "in " + mins + " min"; }
+    var hours = Math.round(mins / 60);
+    if (hours < 24) { return "in " + hours + " h"; }
+    return "in " + Math.round(hours / 24) + " d";
+  }
+
+  function peopleText(snap) {
+    var n = num(snap.people);
+    if (n === null) { return ""; }
+    var names = words(snap.people_names).split("&")
+      .map(function (s) { return s.trim(); })
+      .filter(Boolean);
+    if (n === 1 && names.length === 1) { return names[0] + " is home"; }
+    if (n === 2 && names.length === 2) { return names[0] + " & " + names[1] + " are home"; }
+    if (n === 0) { return "Nobody home"; }
+    return n + " people home";
+  }
+
+  function energyText(snap) {
+    var kwh = num(snap.energy_today);
+    var left = words(snap.battery_left);
+    if (kwh !== null && left) { return one(kwh) + " kWh today · " + left + " left"; }
+    if (kwh !== null) { return one(kwh) + " kWh today"; }
+    if (left) { return "Battery " + left + " left"; }
+    return "";
+  }
+
+  function sunText(snap) {
+    var rise = clockTime(snap.sunrise_at);
+    var set = clockTime(snap.sunset_at);
+    if (rise && set) { return "Sunrise " + rise + " · Sunset " + set; }
+    if (rise) { return "Sunrise " + rise; }
+    if (set) { return "Sunset " + set; }
+    return "";
+  }
+
+  function windText(snap) {
+    var wind = num(snap.wind);
+    var unit = words(snap.wind_unit) || "km/h";
+    var humidity = num(snap.humidity);
+    var bits = [];
+    if (wind !== null) { bits.push(Math.round(wind) + " " + unit); }
+    if (humidity !== null) { bits.push(Math.round(humidity) + "% humidity"); }
+    return bits.join(" · ");
+  }
+
+  /* The reference screen has room for a few lines under the battery row, so
+     the things you can act on come first: bins, then the next event, then
+     weather, then who is home, then power. Nothing is shown twice. */
+  function snapshotLines(snap) {
+    return allLines(snap).slice(0, cfg.maxLines || 3);
+  }
+
+  function allLines(snap) {
+    var out = [];
+
+    if (words(snap.bins)) {
+      out.push({ icon: "bin", text: words(snap.bins), accent: true });
+    }
+
+    if (words(snap.next)) {
+      var when = inText(snap.next_at);
+      out.push({ icon: "cal", text: words(snap.next) + (when ? " · " + when : "") });
+    }
+
+    var rain = words(snap.rain);
+    if (rain && !/^(no rain|dry|none)/i.test(rain)) {
+      out.push({ icon: "rain", text: rain });
+    }
+
+    var people = peopleText(snap);
+    if (people) { out.push({ icon: "person", text: people }); }
+
+    var energy = energyText(snap);
+    if (energy) { out.push({ icon: "bolt", text: energy }); }
+
+    var sun = sunText(snap);
+    if (sun) { out.push({ icon: "sun", text: sun }); }
+
+    var wind = windText(snap);
+    if (wind) { out.push({ icon: "wind", text: wind }); }
+
+    return out;
+  }
+
+  /* ---------- Home Assistant sheet ---------- */
+
+  function haTile(icon, value, label, stale) {
+    var t = document.createElement("div");
+    t.className = "ha-tile" + (stale ? " stale" : "");
+    t.innerHTML = '<span class="ic">' + (ICONS[icon] || ICONS.dot) + "</span>";
+    var v = document.createElement("div");
+    v.className = "v";
+    v.textContent = value;
+    var l = document.createElement("div");
+    l.className = "l";
+    l.textContent = label;
+    t.appendChild(v);
+    t.appendChild(l);
+    return t;
+  }
+
+  function renderHa(snap) {
+    snap = snap || {};
+    var ages = snap.ages || {};
+    var old = function (key) { return (ages[key] || 0) > 900; };
+    var panel = $("haPanel");
+    panel.innerHTML = "";
+    var temp = num(snap.temp);
+    if (temp !== null) {
+      var big = document.createElement("div");
+      big.className = "ha-big";
+      big.textContent = Math.round(temp) + "\u00b0";
+      panel.appendChild(big);
+    }
+    var sub = [words(snap.condition), num(snap.feels) !== null ? "Feels " + Math.round(num(snap.feels)) + "\u00b0" : ""]
+      .filter(Boolean).join(" \u00b7 ");
+    if (sub) {
+      var s = document.createElement("div");
+      s.className = "ha-sub";
+      s.textContent = sub.charAt(0).toUpperCase() + sub.slice(1);
+      panel.appendChild(s);
+    }
+    var tiles = document.createElement("div");
+    tiles.className = "ha-tiles";
+    if (num(snap.solar) !== null) { tiles.appendChild(haTile("sun", num(snap.solar).toFixed(1) + " kW", "Solar", old("solar"))); }
+    if (num(snap.battery) !== null) { tiles.appendChild(haTile("battery", Math.round(num(snap.battery)) + "%", "Battery", old("battery"))); }
+    if (num(snap.house) !== null) { tiles.appendChild(haTile("home", num(snap.house).toFixed(1) + " kW", "Home", old("house"))); }
+    if (num(snap.inside) !== null) { tiles.appendChild(haTile("thermo", num(snap.inside).toFixed(1) + "\u00b0", "Inside", old("inside"))); }
+    if (words(snap.ac)) { tiles.appendChild(haTile("snow", words(snap.ac), "AC", old("ac"))); }
+    if (tiles.children.length) {
+      var rule = document.createElement("div");
+      rule.className = "ha-rule";
+      panel.appendChild(rule);
+      panel.appendChild(tiles);
+    }
+    var lines = document.createElement("div");
+    lines.className = "ha-lines";
+    allLines(snap).forEach(function (line) {
+      var r = row(line.icon);
+      var t = document.createElement("span");
+      t.textContent = line.text;
+      if (line.accent) { t.style.color = "#f0c45a"; }
+      r.appendChild(t);
+      lines.appendChild(r);
+    });
+    panel.appendChild(lines);
+  }
+
+  /* The card is the same idea as the Fire TV panel's Plex line: audio first
+     (media_* in tvhome.yaml), otherwise what Plex is playing elsewhere. */
+  function renderNow(snap) {
+    var box = $("now");
+    var title = words(snap.media_title);
+    var sub = words(snap.media_artist);
+    var art = words(snap.media_art);
+    var warm = true;
+
+    // Only what is playing on a media player you name in the snapshot. The `plex` key is
+    // whoever is streaming from your Plex server, shared users included, so it is not shown.
+    if (!title) { box.hidden = true; return; }
+
+    box.hidden = false;
+    $("nowTitle").textContent = title;
+    $("nowSub").textContent = sub;
+
+    var el = $("nowArt");
+    el.style.backgroundImage = "none";
+    if (art) {
+      el.style.background = "none";
+      el.style.backgroundImage = "url('" + art + "')";
+    } else if (warm) {
+      el.style.background = "linear-gradient(140deg,#e8a06a,#8f6fd0)";
+    } else {
+      el.style.background = "linear-gradient(140deg,#7f8fb4,#2b3550)";
+    }
+  }
+
+  function render(snap) {
+    snap = snap || {};
     var info = $("info");
     info.innerHTML = "";
 
-    var w = data.weather;
-    if (w && (typeof w.temp === "number" || typeof w.inside === "number")) {
-      var wr = row(weatherIcon(w.condition));
-      var text = "";
-      if (typeof w.temp === "number") {
-        text = w.temp + "°" + (w.condition ? " " + w.condition : "");
-      } else {
-        text = w.condition || "";
-      }
-      if (text) {
-        var s = document.createElement("span");
-        s.textContent = text;
-        wr.appendChild(s);
-      }
-      if (typeof w.inside === "number") {
-        var sep = document.createElement("span");
-        sep.className = "sep";
-        sep.textContent = "·";
-        wr.appendChild(sep);
-        var ins = document.createElement("span");
-        ins.textContent = w.inside + "° inside";
-        wr.appendChild(ins);
-      }
-      info.appendChild(wr);
-    }
+    var weather = weatherRow(snap);
+    if (weather) { info.appendChild(weather); }
+    var pills = pillsRow(snap);
+    if (pills) { info.appendChild(pills); }
 
-    if (data.batteries && data.batteries.length) {
-      var br = row(null);
-      data.batteries.forEach(function (b) { br.appendChild(batteryPill(b)); });
-      info.appendChild(br);
-    }
-
-    (data.lines || []).forEach(function (line) {
-      if (!line || !line.text) { return; }
-      var lr = row(line.icon || "dot");
-      var span = document.createElement("span");
-      span.textContent = line.text;
-      if (line.accent) { span.style.color = "#f0c45a"; }
-      if (line.dim) { span.style.color = "rgba(255,255,255,.55)"; }
-      lr.appendChild(span);
-      info.appendChild(lr);
+    snapshotLines(snap).forEach(function (line) {
+      var r = row(line.icon);
+      var s = document.createElement("span");
+      s.textContent = line.text;
+      if (line.accent) { s.style.color = "#f0c45a"; }
+      if (line.dim) { s.style.color = "rgba(255,255,255,.55)"; }
+      r.appendChild(s);
+      info.appendChild(r);
     });
 
-    var np = data.now_playing;
-    var box = $("now");
-    if (np && np.title) {
-      box.hidden = false;
-      $("nowTitle").textContent = np.title;
-      $("nowSub").textContent = np.subtitle || "";
-      var art = $("nowArt");
-      art.style.backgroundImage = "none";
-      if (np.art) {
-        art.style.backgroundImage = "url('" + np.art + "')";
-      } else if (np.tint && np.tint.length > 1) {
-        art.style.background = "linear-gradient(140deg," + np.tint[0] + "," + np.tint[1] + ")";
-      }
-    } else {
-      box.hidden = true;
-    }
+    renderNow(snap);
   }
 
-  function note(text) {
+  function note(msg) {
     var el = $("dataNote");
-    if (el) { el.textContent = text; }
+    if (el) { el.textContent = msg; }
   }
 
   function load() {
-    var url = cfg.feedUrl + (cfg.feedUrl.indexOf("?") < 0 ? "?" : "&") + "_=" + Date.now();
-    var request;
-    if (!window.fetch) { render(FALLBACK); return; }
-    fetch(url, { cache: "no-store" })
-      .then(function (r) { if (!r || !r.ok) { throw new Error("http"); } return r.json(); })
-      .then(function (data) {
-        render(data);
-        var d = new Date();
-        note("Updated " + pad(d.getHours()) + ":" + pad(d.getMinutes()) + " · " + cfg.feedUrl);
+    usingSample = !cfg.snapshotUrl;
+    var url = cfg.snapshotUrl || cfg.sampleUrl;
+    var chip = $("sampleChip");
+
+    if (!window.fetch) {
+      render({});
+      note("This browser cannot read the snapshot (no fetch).");
+      return;
+    }
+
+    // One read at a time, and none that hangs: the TV's network can stall a request
+    // for minutes, and a 15-second poll would otherwise stack them up.
+    if (loading) { return; }
+    loading = true;
+    var busted = url + (url.indexOf("?") < 0 ? "?" : "&") + "_=" + Date.now();
+    var timeout = new Promise(function (resolve, reject) {
+      setTimeout(function () { reject(new Error("timed out")); }, 10000);
+    });
+    Promise.race([fetch(busted, { cache: "no-store" }), timeout])
+      .then(function (r) {
+        if (!r || !r.ok) { throw new Error("HTTP " + (r ? r.status : "error")); }
+        return r.json();
       })
-      .catch(function () {
-        render(FALLBACK);
-        note("Demo data (could not read " + cfg.feedUrl + ")");
+      .then(function (snap) {
+        loading = false;
+        lastSnap = snap;
+        $("info").className = "info";
+        render(snap);
+        if (chip) {
+          chip.hidden = !usingSample;
+          chip.textContent = "sample data";
+        }
+        var d = new Date();
+        note((usingSample ? "Sample file" : "Home Assistant") +
+          " · read " + pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds()));
+      })
+      .catch(function (err) {
+        // Nothing invented on screen. A missed read keeps the last good snapshot, dimmed,
+        // so one dropped poll does not blank the panel; with none yet, only the clock and dock.
+        loading = false;
+        if (lastSnap) {
+          $("info").className = "info stale";
+        } else {
+          render({});
+        }
+        if (chip) {
+          chip.hidden = false;
+          chip.textContent = lastSnap ? "offline · last read kept" : "no data";
+        }
+        note("Could not read " + url + " — " + (err && err.message ? err.message : "error") +
+          ". Set snapshotUrl in config.js and allow this origin in HA (http.cors_allowed_origins).");
       });
-    return request;
+  }
+
+  /* ---------- live now / new on Plex ---------- */
+
+  function clean(text) {
+    return String(text || "").replace(/\s+/g, " ").trim();
+  }
+
+  function clock12(sec) {
+    var d = new Date(sec * 1000);
+    var h = d.getHours();
+    var m = pad(d.getMinutes());
+    if (!hour12) { return pad(h) + ":" + m; }
+    return (h % 12 || 12) + ":" + m + (h < 12 ? "am" : "pm");
+  }
+
+  function cardsUrl() {
+    if (cfg.cardsUrl) { return cfg.cardsUrl; }
+    return cfg.snapshotUrl ? cfg.snapshotUrl.replace(/tvhome\.json(\?.*)?$/, "tvhome_new.json") : "";
+  }
+
+  function paneFor(item, live) {
+    var p = document.createElement("div");
+    p.className = "pane" + (live ? "" : " plex");
+    var art = document.createElement("div");
+    art.className = "art";
+    if (item.image) { art.style.backgroundImage = "url('" + item.image + "')"; }
+    var words = document.createElement("div");
+    words.className = "words";
+    var eyebrow = document.createElement("div");
+    eyebrow.className = "eyebrow";
+    eyebrow.innerHTML = '<span class="dot"></span>';
+    eyebrow.appendChild(document.createTextNode(live ? "Live now on TV" : "Now Showing on Plex"));
+    var t = document.createElement("div");
+    t.className = "t";
+    t.textContent = clean(item.title);
+    var s = document.createElement("div");
+    s.className = "s";
+    s.textContent = live
+      ? [clean(item.channel), item.until ? "ends " + clock12(item.until) : ""].filter(Boolean).join(" \u00b7 ")
+      : clean(item.sub);
+    words.appendChild(eyebrow);
+    words.appendChild(t);
+    words.appendChild(s);
+    p.appendChild(art);
+    p.appendChild(words);
+    return p;
+  }
+
+  /* One card: its list, the pane on screen, and its own slot on a shared 10 s
+     grid (live on the beat, Plex half a beat later) so the two never turn together. */
+  function makeDeck(live, items, open) {
+    var el = document.createElement("button");
+    el.type = "button";
+    el.className = "deck";
+    var deck = { el: el, live: live, items: items, cur: 0 };
+    items.forEach(function (item, i) {
+      var p = paneFor(item, live);
+      if (i === 0) { p.className += " on"; }
+      el.appendChild(p);
+    });
+    el.addEventListener("click", function () { open(items[deck.cur]); });
+    deck.turn = function () {
+      if (items.length < 2 || document.activeElement === el) { return; }
+      var panes = el.children;
+      panes[deck.cur].className = panes[deck.cur].className.replace(" on", "");
+      deck.cur = (deck.cur + 1) % items.length;
+      panes[deck.cur].className += " on";
+    };
+    return deck;
+  }
+
+  function sourceApp(key) {
+    return (cfg.apps || []).filter(function (a) { return a.key === key; })[0];
+  }
+
+  function renderDecks(items) {
+    var box = $("decks");
+    var now = Date.now() / 1000;
+    var live = items.filter(function (i) { return i.kind === "live" && (!i.until || i.until > now); }).slice(0, 10);
+    var plex = items.filter(function (i) { return i.kind !== "live" && i.app === "Plex"; }).slice(0, 10);
+    var sig = JSON.stringify([live, plex]);
+    if (box.getAttribute("data-sig") === sig) { return; }
+    box.setAttribute("data-sig", sig);
+    var had = document.activeElement && document.activeElement.className === "deck";
+    box.innerHTML = "";
+    decks = [];
+    // Live is TiviMate on the Fire TV, so its card switches to the Fire TV's input;
+    // the Plex card opens Plex on this TV.
+    if (live.length) {
+      decks.push(makeDeck(true, live, function () {
+        var ft = sourceApp("firetv");
+        if (ft) { launch(ft); }
+      }));
+    }
+    if (plex.length) {
+      decks.push(makeDeck(false, plex, function () {
+        var px = sourceApp("plex");
+        if (px) { launch(px); } else { toast("Plex is not on this TV"); }
+      }));
+    }
+    decks.forEach(function (d) { box.appendChild(d.el); });
+    box.hidden = !decks.length;
+    if (had && decks.length) { decks[0].el.focus(); }
+  }
+
+  function loadCards() {
+    var url = cardsUrl();
+    if (!url || !window.fetch) { return; }
+    fetch(url + (url.indexOf("?") < 0 ? "?" : "&") + "_=" + Date.now(), { cache: "no-store" })
+      .then(function (r) { if (!r.ok) { throw new Error("HTTP " + r.status); } return r.json(); })
+      .then(function (feed) { renderDecks((feed && feed.items) || []); })
+      .catch(function () { /* keep whatever cards are on screen */ });
+  }
+
+  function deckEls() {
+    return decks.map(function (d) { return d.el; });
   }
 
   /* ---------- dock ---------- */
@@ -270,10 +741,18 @@
     return MARKS[app.key] || '<span class="mark"><span class="word">' + app.label + "</span></span>";
   }
 
+  /* What this TV actually has: a tile with no match is left out, but a
+     keyAction tile (Live TV) is a source, not an installed app, and stays. */
+  function visibleApps() {
+    return (cfg.apps || []).filter(function (app) {
+      return app.keyAction || !appsKnown || app.found;
+    });
+  }
+
   function buildDock() {
     var dock = $("dock");
     dock.innerHTML = "";
-    (cfg.apps || []).forEach(function (app) {
+    visibleApps().forEach(function (app) {
       if (app.divider) {
         var d = document.createElement("span");
         d.className = "divider";
@@ -283,9 +762,13 @@
       b.type = "button";
       b.className = "tile";
       b.setAttribute("aria-label", app.label);
-      b.innerHTML = markFor(app);
+      // The name shows under the focused tile only, as on tvOS (style.css .name).
+      b.innerHTML = markFor(app) + '<span class="name">' + app.label + "</span>";
       b.addEventListener("click", function () { launch(app); });
-      b.addEventListener("focus", function () { spot(b); });
+      b.addEventListener("focus", function () { if (b.className.indexOf("focused") < 0) { spot(b); } });
+      // Left to right, half a beat apart, after the glass itself has risen.
+      b.className = "tile enter";
+      b.style.webkitAnimationDelay = b.style.animationDelay = (160 + dock.children.length * 20) + "ms";
       dock.appendChild(b);
     });
   }
@@ -293,7 +776,7 @@
   function buildGrid() {
     var grid = $("appsGrid");
     grid.innerHTML = "";
-    (cfg.apps || []).forEach(function (app) {
+    visibleApps().forEach(function (app) {
       var c = document.createElement("button");
       c.type = "button";
       c.className = "card";
@@ -312,27 +795,104 @@
 
   /* The TV sets the spotlight from the remote, so do not rely on :focus alone:
      an inactive browser window can leave :focus unmatched. */
-  function spot(element) {
+  /* dir: "l" or "r" when the cursor arrived sideways, so the tile leans the way it
+     travelled and levels out (style.css .lean-l / .lean-r). */
+  function spot(element, dir) {
     Array.prototype.forEach.call(document.querySelectorAll(".tile.focused"), function (t) {
       t.className = "tile";
     });
-    if (element) { element.className = "tile focused"; }
+    if (element) { element.className = "tile focused" + (dir ? " lean-" + dir : ""); }
   }
 
-  function focusTile(index) {
+  function focusTile(index, dir) {
     var all = tiles();
     if (!all.length) { return; }
     tileIndex = (index + all.length) % all.length;
-    spot(all[tileIndex]);
+    spot(all[tileIndex], dir);
     all[tileIndex].focus();
   }
 
   /* ---------- actions ---------- */
 
+  function normal(s) {
+    return String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  }
+
+  /* Tizen knows which apps are installed on this set, so the dock matches them by
+     name instead of relying on ids copied from another region's TV (a Tizen id is
+     region- and firmware-specific). A match is cached; a failed launch drops it. */
+  function resolveApps(done) {
+    var apps = cfg.apps || [];
+    if (!(window.tizen && window.tizen.application && window.tizen.application.getAppsInfo)) {
+      done();
+      return;
+    }
+    try {
+      window.tizen.application.getAppsInfo(function (list) {
+        // An empty list is far more likely to be a firmware quirk than a TV
+        // with no apps at all; in that case keep showing the configured dock.
+        if (list && list.length) {
+          match(apps, list);
+          appsKnown = true;
+        }
+        done();
+      }, function () { done(); });
+    } catch (e) {
+      done();
+    }
+  }
+
+  /* Names first, cached ids second, and a cached id only survives if the TV
+     still reports it: an uninstalled app should lose its tile, not keep it
+     until someone taps a dead button. */
+  function match(apps, list) {
+    var ids = {};
+    var byName = {};
+
+    list.forEach(function (item) {
+      if (!item || !item.id) { return; }
+      ids[item.id] = true;
+      var names = [item.name].concat(item.names || []);
+      names.forEach(function (name) {
+        var key = normal(name);
+        if (key && !byName[key]) { byName[key] = item; }
+      });
+    });
+
+    apps.forEach(function (app) {
+      if (app.keyAction) { app.found = true; return; }
+
+      var saved = stored("tvh.id." + app.key);
+      if (saved) {
+        if (ids[saved]) { app.id = saved; app.found = true; return; }
+        try { localStorage.removeItem("tvh.id." + app.key); } catch (e) { /* private mode */ }
+      }
+
+      if (app.id) {
+        app.found = !!ids[app.id];
+        return;
+      }
+
+      var want = (app.names || [app.label]).map(normal);
+      var hit = null;
+      for (var i = 0; i < want.length && !hit; i++) {
+        if (byName[want[i]]) { hit = byName[want[i]]; }
+      }
+
+      if (hit) {
+        app.id = hit.id;
+        app.found = true;
+        store("tvh.id." + app.key, hit.id);
+      } else {
+        app.found = false;
+      }
+    });
+  }
+
   function launch(app) {
-    if (app.keyAction) { sendKey(app.keyAction); return; }
+    if (app.keyAction) { sendKey(app); return; }
     if (!app.id) {
-      toast("No Tizen app id for " + app.label + " yet — run: python tools/tizen.py apps");
+      toast(app.label + " is not on this TV, or Tizen did not report it");
       return;
     }
     openApp(app);
@@ -342,6 +902,8 @@
     if (window.tizen && window.tizen.application && window.tizen.application.launch) {
       try {
         window.tizen.application.launch(app.id, function () {}, function (err) {
+          try { localStorage.removeItem("tvh.id." + app.key); } catch (e) { /* private mode */ }
+          app.id = "";
           toast("Could not open " + app.label + ": " + (err && err.message ? err.message : "failed"));
         });
       } catch (e) {
@@ -349,17 +911,21 @@
       }
       return;
     }
-    toast(app.label + " → app id " + app.id + " (needs the Tizen runtime)");
+    toast(app.label + " → " + app.id + " (needs the Tizen runtime)");
   }
 
-  function sendKey(key) {
+  function sendKey(app) {
+    var key = app.keyAction;
     if (!cfg.controlUrl) {
-      toast("Live TV sends the " + key + " key, which needs controlUrl in config.js");
+      toast(app.label + " sends the " + key + " key, which needs controlUrl in config.js");
       return;
     }
     var url = cfg.controlUrl + (cfg.controlUrl.indexOf("?") < 0 ? "?" : "&") + "key=" + encodeURIComponent(key);
     fetch(url, { method: "POST" })
-      .then(function (r) { toast(r && r.ok ? "Sent " + key : "Control URL returned an error"); })
+      .then(function (r) {
+        if (!r || !r.ok) { toast("Control URL returned an error"); return; }
+        toast("Switching to " + app.label);
+      })
       .catch(function () { toast("Could not reach the control URL"); });
   }
 
@@ -367,16 +933,31 @@
 
   function openSheet(el) {
     lastFocus = document.activeElement;
-    [$("appsSheet"), $("settingsSheet")].forEach(function (s) { s.className = "sheet"; });
-    el.className = "sheet open";
+    [$("appsSheet"), $("settingsSheet"), $("haSheet")].forEach(function (s) { s.classList.remove("open"); });
+    if (el === $("haSheet")) { renderHa(lastSnap); }
+    el.classList.add("open");
     sheet = el;
     var first = el.querySelector("button");
     if (first) { first.focus(); }
   }
 
+  /* Arrows inside a sheet. The apps grid moves by its own column count; the settings
+     rows are a single column, so left and right do nothing there. */
+  function moveInSheet(k) {
+    var items = Array.prototype.slice.call(sheet.querySelectorAll("button"));
+    if (!items.length) { return; }
+    var i = items.indexOf(document.activeElement);
+    if (i < 0) { items[0].focus(); return; }
+    var cols = sheet === $("appsSheet") ? 6 : 1;
+    var step = k === 37 ? -1 : k === 39 ? 1 : k === 38 ? -cols : cols;
+    if (cols === 1 && (k === 37 || k === 39)) { return; }
+    var n = i + step;
+    if (n >= 0 && n < items.length) { items[n].focus(); }
+  }
+
   function closeSheet() {
     if (!sheet) { return; }
-    sheet.className = "sheet";
+    sheet.classList.remove("open");
     sheet = null;
     if (lastFocus && lastFocus.focus) { lastFocus.focus(); } else { focusTile(tileIndex); }
   }
@@ -406,18 +987,33 @@
 
     fit();
     window.addEventListener("resize", fit);
+    window.addEventListener("orientationchange", fit);
 
     applyWall(0);
     setRotation(rotate);
     setSwitch($("toggleWall"), rotate);
 
     tick();
-    setInterval(tick, 1000);
+    // The panel (and some TV firmware) can change the viewport without firing resize,
+    // so re-fit alongside the clock rather than trusting the event alone.
+    setInterval(function () { tick(); fit(); }, 1000);
 
-    buildDock();
-    buildGrid();
+    // Ask the TV which apps it has before drawing the dock. In a browser this
+    // falls straight through and the tiles simply cannot launch.
+    resolveApps(function () {
+      buildDock();
+      buildGrid();
+      focusTile(0);
+    });
     load();
-    setInterval(load, Math.max(15, cfg.refreshSeconds || 60) * 1000);
+    setInterval(load, Math.max(15, cfg.refreshSeconds || 15) * 1000);
+
+    loadCards();
+    setInterval(loadCards, 60000);
+    setInterval(function () { if (decks[0]) { decks[0].turn(); } }, DECK_EVERY);
+    setTimeout(function () {
+      setInterval(function () { if (decks[1]) { decks[1].turn(); } }, DECK_EVERY);
+    }, DECK_EVERY / 2);
 
     setSwitch($("toggle24"), !hour12);
 
@@ -443,6 +1039,8 @@
 
     $("allAppsBtn").addEventListener("click", function () { openSheet($("appsSheet")); });
     $("settingsBtn").addEventListener("click", function () { openSheet($("settingsSheet")); });
+    $("allAppsBtn").addEventListener("focus", function () { spot(null); });
+    $("settingsBtn").addEventListener("focus", function () { spot(null); });
 
     $("appsSheet").addEventListener("click", function (e) { if (e.target === this) { closeSheet(); } });
     $("settingsSheet").addEventListener("click", function (e) { if (e.target === this) { closeSheet(); } });
@@ -451,28 +1049,61 @@
       var k = e.keyCode;
 
       if (sheet) {
-        if (k === 27 || k === 8 || k === 461) {
+        // 10009 is the Samsung remote's Back; the others are keyboards and other remotes.
+        if (k === 27 || k === 8 || k === 461 || k === 10009) {
           e.preventDefault();
           closeSheet();
+        } else if (k >= 37 && k <= 40) {
+          // The TV's browser has no spatial navigation: move between the sheet's buttons here.
+          e.preventDefault();
+          moveInSheet(k);
         }
         return;
       }
 
-      if (k === 37 || k === 39) {
+      var top = [$("allAppsBtn"), $("settingsBtn")];
+      var t = top.indexOf(document.activeElement);
+      var di = deckEls().indexOf(document.activeElement);
+      var onBlock = document.activeElement === $("block");
+      if (onBlock) {
+        // The clock block: OK opens the detail, right goes to the buttons, down to the cards.
+        if (k === 13) { e.preventDefault(); openSheet($("haSheet")); }
+        else if (k === 39) { e.preventDefault(); $("allAppsBtn").focus(); }
+        else if (k === 40) {
+          e.preventDefault();
+          if (decks.length) { decks[0].el.focus(); } else { focusTile(tileIndex); }
+        }
+        return;
+      }
+      if (t === 0 && k === 37) {
+        e.preventDefault();
+        $("block").focus();
+      } else if (di >= 0 && (k === 37 || k === 39)) {
+        e.preventDefault();
+        var dn = di + (k === 39 ? 1 : -1);
+        if (dn >= 0 && dn < decks.length) { decks[dn].el.focus(); }
+      } else if (t >= 0 && (k === 37 || k === 39)) {
+        // Left and right move between the round buttons; they used to drop into the dock.
+        e.preventDefault();
+        top[Math.max(0, Math.min(top.length - 1, t + (k === 39 ? 1 : -1)))].focus();
+      } else if (k === 37 || k === 39) {
         e.preventDefault();
         var i = tiles().indexOf(document.activeElement);
-        if (k === 37) { focusTile(i <= 0 ? tiles().length - 1 : i - 1); }
-        else { focusTile(i < 0 ? 0 : i + 1); }
+        if (k === 37) { focusTile(i <= 0 ? tiles().length - 1 : i - 1, "l"); }
+        else { focusTile(i < 0 ? 0 : i + 1, "r"); }
       } else if (k === 38) {
         e.preventDefault();
+        // Up from the dock lands on the cards, up again on the round buttons.
+        var onTile = tiles().indexOf(document.activeElement) >= 0;
         spot(null);
-        $("allAppsBtn").focus();
+        if (onTile && decks.length) { decks[0].el.focus(); } else { $("allAppsBtn").focus(); }
       } else if (k === 40) {
         e.preventDefault();
-        if (document.activeElement === $("allAppsBtn") || document.activeElement === $("settingsBtn")) {
-          focusTile(tileIndex);
+        var fromTop = document.activeElement === $("allAppsBtn") || document.activeElement === $("settingsBtn");
+        if (fromTop && decks.length) {
+          decks[0].el.focus();
         } else {
-          focusTile(0);
+          focusTile(fromTop || deckEls().indexOf(document.activeElement) >= 0 ? tileIndex : 0);
         }
       }
     });
@@ -481,6 +1112,10 @@
       if (!document.hidden) { tick(); }
     });
   }
+
+  /* Console hook: feed it a snapshot to see how the screen lays it out.
+     window.TVH_debug.render({ temp: 24, inside: 21.6 }) */
+  window.TVH_debug = { render: render, load: load, loadCards: loadCards };
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);

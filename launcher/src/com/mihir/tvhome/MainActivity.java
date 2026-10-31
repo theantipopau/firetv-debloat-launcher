@@ -1,6 +1,10 @@
 package com.mihir.tvhome;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
 import android.animation.ArgbEvaluator;
+import android.animation.ObjectAnimator;
+import android.animation.PropertyValuesHolder;
 import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.BroadcastReceiver;
@@ -101,17 +105,24 @@ public class MainActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable rotateWallpaper = this::nextWallpaper;
     static final long WALLPAPER_INTERVAL_MS = 10 * 60 * 1000;
-    private TextView clock, greet, dateLine, appsLabel, statusWeather, statusBattery, statusAc, statusBins;
+    private TextView clock, greet, dateLine, appsLabel, statusWeather, statusBattery, statusSolar, statusAc, statusBins;
     private LinearLayout statusBlock, statusLineBox;
     private View statusWeatherRow, statusBatteryRow, statusAcRow, statusBinsRow;
+    private LinearLayout statusSolarGroup;
     private ImageView statusBatteryIcon;
     private View topActions;
     private View actionApps, actionSettings;
     /** Wi-Fi or Ethernet, back where it always was: icon at rest, the network's name on focus. */
     private TextView netChip;
+    /** The glass colour, tinted by the wallpaper: the dock, the cards and the round buttons share it. */
+    private int glassColor = HomeTheme.GLASS;
+    private final List<GradientDrawable> glasses = new ArrayList<>();
+    private final List<TextView> chips = new ArrayList<>();
     /** The dock as drawn, so the cover can paint the same icons without a package lookup. */
     static volatile List<App> dockSnapshot;
     private String netLabel = "Wi-Fi";
+    /** Optional `eth_mbps` from the HA snapshot: only used when the TV cannot read its own rate. */
+    private String haEthMbps = "";
     private String cwSig = "";
     private ValueAnimator scrollGlide;
     private boolean haShown;
@@ -132,8 +143,8 @@ public class MainActivity extends Activity {
     /** The snapshot on screen; the settings sheet re-applies it when a preference changes. */
     private JSONObject lastHa;
     private Frost haFrost;
-    private TextView haBig, haSub, haWeather, haSun, haSolar, haRain, haNext, haPeople, haPlex;
-    private View haWeatherRow, haSunRow, haSolarRow, haRainRow, haNextRow, haPeopleRow, haPlexRow;
+    private TextView haBig, haSub, haWeather, haSun, haSolar, haRain, haNext, haPeople;
+    private View haWeatherRow, haSunRow, haSolarRow, haRainRow, haNextRow, haPeopleRow;
     private ImageView haSolarIcon;
     // Six tiles in two rows of three: solar, battery, house load / inside, AC, bins.
     private static final String[] HA_KEYS = {"solar", "battery", "house", "inside", "ac", "bins"};
@@ -451,24 +462,21 @@ public class MainActivity extends Activity {
         statusBlock.setId(View.generateViewId());
         statusBlock.setClipChildren(false);
         statusBlock.setPadding(dp(HomeTheme.BLOCK_PAD_H), dp(HomeTheme.BLOCK_PAD_V),
-                dp(HomeTheme.BLOCK_PAD_H), dp(HomeTheme.BLOCK_PAD_V));
+                dp(HomeTheme.BLOCK_PAD_H), dp(HomeTheme.BLOCK_PAD_BOTTOM));
         final GradientDrawable bg = new GradientDrawable();
         bg.setCornerRadius(dp(HomeTheme.BLOCK_RADIUS));
         bg.setColor(Color.TRANSPARENT);
-        // Inset layer, not the view's own box: the highlight has to stop a full gutter above the
-        // cards, and padding cannot go negative without also moving the last line of text.
-        android.graphics.drawable.LayerDrawable bgLayer =
-                new android.graphics.drawable.LayerDrawable(
-                        new android.graphics.drawable.Drawable[]{bg});
-        bgLayer.setLayerInset(0, 0, 0, 0, dp(HomeTheme.BLOCK_INSET_BOTTOM));
-        statusBlock.setBackground(bgLayer);
+        // The highlight is the block's own box, padding included: an inset edge used to cross the
+        // last line whenever a line was hidden, so the glass ended through "Air con off".
+        statusBlock.setBackground(bg);
         // OK on the block opens the detail sheet; the block is the only way in.
         statusBlock.setOnClickListener(v -> openHa());
         statusBlock.setOnFocusChangeListener((v, has) ->
                 bg.setColor(has ? 0x14FFFFFF : Color.TRANSPARENT));
 
         // The greeting sits above the clock, quiet enough to read as a caption on the wallpaper.
-        greet = text(20, "sans-serif-medium", 0xD9FFFFFF);
+        // 18sp at 70%: a caption to the clock, so the time is plainly the first thing read.
+        greet = text(18, "sans-serif-medium", HomeTheme.TEXT_70);
         greet.setSingleLine(true);
         greet.setEllipsize(android.text.TextUtils.TruncateAt.END);
         greet.setIncludeFontPadding(false);
@@ -476,6 +484,7 @@ public class MainActivity extends Activity {
         statusBlock.addView(greet, llp(-1, -2, 0, 0, 0, dp(HomeTheme.GREET_GAP)));
 
         clock = text(56, "sans-serif-light", Color.WHITE);
+        clock.setLetterSpacing(HomeTheme.CLOCK_TRACKING);
         Typo.numbers(clock);
         clock.setIncludeFontPadding(false);
         clock.setShadowLayer(dp(8), 0, dp(1), 0x80000000);
@@ -498,6 +507,23 @@ public class MainActivity extends Activity {
         statusBattery = lineText();
         statusBatteryRow = statusLine(R.drawable.ic_battery, statusBattery);
         statusBatteryIcon = (ImageView) ((LinearLayout) statusBatteryRow).getChildAt(0);
+        // Producing solar joins the battery's own line: the two numbers belong together, and the
+        // block has no room for a fifth row. Hidden at night, so the line is just the battery.
+        statusSolar = lineText();
+        statusSolarGroup = new LinearLayout(this);
+        statusSolarGroup.setOrientation(LinearLayout.HORIZONTAL);
+        statusSolarGroup.setGravity(Gravity.CENTER_VERTICAL);
+        statusSolarGroup.setVisibility(View.GONE);
+        ImageView solarMark = new ImageView(this);
+        solarMark.setImageResource(R.drawable.ic_sun);
+        solarMark.setImageTintList(android.content.res.ColorStateList.valueOf(HomeTheme.TEXT_70));
+        LinearLayout.LayoutParams smp = new LinearLayout.LayoutParams(
+                dp(HomeTheme.LINE_ICON), dp(HomeTheme.LINE_ICON));
+        smp.leftMargin = dp(14);
+        smp.rightMargin = dp(HomeTheme.LINE_ICON_GAP);
+        statusSolarGroup.addView(solarMark, smp);
+        statusSolarGroup.addView(statusSolar, new LinearLayout.LayoutParams(-2, -2));
+        ((LinearLayout) statusBatteryRow).addView(statusSolarGroup, new LinearLayout.LayoutParams(-2, -2));
         statusAc = lineText();
         statusAcRow = statusLine(R.drawable.ic_ac, statusAc);
         statusBins = lineText();
@@ -556,12 +582,12 @@ public class MainActivity extends Activity {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setClipChildren(false);
-        netChip = chipAction(isEthernet() ? R.drawable.ic_ethernet : R.drawable.ic_wifi,
-                v -> openWifiSettings());
-        row.addView(netChip, llp(-2, -2, 0, 0, dp(HomeTheme.ACTION_GAP), 0));
-        actionApps = action(R.drawable.ic_apps, "All apps", v -> showAllApps());
-        row.addView(actionApps, llp(-2, -2, 0, 0, dp(HomeTheme.ACTION_GAP), 0));
-        actionSettings = action(R.drawable.ic_settings, "Settings", v -> showSettings());
+        netChip = chip(isEthernet() ? R.drawable.ic_ethernet : R.drawable.ic_wifi,
+                () -> netLabel, v -> openWifiSettings());
+        row.addView(netChip, llp(-2, dp(HomeTheme.ACTION_SIZE), 0, 0, dp(HomeTheme.ACTION_GAP), 0));
+        actionApps = chip(R.drawable.ic_apps, () -> "All apps", v -> showAllApps());
+        row.addView(actionApps, llp(-2, dp(HomeTheme.ACTION_SIZE), 0, 0, dp(HomeTheme.ACTION_GAP), 0));
+        actionSettings = chip(R.drawable.ic_settings, () -> "Settings", v -> showSettings());
         actionSettings.setOnLongClickListener(v -> {
             getSharedPreferences("launcher", MODE_PRIVATE).edit()
                     .remove("hidden").remove("dock_order").apply();
@@ -570,77 +596,52 @@ public class MainActivity extends Activity {
             buildApps();
             return true;
         });
-        row.addView(actionSettings);
+        row.addView(actionSettings, llp(-2, dp(HomeTheme.ACTION_SIZE), 0, 0, 0, 0));
         return row;
     }
 
-    /** A word, not an icon: the bar keeps two obvious doors instead of five symbols. */
-    private TextView action(int iconRes, String label, View.OnClickListener click) {
-        TextView b = text(18, "sans-serif-medium", 0xE6FFFFFF);
-        b.setText(label);
-        b.setGravity(Gravity.CENTER);
-        b.setPadding(dp(14), dp(10), dp(16), dp(10));
-        b.setFocusable(true);
-        b.setId(View.generateViewId());
-        Drawable ic = getDrawable(iconRes);
-        ic.setBounds(0, 0, dp(20), dp(20));
-        b.setCompoundDrawables(ic, null, null, null);
-        b.setCompoundDrawablePadding(dp(10));
-        b.setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(0xE6FFFFFF));
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(dp(22));
-        bg.setColor(Color.TRANSPARENT);
-        b.setBackground(bg);
-        b.setOnClickListener(click);
-        b.setOnFocusChangeListener((v, has) -> {
-            bg.setColor(has ? 0x1FFFFFFF : Color.TRANSPARENT);
-            b.setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(
-                    has ? 0xFFFFFFFF : 0xE6FFFFFF));
-            b.setTextColor(has ? Color.WHITE : 0xE6FFFFFF);
-            v.animate().scaleX(has ? 1.04f : 1f).scaleY(has ? 1.04f : 1f)
-                    .setDuration(has ? 160 : 200).start();
-            if (has) lastFocusedId = v.getId();
-        });
-        return b;
-    }
-
     /**
-     * An icon-only chip: its label appears while it has focus, so the bar stays quiet at rest but
-     * a focused chip still says what it does - and the network one says the network's name.
+     * The top-right controls, drawn the way tvOS draws its own: an icon in a 44dp glass circle at
+     * rest, and under the cursor a white capsule with dark ink that says what it does. The network
+     * chip's label is the network itself.
      */
-    private TextView chipAction(int iconRes, View.OnClickListener click) {
-        final TextView b = text(18, "sans-serif-medium", 0xE6FFFFFF);
+    private TextView chip(int iconRes, java.util.function.Supplier<String> label, View.OnClickListener click) {
+        final TextView b = text(18, "sans-serif-medium", Color.WHITE);
         b.setGravity(Gravity.CENTER);
-        b.setPadding(dp(12), dp(10), dp(14), dp(10));
+        b.setSingleLine(true);
+        b.setMinWidth(dp(HomeTheme.ACTION_SIZE));
         b.setFocusable(true);
         b.setId(View.generateViewId());
-        b.setCompoundDrawablePadding(dp(10));
         b.setTag(iconRes);
-        final GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(dp(22));
-        bg.setColor(Color.TRANSPARENT);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(dp(HomeTheme.ACTION_SIZE / 2));
+        bg.setStroke(Math.max(1, Math.round(getResources().getDisplayMetrics().density)), HomeTheme.GLASS_EDGE);
         b.setBackground(bg);
-        paintChip(b, iconRes, false, false);
+        chips.add(b);
+        paintChip(b, iconRes, false, "");
         b.setOnClickListener(click);
         b.setOnFocusChangeListener((v, has) -> {
-            bg.setColor(has ? 0x1FFFFFFF : Color.TRANSPARENT);
-            paintChip(b, (Integer) v.getTag(), has, has);
-            v.animate().scaleX(has ? 1.04f : 1f).scaleY(has ? 1.04f : 1f)
-                    .setDuration(has ? 160 : 200).start();
+            paintChip(b, (Integer) v.getTag(), has, label.get());
+            v.animate().scaleX(has ? 1.06f : 1f).scaleY(has ? 1.06f : 1f)
+                    .setInterpolator(has ? HomeTheme.settle() : HomeTheme.ease())
+                    .setDuration(HomeTheme.MS_FOCUS).start();
             if (has) lastFocusedId = v.getId();
         });
         return b;
     }
 
-    /** Draws the chip: its mark, and the label only while focused (or pinned by the caller). */
-    private void paintChip(TextView chip, int iconRes, boolean focused, boolean withLabel) {
-        Drawable ic = getDrawable(iconRes);
+    private void paintChip(TextView chip, int iconRes, boolean focused, String label) {
+        Drawable ic = getDrawable(iconRes).mutate();
         ic.setBounds(0, 0, dp(20), dp(20));
         chip.setCompoundDrawables(ic, null, null, null);
-        chip.setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(
-                focused ? 0xFFFFFFFF : 0xE6FFFFFF));
-        chip.setTextColor(focused ? Color.WHITE : 0xE6FFFFFF);
-        chip.setText(withLabel ? netLabel : "");
+        int ink = focused ? 0xFF111114 : 0xF2FFFFFF;
+        chip.setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(ink));
+        chip.setTextColor(ink);
+        String text = focused && label != null ? label : "";
+        chip.setText(text);
+        chip.setCompoundDrawablePadding(text.isEmpty() ? 0 : dp(8));
+        chip.setPadding(dp(12), 0, dp(text.isEmpty() ? 12 : 18), 0);
+        ((GradientDrawable) chip.getBackground()).setColor(focused ? 0xF2FFFFFF : glassColor);
     }
 
     // ---------------------------------------------------------------- Now Showing
@@ -649,18 +650,18 @@ public class MainActivity extends Activity {
     private static final class NowPane {
         FrameLayout root;
         ImageView art, badge;
-        View dot;
+        View dot, scrim, words;
         TextView source, title, meta;
     }
 
     private static final long NOW_EVERY_MS = 10000;
     /** One origin for both cards' timers, so their slots stay half a beat apart forever. */
     private static final long NOW_EPOCH = SystemClock.elapsedRealtime();
-    private static final long NOW_FADE_MS = 400;
+    private static final long NOW_FADE_MS = HomeTheme.MS_FADE;
     /** How many frames each card rotates: the guide's next few live events, Plex's newest few titles. */
     private static final int LIVE_MAX = 10, PLEX_MAX = 10;
-    /** Card art is 120x68dp, so decoding a 1080p still would only cost memory. */
-    private static final long NOW_PIXELS = 160_000;
+    /** Card art fills the 425x96dp card; the feed's 720x405 stills fit whole, a 1080p one is cut down. */
+    private static final long NOW_PIXELS = 300_000;
 
     /**
      * One rotating card. Home shows two of them side by side - live on the left, new on Plex on the
@@ -744,20 +745,25 @@ public class MainActivity extends Activity {
             Feed.Item it = items.get(i);
             Bitmap logo = logos.get(i), img = images.get(i);
             Bitmap badge = i < badges.size() ? badges.get(i) : null;
-            Bitmap art = logo != null ? logo : img;
-            if (art == null) {
-                p.art.setImageDrawable(null);
-            } else {
-                p.art.setImageBitmap(art);
-                // A transparent channel mark is not a still: contain it, never crop it.
-                boolean mark = logo != null || art.hasAlpha();
-                p.art.setScaleType(mark ? ImageView.ScaleType.FIT_CENTER : ImageView.ScaleType.CENTER_CROP);
-                p.art.setPadding(mark ? dp(16) : 0, mark ? dp(8) : 0, mark ? dp(16) : 0, mark ? dp(8) : 0);
-            }
+            // A still fills the card; a logo or a transparent mark cannot be cropped, so it is
+            // contained at the card's right end, clear of the words, on the plain glass.
+            boolean still = img != null && !it.artfit && !img.hasAlpha();
+            Bitmap art = still ? img : (logo != null ? logo : img);
+            p.art.setImageBitmap(art);
+            p.art.setScaleType(still ? ImageView.ScaleType.CENTER_CROP : ImageView.ScaleType.FIT_CENTER);
+            int markLeft = dp(HomeTheme.NOW_W - HomeTheme.NOW_MARK_W);
+            p.art.setPadding(still ? 0 : markLeft, still ? 0 : dp(14), still ? 0 : dp(16), still ? 0 : dp(14));
+            p.scrim.setVisibility(still ? View.VISIBLE : View.GONE);
+            // Over a still the words may run on; beside a contained mark they stop short of it.
+            FrameLayout.LayoutParams wlp = (FrameLayout.LayoutParams) p.words.getLayoutParams();
+            wlp.rightMargin = dp(still ? HomeTheme.NOW_PAD : HomeTheme.NOW_MARK_W);
+            p.words.setLayoutParams(wlp);
             p.title.setText(it.title);
             boolean isLive = it.live();
-            p.source.setText((isLive ? "Live now on " : "Now Showing on ")
-                    + (it.app.isEmpty() ? (isLive ? "TiviMate" : "Plex") : it.app));
+            // No brand on the eyebrow: the dock calls that app Live TV now, and "on TiviMate"
+            // only brings back the name that confused the point of it.
+            p.source.setText(isLive ? "Live now"
+                    : "Now Showing on " + (it.app.isEmpty() ? "Plex" : it.app));
             android.graphics.drawable.Drawable dbg = p.dot.getBackground();
             if (dbg instanceof GradientDrawable)
                 ((GradientDrawable) dbg).setColor(isLive ? 0xFFFF453A : 0xFFE5A00D);
@@ -793,8 +799,9 @@ public class MainActivity extends Activity {
             p.root.animate().cancel();
             out.root.animate().cancel();
             p.root.setAlpha(0f);
-            p.root.animate().alpha(1f).setDuration(NOW_FADE_MS).start();
-            out.root.animate().alpha(0f).setDuration(NOW_FADE_MS).start();
+            // On a layer: a full-bleed still fading over glass is otherwise redrawn every frame.
+            p.root.animate().alpha(1f).setDuration(NOW_FADE_MS).withLayer().start();
+            out.root.animate().alpha(0f).setDuration(NOW_FADE_MS).withLayer().start();
             front = back;
             cur = i;
         }
@@ -834,14 +841,8 @@ public class MainActivity extends Activity {
         card.setVisibility(View.GONE);
         final GradientDrawable glass = HomeTheme.glassPill(HomeTheme.NOW_RADIUS,
                 getResources().getDisplayMetrics().density);
+        glasses.add(glass);
         card.setBackground(glass);
-
-        final GradientDrawable halo = new GradientDrawable();
-        halo.setCornerRadius(dp(HomeTheme.NOW_RADIUS));
-        halo.setStroke(dp(2), 0x00FFFFFF);
-        View rim = new View(this);
-        rim.setBackground(halo);
-        card.addView(rim, new FrameLayout.LayoutParams(-1, -1));
 
         for (int i = 0; i < 2; i++) {
             NowPane p = nowPane();
@@ -850,12 +851,20 @@ public class MainActivity extends Activity {
             card.addView(p.root, new FrameLayout.LayoutParams(-1, -1));
         }
 
+        // Over the panes, not under them: the artwork fills the card and would hide it.
+        final GradientDrawable halo = new GradientDrawable();
+        halo.setCornerRadius(dp(HomeTheme.NOW_RADIUS));
+        halo.setStroke(dp(2), 0x00FFFFFF);
+        View rim = new View(this);
+        rim.setBackground(halo);
+        card.addView(rim, new FrameLayout.LayoutParams(-1, -1));
+
         card.setOnClickListener(v -> deck.open());
         card.setOnFocusChangeListener((v, has) -> {
             // Highlighted in place: the rim and a lighter glass, no size change, so the 14dp gutter
             // between the cards (and down to the dock) is the same gap, focused or not.
             halo.setStroke(dp(2), has ? 0xB3FFFFFF : 0x00FFFFFF);
-            glass.setColor(has ? 0x7A101014 : HomeTheme.GLASS);
+            glass.setColor(has ? 0x7A101014 : glassColor);
             // Focus is the pause: OK must open exactly what is on screen.
             handler.removeCallbacks(deck.tick);
             if (!has) deck.start();   // back on its own slot, not on whichever moment focus left
@@ -863,29 +872,30 @@ public class MainActivity extends Activity {
         return card;
     }
 
-    /** Artwork left, title and one meta line right: the whole card inside 96dp. */
+    /** Artwork across the whole card, the words over its darkened left: Apple TV's Up Next. */
     private NowPane nowPane() {
         NowPane p = new NowPane();
         FrameLayout root = new FrameLayout(this);
         p.root = root;
 
         FrameLayout artFrame = new FrameLayout(this);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(dp(HomeTheme.NOW_ART_RADIUS));
-        bg.setColor(0xFF14161C);
-        artFrame.setBackground(bg);
         artFrame.setClipToOutline(true);
         artFrame.setOutlineProvider(new ViewOutlineProvider() {
             @Override public void getOutline(View v, Outline o) {
-                o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), dp(HomeTheme.NOW_ART_RADIUS));
+                o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), dp(HomeTheme.NOW_RADIUS));
             }
         });
         ImageView art = new ImageView(this);
         art.setScaleType(ImageView.ScaleType.CENTER_CROP);
         artFrame.addView(art, new FrameLayout.LayoutParams(-1, -1));
-        root.addView(artFrame, lp(dp(HomeTheme.NOW_ART_W), dp(HomeTheme.NOW_ART_H),
-                Gravity.CENTER_VERTICAL, dp(HomeTheme.NOW_PAD), 0, 0, 0));
+        // Dark under the words, clear by two thirds across, so the still keeps its own light.
+        View scrim = new View(this);
+        scrim.setBackground(HomeTheme.horizontal(new int[]{0xE6000000, 0x8C000000, 0x00000000}));
+        scrim.setVisibility(View.GONE);
+        artFrame.addView(scrim, new FrameLayout.LayoutParams(-1, -1));
+        root.addView(artFrame, new FrameLayout.LayoutParams(-1, -1));
         p.art = art;
+        p.scrim = scrim;
 
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
@@ -912,6 +922,7 @@ public class MainActivity extends Activity {
         col.addView(eyebrow, new LinearLayout.LayoutParams(-1, -2));
 
         TextView title = text(20, "sans-serif-semibold", Color.WHITE);
+        title.setLetterSpacing(HomeTheme.TITLE_TRACKING);
         title.setSingleLine(true);
         title.setEllipsize(android.text.TextUtils.TruncateAt.END);
         col.addView(title, llp(-1, -2, 0, dp(3), 0, 0));
@@ -935,8 +946,8 @@ public class MainActivity extends Activity {
         metaRow.addView(meta, new LinearLayout.LayoutParams(0, -2, 1f));
         col.addView(metaRow, llp(-1, -2, 0, dp(4), 0, 0));
         root.addView(col, lp(-1, -2, Gravity.CENTER_VERTICAL,
-                dp(HomeTheme.NOW_PAD + HomeTheme.NOW_ART_W + HomeTheme.NOW_TEXT_GAP), 0,
-                dp(HomeTheme.NOW_PAD), 0));
+                dp(HomeTheme.NOW_PAD), 0, dp(HomeTheme.NOW_MARK_W), 0));
+        p.words = col;
         p.dot = dot;
         p.badge = badge;
         p.source = source;
@@ -1139,7 +1150,7 @@ public class MainActivity extends Activity {
 
     /** Fade both cards together: they are a row, not two independent things. */
     private void fadeCards(float alpha, long ms) {
-        for (Deck d : decks()) if (d != null) d.root.animate().alpha(alpha).setDuration(ms).start();
+        for (Deck d : decks()) if (d != null) d.root.animate().alpha(alpha).setDuration(ms).withLayer().start();
     }
 
     private void hideNow() {
@@ -1168,8 +1179,10 @@ public class MainActivity extends Activity {
         // is 8 less: the glass reads as 14dp of air while the pill stays 92dp tall.
         dockPillRow.setPadding(dp(HomeTheme.DOCK_PAD), dp(HomeTheme.DOCK_PAD_TOP),
                 dp(HomeTheme.DOCK_PAD), dp(HomeTheme.DOCK_PAD_BOTTOM));
-        dockPillRow.setBackground(HomeTheme.glassPill(HomeTheme.DOCK_PILL_RADIUS,
-                getResources().getDisplayMetrics().density));
+        GradientDrawable pillGlass = HomeTheme.glassPill(HomeTheme.DOCK_PILL_RADIUS,
+                getResources().getDisplayMetrics().density);
+        glasses.add(pillGlass);
+        dockPillRow.setBackground(pillGlass);
         return dockPillRow;
     }
 
@@ -1189,22 +1202,25 @@ public class MainActivity extends Activity {
         holder.setPadding(dp(6), dp(3), dp(6), dp(9));
         holder.setTag(app);
 
-        final View halo = new View(this);
-        GradientDrawable gd = new GradientDrawable();
-        gd.setGradientType(GradientDrawable.RADIAL_GRADIENT);
-        gd.setGradientRadius(dp(74));
-        gd.setGradientCenter(0.5f, 0.5f);
-        gd.setColors(new int[]{0x40FFFFFF, 0x0DFFFFFF, 0x00000000});
-        halo.setBackground(gd);
-        halo.setAlpha(0f);
-        holder.addView(halo, new FrameLayout.LayoutParams(-1, -1));
-
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
         col.setGravity(Gravity.CENTER_HORIZONTAL);
+        col.setClipChildren(false);
+        col.setClipToPadding(false);
         FrameLayout frame = new FrameLayout(this);
-        frame.addView(AppTile.dock(this, app, getResources().getDisplayMetrics().density),
-                new FrameLayout.LayoutParams(-1, -1));
+        frame.setClipChildren(false);
+        final float density = getResources().getDisplayMetrics().density;
+        // The tile carries the elevation: its rounded outline is what casts the focus shadow.
+        final ImageView shadow = AppTile.shadow(this, density, HomeTheme.DOCK_W, HomeTheme.DOCK_H,
+                HomeTheme.DOCK_ICON_RADIUS);
+        frame.addView(shadow, AppTile.shadowParams(density));
+        final FrameLayout tile = AppTile.dock(this, app, density);
+        final View sheen = AppTile.sheen(this);
+        tile.addView(sheen, new FrameLayout.LayoutParams(-1, -1));
+        frame.addView(tile, new FrameLayout.LayoutParams(-1, -1));
+        final View rim = AppTile.focusRim(this, density);
+        rim.setAlpha(0f);
+        frame.addView(rim, new FrameLayout.LayoutParams(-1, -1));
         col.addView(frame, new LinearLayout.LayoutParams(dp(HomeTheme.DOCK_W), dp(HomeTheme.DOCK_H)));
 
         TextView name = text(Typo.CAPTION, "sans-serif-medium", 0xCCFFFFFF);
@@ -1215,30 +1231,33 @@ public class MainActivity extends Activity {
         name.setGravity(Gravity.CENTER);
         name.setEllipsize(android.text.TextUtils.TruncateAt.END);
         name.setShadowLayer(dp(6), 0, dp(1), 0x99000000);
-        col.addView(name, llp(dp(HomeTheme.DOCK_W), -2, 0, dp(HomeTheme.DOCK_NAME_GAP), 0, 0));
+        name.setTextColor(Color.WHITE);
+        // tvOS names only the app under the cursor; the line keeps its height so nothing moves.
+        name.setAlpha(0f);
+        col.addView(name, llp(dp(HomeTheme.DOCK_W + 12), -2, 0, dp(HomeTheme.DOCK_NAME_GAP), 0, 0));
 
         holder.addView(col, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER));
 
         holder.setOnFocusChangeListener((v, has) -> {
-            float s = has ? HomeTheme.DOCK_FOCUS_SCALE : 1f;
-            v.animate().scaleX(s).scaleY(s)
-                    .translationY(has ? -dp(HomeTheme.DOCK_FOCUS_LIFT) : 0)
-                    .setInterpolator(new DecelerateInterpolator(1.6f))
-                    .setDuration(has ? 170 : 200).start();
-            halo.animate().alpha(has ? 1f : 0f).setDuration(has ? 180 : 240).start();
+            lift(v, has, HomeTheme.DOCK_FOCUS_SCALE);
+            shadow.animate().alpha(has ? 1f : 0f).setDuration(HomeTheme.MS_FOCUS).start();
+            rim.animate().alpha(has ? 1f : 0f).setDuration(HomeTheme.MS_FOCUS).start();
+            name.animate().alpha(has ? 1f : 0f).setDuration(HomeTheme.MS_FOCUS).start();
+            if (has) AppTile.sweep(sheen, tile.getWidth() > 0 ? tile.getWidth() : dp(HomeTheme.DOCK_W));
+            else { sheen.animate().cancel(); sheen.setAlpha(0f); }
             if (!has) return;
             lastFocusedId = v.getId();
             glideTo(0);
         });
         holder.setOnClickListener(v -> {
-            pressDip(v, 1f);
+            pressDip(v, HomeTheme.DOCK_FOCUS_SCALE);
             getSharedPreferences("launches", MODE_PRIVATE).edit()
                     .putLong(app.pkg, System.currentTimeMillis()).apply();
             boolean opened = launch(new Intent(Intent.ACTION_MAIN)
                     .addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
                     .setComponent(app.component)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED));
-            if (!opened) pressUndo(v, 1f);
+            if (!opened) pressUndo(v, HomeTheme.DOCK_FOCUS_SCALE);
         });
         holder.setOnLongClickListener(v -> { showAppMenu(v, app); return true; });
         return holder;
@@ -1305,28 +1324,28 @@ public class MainActivity extends Activity {
         cwReveal.setTranslationY(dp(36));
         cwReveal.setAlpha(0f);
         cwReveal.animate().translationY(0f).alpha(1f)
-                .setDuration(HomeTheme.CW_REVEAL_MS)
-                .setInterpolator(new DecelerateInterpolator(1.8f)).start();
+                .setDuration(HomeTheme.MS_REVEAL)
+                .setInterpolator(HomeTheme.ease()).withLayer().start();
         cwWash.setVisibility(View.VISIBLE);
-        cwWash.animate().alpha(1f).setDuration(HomeTheme.CW_REVEAL_MS).start();
+        cwWash.animate().alpha(1f).setDuration(HomeTheme.MS_REVEAL).start();
         // The row is a layer, not a neighbour: the clock and the card fade back so nothing shows
         // through the tiles.
-        if (statusBlock != null) statusBlock.animate().alpha(0.12f).setDuration(180).start();
-        if (topActions != null) topActions.animate().alpha(0.12f).setDuration(180).start();
-        fadeCards(0.12f, 180);
+        if (statusBlock != null) statusBlock.animate().alpha(0.12f).setDuration(HomeTheme.MS_REVEAL).start();
+        if (topActions != null) topActions.animate().alpha(0.12f).setDuration(HomeTheme.MS_REVEAL).start();
+        fadeCards(0.12f, HomeTheme.MS_REVEAL);
         cwCards.get(0).requestFocus();
     }
 
     private void hideContinue() {
         if (!cwOpen) return;
         cwOpen = false;
-        cwReveal.animate().translationY(dp(36)).alpha(0f).setDuration(180)
+        cwReveal.animate().translationY(dp(36)).alpha(0f).setDuration(HomeTheme.MS_REVEAL).withLayer()
                 .withEndAction(() -> { if (!cwOpen) cwReveal.setVisibility(View.GONE); }).start();
-        cwWash.animate().alpha(0f).setDuration(180)
+        cwWash.animate().alpha(0f).setDuration(HomeTheme.MS_REVEAL)
                 .withEndAction(() -> { if (!cwOpen) cwWash.setVisibility(View.GONE); }).start();
-        if (statusBlock != null) statusBlock.animate().alpha(1f).setDuration(220).start();
-        if (topActions != null) topActions.animate().alpha(1f).setDuration(220).start();
-        fadeCards(1f, 220);
+        if (statusBlock != null) statusBlock.animate().alpha(1f).setDuration(HomeTheme.MS_REVEAL).start();
+        if (topActions != null) topActions.animate().alpha(1f).setDuration(HomeTheme.MS_REVEAL).start();
+        fadeCards(1f, HomeTheme.MS_REVEAL);
     }
 
     /** Rebuilds only when the list really changed: every rebuild downloads its artwork again. */
@@ -1408,6 +1427,10 @@ public class MainActivity extends Activity {
             }
         });
         card.setBackgroundColor(0xFF14161C);
+        final float density = getResources().getDisplayMetrics().density;
+        final ImageView shadow = AppTile.shadow(this, density, HomeTheme.CW_W, HomeTheme.CW_H,
+                HomeTheme.CW_RADIUS);
+        holder.addView(shadow, AppTile.shadowParams(density));
         holder.addView(card, new FrameLayout.LayoutParams(-1, -1));
 
         int art = Cards.art(it.image, it.logo);
@@ -1491,14 +1514,19 @@ public class MainActivity extends Activity {
                     dp(HomeTheme.PROGRESS_INSET), 0, 0, dp(HomeTheme.PROGRESS_INSET)));
         }
 
+        // The dock's focus language: a light 1dp edge, a dropped shadow and one sheen across.
+        final View sheen = AppTile.sheen(this);
+        card.addView(sheen, new FrameLayout.LayoutParams(-1, -1));
         holder.setOnFocusChangeListener((v, has) -> {
-            rim.setStroke(dp(has ? 2 : 1), has ? 0xE6FFFFFF : HomeTheme.RIM);
+            rim.setStroke(dp(1), has ? HomeTheme.FOCUS_RIM : HomeTheme.RIM);
             // setScale, not animate(): inside the scroll view the property animator never produced a
             // visible scale change (the rim moved, the tile did not). Setting it is what renders.
             float s = has ? HomeTheme.CW_FOCUS_SCALE : 1f;
             v.setScaleX(s);
             v.setScaleY(s);
-            v.animate().translationZ(has ? dp(8) : 0).setDuration(has ? 170 : 200).start();
+            shadow.animate().alpha(has ? 1f : 0f).setDuration(HomeTheme.MS_FOCUS).start();
+            if (has) AppTile.sweep(sheen, card.getWidth() > 0 ? card.getWidth() : dp(HomeTheme.CW_W));
+            else { sheen.animate().cancel(); sheen.setAlpha(0f); }
             if (has) {
                 lastFocusedId = v.getId();
                 cwScroll.smoothScrollTo(Math.max(0, v.getLeft() - dp(HomeTheme.SAFE)), 0);
@@ -1619,7 +1647,7 @@ public class MainActivity extends Activity {
         hideContinue();
         settingsPage.setVisibility(View.VISIBLE);
         settingsPage.setAlpha(0f);
-        settingsPage.animate().alpha(1f).setDuration(180).start();
+        settingsPage.animate().alpha(1f).setDuration(HomeTheme.MS_REVEAL).withLayer().start();
         scroll.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
         if (!settingsRows.isEmpty()) settingsRows.get(0).requestFocus();
     }
@@ -1705,11 +1733,9 @@ public class MainActivity extends Activity {
         haPeople = text(Typo.CAPTION, "sans-serif", 0xF2FFFFFF);
         haPeopleRow = haLine(R.drawable.ic_person, haPeople, 1);
         haPanel.addView(haPeopleRow, llp(-1, -2, 0, dp(5), 0, 0));
-        // Last, and first to go if the sheet ever runs out of height: what Plex is playing is the
-        // one line nobody needs twice.
-        haPlex = text(Typo.CAPTION, "sans-serif", 0xF2FFFFFF);
-        haPlexRow = haLine(R.drawable.ic_play, haPlex, 1);
-        haPanel.addView(haPlexRow, llp(-1, -2, 0, dp(5), 0, 0));
+        // Who is home is the last line. Plex's "what is playing elsewhere" used to sit under it and
+        // pushed the sheet past the 492dp the panel has between its margins, which measured the
+        // last rows to nothing; one line of television elsewhere is not worth a clipped sheet.
         return haPanel;
     }
 
@@ -1752,38 +1778,38 @@ public class MainActivity extends Activity {
         stopNowRotation();
         hideContinue();
         haScrim.setVisibility(View.VISIBLE);
-        haScrim.animate().alpha(1f).setDuration(240).start();
+        haScrim.animate().alpha(1f).setDuration(HomeTheme.MS_REVEAL).start();
         // The clock and the card would otherwise be legible through the sheet's top edge.
-        if (statusBlock != null) statusBlock.animate().alpha(0f).setDuration(180).start();
-        if (topActions != null) topActions.animate().alpha(0f).setDuration(180).start();
-        fadeCards(0f, 180);
-        if (dockPillRow != null) dockPillRow.animate().alpha(0.15f).setDuration(180).start();
+        if (statusBlock != null) statusBlock.animate().alpha(0f).setDuration(HomeTheme.MS_REVEAL).start();
+        if (topActions != null) topActions.animate().alpha(0f).setDuration(HomeTheme.MS_REVEAL).start();
+        fadeCards(0f, HomeTheme.MS_REVEAL);
+        if (dockPillRow != null) dockPillRow.animate().alpha(0.15f).setDuration(HomeTheme.MS_REVEAL).start();
         haPanel.setVisibility(View.VISIBLE);
         haPanel.requestLayout();   // lines that came or went while it was closed need a fresh measure
         haPanel.setTranslationX(dp(HA_PANEL_W_DP));
         haPanel.setAlpha(0f);
         haPanel.animate().translationX(0).alpha(1f)
-                .setInterpolator(new DecelerateInterpolator(2f)).setDuration(260).start();
+                .setInterpolator(HomeTheme.ease()).setDuration(HomeTheme.MS_REVEAL).withLayer().start();
         haPanel.requestFocus();
     }
 
     private void closeHa() {
         if (!haOpen) return;
         haOpen = false;
-        haPanel.animate().translationX(dp(HA_PANEL_W_DP)).alpha(0f).setDuration(200)
+        haPanel.animate().translationX(dp(HA_PANEL_W_DP)).alpha(0f).setDuration(HomeTheme.MS_REVEAL).withLayer()
                 .withEndAction(() -> {
                     if (!haOpen) haPanel.setVisibility(View.GONE);
                 }).start();
-        haScrim.animate().alpha(0f).setDuration(180).withEndAction(() -> {
+        haScrim.animate().alpha(0f).setDuration(HomeTheme.MS_REVEAL).withEndAction(() -> {
             if (!haOpen) haScrim.setVisibility(View.GONE);
         }).start();
         if (statusBlock != null) {
-            statusBlock.animate().alpha(1f).setDuration(220).start();
+            statusBlock.animate().alpha(1f).setDuration(HomeTheme.MS_REVEAL).start();
             statusBlock.requestFocus();
         }
-        if (topActions != null) topActions.animate().alpha(1f).setDuration(220).start();
-        fadeCards(1f, 220);
-        if (dockPillRow != null) dockPillRow.animate().alpha(1f).setDuration(220).start();
+        if (topActions != null) topActions.animate().alpha(1f).setDuration(HomeTheme.MS_REVEAL).start();
+        fadeCards(1f, HomeTheme.MS_REVEAL);
+        if (dockPillRow != null) dockPillRow.animate().alpha(1f).setDuration(HomeTheme.MS_REVEAL).start();
         startNowRotation();
     }
 
@@ -1842,12 +1868,14 @@ public class MainActivity extends Activity {
 
     private void setHaTile(int i, String value, String raw, JSONObject ages, String label) {
         boolean has = !raw.isEmpty() && !raw.startsWith("unknown") && !raw.startsWith("unavailable");
-        haTileBox[i].setVisibility(has ? View.VISIBLE : View.INVISIBLE);
+        // Gone, not invisible: a row with a missing tile spreads the rest across it instead of
+        // leaving a hole at its end (Inside and AC with no bins left the right third empty).
+        haTileBox[i].setVisibility(has ? View.VISIBLE : View.GONE);
         if (!has) return;
         haTileValue[i].setText(value);
         long age = ages == null ? 0 : ages.optLong(HA_KEYS[i], 0);
         boolean stale = Times.stale(age);
-        haTileBox[i].setAlpha(stale ? 0.4f : 1f);
+        haTileBox[i].setAlpha(stale ? HomeTheme.STALE : 1f);
         haTileLabel[i].setText(stale ? Times.updatedAgo(age) : label);
     }
 
@@ -1919,11 +1947,21 @@ public class MainActivity extends Activity {
                     .getBoolean("bat_positive_charging", Batteries.DEFAULT_POSITIVE_IS_CHARGING);
             int state = Batteries.state(soc, watts, posCharge);
             boolean stale = Times.stale(age(ages, "battery"));
-            String name = j.optString("battery_name", "House");
-            int color = Batteries.color(state, stale);
-            setStatusLine(statusBatteryRow, statusBattery, Batteries.line(name, soc, state), color,
-                    Batteries.alpha(stale));
-            tintBatteryIcon(color);
+            String name = j.optString("battery_name", "Battery");
+            // The words stay white like every other line; the mark carries the state, so a
+            // charging battery is green and a draining one orange without tinting the sentence.
+            setStatusLine(statusBatteryRow, statusBattery, Batteries.line(name, soc, state),
+                    HomeTheme.TEXT_90, Batteries.alpha(stale));
+            tintBatteryIcon(stale ? Batteries.GREY : Batteries.color(state));
+            // "Battery 66% ↑  ☀ 5.3 kW" while the roof is producing; the sun mark is the same
+            // one the sheet's Solar tile uses. At night the whole segment is gone, not a "0 kW".
+            String solar = j.optString("solar", "");
+            boolean producing = !solar.isEmpty() && number(solar, 0) > 0.05;
+            statusSolarGroup.setVisibility(producing ? View.VISIBLE : View.GONE);
+            if (producing) {
+                statusSolar.setText(Times.kw(solar) + " kW");
+                statusSolarGroup.setAlpha(Times.stale(age(ages, "solar")) ? HomeTheme.STALE : 1f);
+            }
         }
 
         String ac = j.optString("ac", "");
@@ -1954,6 +1992,13 @@ public class MainActivity extends Activity {
         boolean is24 = android.text.format.DateFormat.is24HourFormat(this);
         JSONObject ages = j.optJSONObject("ages");
         lastHa = j;   // so the battery-sign setting can re-render without waiting for a poll
+
+        // The wired pill may have been waiting for this poll before it could say its speed.
+        String eth = j.optString("eth_mbps", "");
+        if (!eth.equals(haEthMbps)) {
+            haEthMbps = eth;
+            if (isEthernet()) updateWifi();
+        }
 
         applyStatus(j, ages);
 
@@ -2022,17 +2067,18 @@ public class MainActivity extends Activity {
                 is24, j.optLong("next_at", 0), now);
         haNextRow.setVisibility(next.isEmpty() ? View.GONE : View.VISIBLE);
         haNext.setText(next);
+        // "in 47 min" is the first thing to go when the line will not fit: the time and the event
+        // are the news, and an ellipsis through the event's name says neither.
+        final String nextShort = Times.calendarLine(j.optString("next", ""), is24, 0, now);
+        haNext.post(() -> {
+            android.text.Layout l = haNext.getLayout();
+            if (l != null && l.getLineCount() > 0 && l.getEllipsisCount(0) > 0) haNext.setText(nextShort);
+        });
 
         // Who is in, named when the snapshot names them. Silent when there are no person entities.
         String people = Cards.peopleLine(j.optString("people", ""), j.optString("people_names", ""));
         haPeopleRow.setVisibility(people.isEmpty() ? View.GONE : View.VISIBLE);
         haPeople.setText(people);
-
-        // What Plex is playing elsewhere in the house, from Tautulli through the snapshot.
-        String plex = Cards.plexLine(j.optString("plex", ""));
-        haPlexRow.setVisibility(plex.isEmpty() ? View.GONE : View.VISIBLE);
-        haPlex.setText(plex);
-
     }
 
     // ---------------------------------------------------------------- apps
@@ -2049,6 +2095,9 @@ public class MainActivity extends Activity {
             App a = new App();
             a.pkg = ai.packageName;
             a.label = String.valueOf(ri.loadLabel(pm));
+            // TiviMate's own name says nothing about what it is for. On the couch it is where
+            // live TV lives; the package is a setting, so a reinstall keeps the plain name.
+            if (!liveTvPkg.isEmpty() && a.pkg.equals(liveTvPkg)) a.label = "Live TV";
             a.component = new ComponentName(ai.packageName, ai.name);
             Drawable banner = ai.loadBanner(pm);
             if (banner == null) banner = ai.applicationInfo.loadBanner(pm);
@@ -2150,21 +2199,17 @@ public class MainActivity extends Activity {
         card.setLongClickable(true);
         card.setOnLongClickListener(v -> { showAppMenu(v, app); return true; });
         card.setOnClickListener(v -> {
-            pressDip(v, 1.08f);
+            pressDip(v, HomeTheme.DOCK_FOCUS_SCALE);
             getSharedPreferences("launches", MODE_PRIVATE).edit().putLong(app.pkg, System.currentTimeMillis()).apply();
             boolean opened = launch(new Intent(Intent.ACTION_MAIN)
                     .addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
                     .setComponent(app.component)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED));
-            if (!opened) pressUndo(v, 1.08f);
+            if (!opened) pressUndo(v, HomeTheme.DOCK_FOCUS_SCALE);
         });
         card.setOnFocusChangeListener((v, has) -> {
-            float s = has ? HomeTheme.DOCK_FOCUS_SCALE : 1f;
-            v.animate().scaleX(s).scaleY(s)
-                    .translationZ(has ? dp(10) : 0)
-                    .translationY(has ? -dp(HomeTheme.DOCK_FOCUS_LIFT) : 0)
-                    .setInterpolator(new DecelerateInterpolator(1.6f))
-                    .setDuration(has ? 170 : 200).start();
+            lift(v, has, HomeTheme.DOCK_FOCUS_SCALE);
+            v.animate().translationZ(has ? dp(10) : 0).setDuration(HomeTheme.MS_FOCUS).start();
             // One sheen sweep on focus, not a permanent glow: it reads as light passing over glass.
             if (has) {
                 int w = card.getWidth() > 0 ? card.getWidth() : dp(120);
@@ -2176,7 +2221,7 @@ public class MainActivity extends Activity {
                 sheen.animate().cancel();
                 sheen.setAlpha(0f);
             }
-            label.animate().alpha(has ? 1f : 0f).translationY(has ? dp(4) : 0).setDuration(200).start();
+            label.animate().alpha(has ? 1f : 0f).translationY(has ? dp(4) : 0).setDuration(HomeTheme.MS_FOCUS).start();
             if (!has) return;
             lastFocusedId = v.getId();
             dimBackdrop(true);
@@ -2324,9 +2369,13 @@ public class MainActivity extends Activity {
 
     /** Half a press before the launch. The gap between OK and the app's first frame is a few hundred ms,
      *  and without this the remote gets no acknowledgement at all in that time. */
+    /** OK pressed: the tile gives under the press, then springs back to its focused size. */
     private void pressDip(View v, float base) {
         v.animate().scaleX(base * 0.94f).scaleY(base * 0.94f).setDuration(90)
-                .setInterpolator(new DecelerateInterpolator()).start();
+                .setInterpolator(new DecelerateInterpolator())
+                .withEndAction(() -> v.animate().scaleX(base).scaleY(base)
+                        .setInterpolator(HomeTheme.settle()).setDuration(HomeTheme.MS_REVEAL).start())
+                .start();
     }
 
     /** Only if nothing opened: the tile would otherwise stay slightly small until focus moves. */
@@ -2546,21 +2595,87 @@ public class MainActivity extends Activity {
         // Digits only, in the device's own zone: the meridian is noise on a screen this quiet.
         long now = System.currentTimeMillis() / 1000L;
         java.time.ZoneId zone = java.time.ZoneId.systemDefault();
-        clock.setText(Times.clockDigits(now, android.text.format.DateFormat.is24HourFormat(this), zone));
-        if (greet != null) {
-            String hello = Times.greeting(now, zone);
-            greet.setText(familyName.isEmpty() ? hello : hello + " " + familyName);
-        }
+        rollClock(Times.clockDigits(now, android.text.format.DateFormat.is24HourFormat(this), zone));
+        if (greet != null) greet.setText(Typo.hello(Times.greeting(now, zone), familyName));
         if (dateLine != null) dateLine.setText(Times.dateLine(now, zone));
     }
 
     /**
-     * The wired link's rate. Android has no API for it; the driver publishes it in
-     * /sys/class/net/<iface>/speed, which is the same number Amazon's own network page prints.
-     * Fire OS 7 denies that file to apps as well as to the shell (measured on the Cube: EACCES),
-     * so the pill falls back to plain "Ethernet" there; a firmware that allows the read gets the rate.
+     * What the pill can honestly say about a wired link.
+     *
+     * The negotiated rate lives in /sys/class/net/<iface>/speed, which Fire OS 7 denies to apps and
+     * the shell alike (measured on the Cube: EACCES); a firmware that allows it gets "Link 1 Gbps".
+     * Next is a rate the snapshot supplies (eth_mbps, e.g. the router's port). Fire OS's own network
+     * agent advertises a flat 100 Mbps for every Ethernet link, so that number is a floor and only a
+     * higher one is printed. A recognised USB adapter is a rating, not a negotiated link - an RTL8153
+     * on a 100 Mbps switch is still a "gigabit adapter", and the Cube's USB 2.0 port carries about
+     * 300 Mbps whatever the adapter - so it says so: "Gigabit adapter".
      */
-    private static int ethernetMbps() {
+    private String ethernetDetail() {
+        int direct = ethernetMbpsSysfs();
+        if (direct > 0) return "Link " + linkRate(direct);
+        int fromHa = (int) number(haEthMbps, 0);
+        if (fromHa > 0) return "Link " + linkRate(fromHa);
+        int usb = usbEthernetMbps();
+        if (usb > 0) return (usb == 1000 ? "Gigabit" : linkRate(usb)) + " adapter";
+        int capability = ethernetMbpsCapability();
+        return capability > 100 ? "Link " + linkRate(capability) : "";
+    }
+
+    /** What the Ethernet network agent advertises, in Mbps. Often a floor; see {@link #ethernetMbps}. */
+    private int ethernetMbpsCapability() {
+        try {
+            android.net.ConnectivityManager cm =
+                    (android.net.ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+            if (cm != null) {
+                for (android.net.Network n : cm.getAllNetworks()) {
+                    android.net.NetworkCapabilities nc = cm.getNetworkCapabilities(n);
+                    if (nc == null || !nc.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET))
+                        continue;
+                    int kbps = Math.max(nc.getLinkDownstreamBandwidthKbps(),
+                            nc.getLinkUpstreamBandwidthKbps());
+                    if (kbps > 0) return Math.max(1, Math.round(kbps / 1000f));
+                }
+            }
+        } catch (RuntimeException ignored) { }
+        return 0;
+    }
+
+    /**
+     * A wired USB adapter's own class, from its vendor/product ids. No permission is needed to
+     * enumerate devices, and the ids are what the kernel matches drivers on, so this is stable
+     * across names and firmware. Only parts faster than the advertised 100 Mbps are listed.
+     */
+    private int usbEthernetMbps() {
+        try {
+            android.hardware.usb.UsbManager um =
+                    (android.hardware.usb.UsbManager) getSystemService(USB_SERVICE);
+            if (um == null) return 0;
+            int best = 0;
+            for (android.hardware.usb.UsbDevice dev : um.getDeviceList().values()) {
+                int vendor = dev.getVendorId(), product = dev.getProductId();
+                if (vendor == 0x0BDA) {                          // Realtek
+                    if (product == 0x8153) best = Math.max(best, 1000);   // RTL8153 gigabit
+                    else if (product == 0x8156) best = Math.max(best, 2500);   // RTL8156 2.5G
+                } else if (vendor == 0x0B95 && product == 0x1790) {   // ASIX AX88179
+                    best = Math.max(best, 1000);
+                }
+            }
+            return best;
+        } catch (RuntimeException ignored) {
+            return 0;
+        }
+    }
+
+    /** "1 Gbps", "2.5 Gbps", "866 Mbps": a link rate the way a router prints it. */
+    private static String linkRate(int mbps) {
+        if (mbps < 1000) return mbps + " Mbps";
+        if (mbps % 1000 == 0) return (mbps / 1000) + " Gbps";
+        return String.format(Locale.US, "%.1f Gbps", mbps / 1000f);
+    }
+
+    /** The interface's own /sys speed, where the firmware lets an app read it. */
+    private static int ethernetMbpsSysfs() {
         try {
             java.util.Enumeration<java.net.NetworkInterface> all = java.net.NetworkInterface.getNetworkInterfaces();
             while (all != null && all.hasMoreElements()) {
@@ -2594,7 +2709,7 @@ public class MainActivity extends Activity {
         if (netChip == null) return;
         int icon = isEthernet() ? R.drawable.ic_ethernet : R.drawable.ic_wifi;
         netChip.setTag(icon);
-        paintChip(netChip, icon, netChip.isFocused(), netChip.isFocused());
+        paintChip(netChip, icon, netChip.isFocused(), netLabel);
     }
 
     private void updateWifi() {
@@ -2602,8 +2717,8 @@ public class MainActivity extends Activity {
         android.net.ConnectivityManager cm = (android.net.ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
         android.net.NetworkInfo ni = cm == null ? null : cm.getActiveNetworkInfo();
         if (ni != null && ni.isConnected() && ni.getType() == android.net.ConnectivityManager.TYPE_ETHERNET) {
-            int mbps = ethernetMbps();
-            setNet(mbps > 0 ? "Ethernet  \u00B7  Link " + mbps + " Mbps" : "Ethernet");
+            String detail = ethernetDetail();
+            setNet(detail.isEmpty() ? "Ethernet" : "Ethernet  \u00B7  " + detail);
             return;
         }
         try {
@@ -2621,7 +2736,7 @@ public class MainActivity extends Activity {
 
     /** The apps grid sits over the busiest part of the photo; browsing it deserves a floor. */
     private void dimBackdrop(boolean dim) {
-        gridShade.animate().alpha(dim ? 1f : 0f).setDuration(300).start();
+        gridShade.animate().alpha(dim ? 1f : 0f).setDuration(HomeTheme.MS_REVEAL).start();
     }
 
     // ---------------------------------------------------------------- wallpaper
@@ -2654,6 +2769,48 @@ public class MainActivity extends Activity {
         scheduleWallpaper(WALLPAPER_INTERVAL_MS);
     }
 
+    /** The minute turns over like the Lock Screen's: the old time lifts away, the new one rises in. */
+    private void rollClock(String digits) {
+        CharSequence was = clock.getText();
+        if (digits.contentEquals(was)) return;
+        if (was.length() == 0 || !clock.isShown()) {
+            clock.setText(digits);
+            return;
+        }
+        clock.animate().alpha(0f).translationY(-dp(4)).setDuration(HomeTheme.MS_FOCUS)
+                .setInterpolator(HomeTheme.ease()).withLayer().withEndAction(() -> {
+                    clock.setText(digits);
+                    clock.setTranslationY(dp(4));
+                    clock.animate().alpha(1f).translationY(0).setDuration(HomeTheme.MS_REVEAL)
+                            .setInterpolator(HomeTheme.ease()).withLayer().start();
+                }).start();
+    }
+
+    /**
+     * The glass takes a little of the photo's colour (see {@link HomeTheme#glassFor}) and eases over
+     * with the photo's own crossfade. The colour is saved so the Home-key cover's dock matches.
+     */
+    private void tintGlass(Bitmap bm) {
+        Bitmap small = Bitmap.createScaledBitmap(bm, 16, 9, true);
+        long r = 0, g = 0, b = 0;
+        for (int y = 0; y < 9; y++) for (int x = 0; x < 16; x++) {
+            int p = small.getPixel(x, y);
+            r += Color.red(p); g += Color.green(p); b += Color.blue(p);
+        }
+        if (small != bm) small.recycle();
+        int to = HomeTheme.glassFor(Color.rgb((int) (r / 144), (int) (g / 144), (int) (b / 144)));
+        getSharedPreferences("launcher", MODE_PRIVATE).edit().putInt("glass", to).apply();
+        ValueAnimator a = ValueAnimator.ofArgb(glassColor, to);
+        a.setDuration(2000);
+        a.addUpdateListener(an -> {
+            glassColor = (int) an.getAnimatedValue();
+            for (GradientDrawable gd : glasses) gd.setColor(glassColor);
+            for (TextView c : chips)
+                if (!c.isFocused()) ((GradientDrawable) c.getBackground()).setColor(glassColor);
+        });
+        a.start();
+    }
+
     private void showWallpaper(Bitmap bm) {
         if (bm == null || isDestroyed()) return;
         // Swap roles: the old front becomes the back, the new photo fades in on top.
@@ -2665,6 +2822,7 @@ public class MainActivity extends Activity {
         root.addView(wallFront, 1, new FrameLayout.LayoutParams(-1, -1));
         wallFront.setImageBitmap(bm);
         currentWall = bm;
+        tintGlass(bm);
         // One small blurred copy per photo, for the frosted panel to sample.
         new Thread(() -> {
             final Bitmap f = Blur.frost(bm, 160, 90);
@@ -2673,12 +2831,21 @@ public class MainActivity extends Activity {
         wallFront.setAlpha(0f);
         wallFront.setScaleX(1f);
         wallFront.setScaleY(1f);
+        // The slow zoom moves the photo about 0.2px a second, so it steps once a second instead of
+        // animating every frame: a per-frame animator redrew the whole screen 60 times a second at
+        // idle (measured on the Cube) and left focus moves no GPU headroom. Stops with its photo.
         final ImageView kb = wallFront;
-        android.animation.ValueAnimator drift = android.animation.ValueAnimator.ofFloat(1f, 1.07f);
-        drift.setDuration(WALLPAPER_INTERVAL_MS + 4000);
-        drift.setInterpolator(new android.view.animation.LinearInterpolator());
-        drift.addUpdateListener(a -> { float f = (float) a.getAnimatedValue(); kb.setScaleX(f); kb.setScaleY(f); });
-        drift.start();
+        final long driftFrom = SystemClock.elapsedRealtime();
+        handler.post(new Runnable() {
+            @Override public void run() {
+                if (kb != wallFront || isDestroyed()) return;
+                float t = Math.min(1f, (SystemClock.elapsedRealtime() - driftFrom)
+                        / (float) (WALLPAPER_INTERVAL_MS + 4000));
+                kb.setScaleX(1f + 0.07f * t);
+                kb.setScaleY(1f + 0.07f * t);
+                if (t < 1f) handler.postDelayed(this, 1000);
+            }
+        });
         wallFront.animate().alpha(1f).setDuration(firstWallpaper ? 600 : 2000).withEndAction(() -> {
             wallBack.setImageDrawable(null); // release the previous photo
         }).start();
@@ -2744,29 +2911,59 @@ public class MainActivity extends Activity {
 
     // ---------------------------------------------------------------- entrance
 
+    /**
+     * Top to bottom, one beat apart: the clock, the actions, each card, the glass, then the dock's
+     * tiles left to right. Object animators, not view.animate(): a start delay set there sticks to
+     * the view and would hold back every focus lift that follows.
+     */
     private void playEntrance() {
-        if (statusBlock != null) {
-            statusBlock.setAlpha(0f);
-            statusBlock.setTranslationY(-dp(10));
-            statusBlock.animate().alpha(1f).translationY(0).setDuration(500).setStartDelay(60).start();
-        }
-        if (topActions != null) {
-            topActions.setAlpha(0f);
-            topActions.setTranslationX(dp(10));
-            topActions.animate().alpha(1f).translationX(0).setDuration(460).setStartDelay(120).start();
-        }
-        for (Deck dk : decks()) {
-            if (dk != null && dk.showing()) {
-                dk.root.setAlpha(0f);
-                dk.root.animate().alpha(1f).setDuration(480).setStartDelay(200).start();
-            }
-        }
-        if (dockPillRow != null) {
-            dockPillRow.setAlpha(0f);
-            dockPillRow.setTranslationY(dp(20));
-            dockPillRow.animate().alpha(1f).translationY(0)
-                    .setInterpolator(new DecelerateInterpolator(2f))
-                    .setDuration(500).setStartDelay(140).start();
+        int beat = 0;
+        if (statusBlock != null) rise(statusBlock, dp(8), beat++);
+        if (topActions != null) rise(topActions, dp(8), beat++);
+        for (Deck dk : decks()) if (dk != null && dk.showing()) rise(dk.root, dp(8), beat++);
+        if (dockPillRow != null) rise(dockPillRow, dp(16), beat++);
+        // Tiles fade only: the focused one is already lifted, and its lift is a translation.
+        for (int i = 0; i < dockCards.size(); i++)
+            rise(dockCards.get(i), 0, beat + i * 0.5f);
+    }
+
+    private void rise(View v, float fromY, float beat) {
+        v.setAlpha(0f);
+        ObjectAnimator a = fromY == 0
+                ? ObjectAnimator.ofFloat(v, View.ALPHA, 0f, 1f)
+                : ObjectAnimator.ofPropertyValuesHolder(v,
+                        PropertyValuesHolder.ofFloat(View.ALPHA, 0f, 1f),
+                        PropertyValuesHolder.ofFloat(View.TRANSLATION_Y, fromY, 0f));
+        a.setStartDelay(Math.round(beat * HomeTheme.STAGGER));
+        a.setDuration(HomeTheme.MS_FADE);
+        a.setInterpolator(HomeTheme.ease());
+        a.addListener(new AnimatorListenerAdapter() {
+            @Override public void onAnimationStart(Animator an) { v.setLayerType(View.LAYER_TYPE_HARDWARE, null); }
+            @Override public void onAnimationEnd(Animator an) { v.setLayerType(View.LAYER_TYPE_NONE, null); }
+        });
+        a.start();
+    }
+
+    /** Last horizontal D-pad step, -1 left or +1 right: which way a newly focused tile leans. */
+    private int lastStep;
+
+    /**
+     * The focus lift the dock and the apps grid share: a small overshoot in, an ease out, and on a
+     * sideways move a lean of {@link HomeTheme#TILT} degrees that levels out behind it.
+     */
+    private void lift(View v, boolean has, float scale) {
+        v.animate().scaleX(has ? scale : 1f).scaleY(has ? scale : 1f)
+                .translationY(has ? -dp(HomeTheme.DOCK_FOCUS_LIFT) : 0)
+                .setInterpolator(has ? HomeTheme.settle() : HomeTheme.ease())
+                .setDuration(HomeTheme.MS_FOCUS).start();
+        if (has && lastStep != 0) {
+            v.setCameraDistance(8000 * getResources().getDisplayMetrics().density);
+            ObjectAnimator t = ObjectAnimator.ofFloat(v, View.ROTATION_Y, -lastStep * HomeTheme.TILT, 0f);
+            t.setDuration(HomeTheme.MS_TILT);
+            t.setInterpolator(HomeTheme.ease());
+            t.start();
+        } else if (!has) {
+            v.setRotationY(0f);
         }
     }
 
@@ -2835,6 +3032,7 @@ public class MainActivity extends Activity {
         kickIdle();
         if (e.getAction() == KeyEvent.ACTION_DOWN) {
             int k = e.getKeyCode();
+            lastStep = k == KeyEvent.KEYCODE_DPAD_LEFT ? -1 : k == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : 0;
             if (k == KeyEvent.KEYCODE_DPAD_UP || k == KeyEvent.KEYCODE_DPAD_DOWN
                     || k == KeyEvent.KEYCODE_DPAD_LEFT || k == KeyEvent.KEYCODE_DPAD_RIGHT
                     || k == KeyEvent.KEYCODE_DPAD_CENTER || k == KeyEvent.KEYCODE_ENTER) userNavigated = true;

@@ -3,7 +3,65 @@
 All notable changes to the Fire TV Debloat Launcher. Versions match `versionName` in
 [`launcher/AndroidManifest.xml`](launcher/AndroidManifest.xml).
 
+## 1.5 — 2026-10-31
+
+An Apple TV-style pass over the whole home screen, and the Samsung dashboard brought up to match.
+
+### Changed
+- **The dock reads like tvOS.** Only the focused app is named. Focus is depth instead of a white
+  ring and glow: the tile grows 1.10 with a small overshoot, leans a few degrees the way the cursor
+  travelled, casts a shadow and gets one sheen sweep. The shadow is a pre-drawn picture faded in,
+  so the GPU no longer recomputes it every frame. Tiles are 90x51dp so the dock sits inside the
+  48dp safe margins with the clock and the cards.
+- **Live now and Now Showing cards fill with their artwork**, Apple TV Up Next style, with the
+  words on a darkened left. Logos and transparent channel marks sit contained at the right end.
+- **Glass takes the wallpaper's colour**: the dock, the cards and the top buttons are tinted with a
+  dark version of the photo's average and ease over with each new wallpaper. The Home-key cover
+  reads the same colour.
+- **All apps, Settings and the network chip are round glass buttons** that become white labelled
+  pills under focus. Ethernet has a real port icon; producing solar uses the sun mark.
+- **Type:** the clock tracks tighter (home, cover and saver), card titles slightly tighter, and the
+  greeting is a quieter 18sp caption with a comma ("Good evening, Hurleys").
+- **One motion scale:** three speeds (focus, reveal, fade) instead of about thirty, fades drawn on
+  GPU layers, and the screen arrives top to bottom with the dock's tiles one after another. The
+  minute rolls over, and OK springs a tile back to its focused size.
+- **Continue Watching** uses the dock's focus language: a light edge, a shadow and a sheen.
+- **Readability:** stronger lower and left washes; stale values dim to 55% instead of 40%; sheet
+  rows spread their tiles when one is missing; the next event drops "in N min" before it is cut.
+- **The wired pill says "Gigabit adapter"** for a recognised USB adapter instead of a link rate it
+  never measured. A real or snapshot-supplied rate still reads "Link ...".
+
+### Fixed
+- **The wallpaper's slow zoom redrew the whole screen 60 times a second at idle.** It now steps
+  once a second (the screensaver four times a second): idle frames on the Cube fell from 302 to 19
+  per 5 seconds, and a typical frame while moving along the dock from 9.4 to 6.4 ms.
+- **The screensaver opens on the home screen's photo** and fades it in, instead of cutting to a
+  random one.
+- **`tools/install-tv.py` checks its own work.** It waits for the reboot, presses Home and reports
+  whether the Home-key service is bound and the launcher is in front. Any install that skips the
+  reboot leaves Home on Amazon's launcher.
+
+### Samsung (Tizen) dashboard
+- Installed and running on a 2020 75TU8000 for the first time; [tizen/INSTALL.md](tizen/INSTALL.md)
+  records what it took (a dead SDK mirror, an admin-only package manager, developer mode sent from
+  `tools/tizen.py devmode`).
+- **Black screen on the 2020 set fixed**: its Chromium 69 has no CSS `inset`, so the wallpaper had
+  no size.
+- **Sources first in the dock**: Fire TV (HDMI 1) and Live TV (the aerial) press their remote key
+  through a Home Assistant webhook (`--control-url`), then Samsung TV Plus and the apps.
+- **Live now on TV / Now Showing on Plex cards** from the Fire TV's own feed; the detail sheet on
+  OK; the greeting (`--family`); tinted glass; round buttons; spring and lean focus; a stepped
+  wallpaper zoom; restyled All apps and Settings; Back closes any sheet.
+- A missed snapshot read keeps the last good one, dimmed, and says "offline" instead of blanking.
+
 ## 1.4.1 — 2026-10-29
+
+### Added
+- **The wired pill says its link rate.** It reads `Ethernet · Link 100 Mbps` on the Cube, the same way the Wi-Fi pill
+  has always shown its own rate. Fire OS refuses `/sys/class/net/<iface>/speed` to apps and to the ADB shell alike,
+  so the number comes from Android: an Ethernet network carries its negotiated speed as its link bandwidth. A firmware
+  that reports neither can be covered by an optional `eth_mbps` in `tvhome.json`; the TV's own rate wins when it has
+  one.
 
 ### Fixed
 - **A dark channel logo is no longer lost on the glass.** EPG marks are drawn for white pages, and several of the
@@ -11,14 +69,24 @@ All notable changes to the Fire TV Debloat Launcher. Versions match `versionName
   it is too dark to read, sets it on a light rounded plate. Logos that already read stay bare. Marks are trimmed of
   their transparent margins and measured from their own aspect (the guide's icons run from 237x413 to 1001x370), so
   a 22dp box holds the mark rather than its frame.
-- **The status block's focus highlight stops a gutter above the card row.** It used to end 5dp over the live card,
-  which read as two glasses touching whenever the remote was on the clock. The highlight is drawn as an inset layer
-  (17dp up from the block's own bottom), so the text does not move and the gap is the row's 14dp gutter.
+- **The status block's glass wraps its last line.** The highlight used to be inset 17dp from the block's own
+  bottom to keep a gutter above the cards, which cut through "Air con off" whenever the bins line was hidden. It is
+  the block's box again, with 12dp of padding under the words; the card row keeps its own 14dp gutter.
+- **The battery line reads like the others.** "House 56%" took the battery state as its text colour, so it sat
+  quieter than the weather and air-con lines and dimmed whenever the SOC entity went quiet. The words are white now
+  and the battery mark carries the state: green charging, orange supplying the house, red under 20%, neutral when
+  idle. The direction comes from an optional `bat_power` (signed watts) in `tvhome.json`; the package template and
+  [the docs](docs/HOME-ASSISTANT.md) show it. On the TVs the snapshot now measures battery freshness from the
+  charge and discharge power sensors, so a percentage that only moves at the odd percent no longer looks stale.
 
 ### Changed
 - **More to rotate through: ten live channels, and ten new titles.** `tvhome_keep.py` now takes up to 10 live
   programmes (`LIVE_COUNT`, was 4), and the launcher shows up to 10 live and 10 new-on-Plex cards (was 7 and 5), so
   five new films and five new episodes all get a turn instead of being cut at five.
+- **The screensaver speaks the home screen's type.** Inter Light for the clock, Inter Regular for the date and the
+  two lines, the home's 48dp safe margin and 56dp floor, the weather in white and only the next event in amber. A
+  long event keeps its line by shrinking from 18sp to 14sp before it would be cut. The block also stays in its
+  corner and drifts 24dp either way instead of jumping to a new random spot every 30 seconds.
 
 ## 1.4 — 2026-10-29
 

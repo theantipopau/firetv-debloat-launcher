@@ -6,13 +6,16 @@
     tizen.py apps [--json]                  installed apps: id and name
     tizen.py launch <appId>                 open an app
     tizen.py key KEY_HOME                   send one remote key
+    tizen.py devmode                        type 1-2-3-4-5 on the Apps screen, which
+                                            opens the Developer mode dialog on sets
+                                            whose remote has no number pad
     tizen.py watch                          log reachability/power changes with timestamps
     tizen.py wol                            magic packet (needs Power On with Mobile)
     tizen.py forget                         drop the pairing token and re-pair next time
 
 The first apps/key/launch run makes the TV ask "Allow this device?" — press Allow with
 the remote. The token it hands back is cached in tools/.tizen_token (git-ignored), so it
-asks once. Everything here is read-only except launch/key/wol.
+asks once. Everything here is read-only except launch/key/devmode/wol.
 
 Ports, from recon on a 2020 75TU8000: 8001 REST (only /api/v2/), 8002 websocket channels,
 8080 Samsung web API, 9197 DLNA.
@@ -239,6 +242,18 @@ def main():
                             "data": {"appId": args[1], "action_type": "NATIVE_LAUNCH"}}})
         print(f"asked the TV to launch {args[1]}")
         time.sleep(1)
+    elif cmd == "devmode":
+        # The 2020 sets open the Developer mode dialog when 12345 is typed inside
+        # the Apps store. A Fire TV remote (over CEC) cannot send digits, so send
+        # them the same way as any other key: one channel, 1..5 in order.
+        ws = open_channel()
+        for digit in "12345":
+            ws.send({"method": "ms.remote.control",
+                     "params": {"Cmd": "Click", "DataOfCmd": "KEY_" + digit,
+                                "Option": "false", "TypeOfRemote": "SendRemoteKey"}})
+            time.sleep(0.35)
+        print("sent 1 2 3 4 5 - if the TV was on Apps, the Developer mode dialog is up")
+        print("set Host PC IP to this machine, turn Developer mode on, then let the TV restart")
     elif cmd == "key":
         key = args[1] if len(args) > 1 else ""
         if not key:
