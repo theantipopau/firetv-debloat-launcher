@@ -5,6 +5,15 @@ All notable changes to the Fire TV Debloat Launcher. Versions match `versionName
 
 ## 1.5.1 — 2026-10-31
 
+### Changed
+- **The home screen is drawn at 0.8x.** At Fire OS's own 960x540dp everything read as zoomed in
+  next to the Samsung dashboard (clock 1.5x, status lines 1.7x, tiles 1.6x). One scale now shrinks
+  every size together, on the home screen and the Home-key cover alike; the safe margins keep their
+  physical size (60dp at 0.8x is the old 48dp). The Live now / Plex cards sit on the dock's glass
+  and stretch between the margins, the dock is centred under them, and its tiles are 104x59dp.
+  The screensaver keeps the TV's own size. Frame times on the Stick are unchanged by it (it is
+  bound by driving a 4K panel: about 30 ms a frame before and after).
+
 ### Fixed
 - **The weather no longer dims as stale while it is current.** Forecast sources publish every 30-60
   minutes, so the 15-minute rule greyed the outside temperature most of the time. Weather gets an

@@ -186,6 +186,15 @@ public class MainActivity extends Activity {
     // ---------------------------------------------------------------- lifecycle
 
     @Override
+    protected void attachBaseContext(Context base) {
+        // One scale for the whole screen (see HomeTheme.UI_SCALE): every dp and sp follows it.
+        android.content.res.Configuration c =
+                new android.content.res.Configuration(base.getResources().getConfiguration());
+        c.densityDpi = Math.round(c.densityDpi * HomeTheme.UI_SCALE);
+        super.attachBaseContext(base.createConfigurationContext(c));
+    }
+
+    @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
         dockApps = getResources().getStringArray(R.array.dock_apps);
@@ -385,8 +394,11 @@ public class MainActivity extends Activity {
         page.addView(left, lp(dp(HomeTheme.NOW_W), -2, Gravity.TOP | Gravity.START,
                 dp(HomeTheme.SAFE), dp(HomeTheme.CLOCK_TOP), 0, 0));
 
-        page.addView(buildNowRow(), lp(-2, -2, Gravity.TOP | Gravity.START,
-                dp(HomeTheme.SAFE), dp(HomeTheme.NOW_TOP), 0, 0));
+        // Sat on the dock's glass, one gutter above it, and stretched between the margins as on the
+        // Samsung: anchoring to the bottom keeps the gap whatever the screen's height in dp.
+        page.addView(buildNowRow(), lp(-1, -2, Gravity.BOTTOM | Gravity.START,
+                dp(HomeTheme.SAFE), 0, dp(HomeTheme.SAFE),
+                dp(HomeTheme.DOCK_BOTTOM + HomeTheme.DOCK_PILL_H + HomeTheme.GUTTER)));
 
         topActions = buildTopActions();
         page.addView(topActions, lp(-2, -2, Gravity.TOP | Gravity.END,
@@ -757,7 +769,8 @@ public class MainActivity extends Activity {
             Bitmap art = still ? img : (logo != null ? logo : img);
             p.art.setImageBitmap(art);
             p.art.setScaleType(still ? ImageView.ScaleType.CENTER_CROP : ImageView.ScaleType.FIT_CENTER);
-            int markLeft = dp(HomeTheme.NOW_W - HomeTheme.NOW_MARK_W);
+            int cardW = root.getWidth() > 0 ? root.getWidth() : dp(HomeTheme.NOW_W);
+            int markLeft = cardW - dp(HomeTheme.NOW_MARK_W);
             p.art.setPadding(still ? 0 : markLeft, still ? 0 : dp(14), still ? 0 : dp(16), still ? 0 : dp(14));
             p.scrim.setVisibility(still ? View.VISIBLE : View.GONE);
             // Over a still the words may run on; beside a contained mark they stop short of it.
@@ -831,9 +844,10 @@ public class MainActivity extends Activity {
         row.setClipToPadding(false);
         liveDeck = new Deck(true);
         plexDeck = new Deck(false);
-        row.addView(liveDeck.root, llp(dp(HomeTheme.NOW_W), dp(HomeTheme.NOW_H), 0, 0,
-                dp(HomeTheme.NOW_GAP_X), 0));
-        row.addView(plexDeck.root, llp(dp(HomeTheme.NOW_W), dp(HomeTheme.NOW_H), 0, 0, 0, 0));
+        LinearLayout.LayoutParams lp1 = new LinearLayout.LayoutParams(0, dp(HomeTheme.NOW_H), 1f);
+        lp1.rightMargin = dp(HomeTheme.NOW_GAP_X);
+        row.addView(liveDeck.root, lp1);
+        row.addView(plexDeck.root, new LinearLayout.LayoutParams(0, dp(HomeTheme.NOW_H), 1f));
         return row;
     }
 
