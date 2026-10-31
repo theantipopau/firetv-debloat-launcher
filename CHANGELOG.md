@@ -3,6 +3,57 @@
 All notable changes to the Fire TV Debloat Launcher. Versions match `versionName` in
 [`launcher/AndroidManifest.xml`](launcher/AndroidManifest.xml).
 
+## 1.5 — 2026-10-31
+
+An Apple TV-style pass over the whole home screen, and the Samsung dashboard brought up to match.
+
+### Changed
+- **The dock reads like tvOS.** Only the focused app is named. Focus is depth instead of a white
+  ring and glow: the tile grows 1.10 with a small overshoot, leans a few degrees the way the cursor
+  travelled, casts a shadow and gets one sheen sweep. The shadow is a pre-drawn picture faded in,
+  so the GPU no longer recomputes it every frame. Tiles are 90x51dp so the dock sits inside the
+  48dp safe margins with the clock and the cards.
+- **Live now and Now Showing cards fill with their artwork**, Apple TV Up Next style, with the
+  words on a darkened left. Logos and transparent channel marks sit contained at the right end.
+- **Glass takes the wallpaper's colour**: the dock, the cards and the top buttons are tinted with a
+  dark version of the photo's average and ease over with each new wallpaper. The Home-key cover
+  reads the same colour.
+- **All apps, Settings and the network chip are round glass buttons** that become white labelled
+  pills under focus. Ethernet has a real port icon; producing solar uses the sun mark.
+- **Type:** the clock tracks tighter (home, cover and saver), card titles slightly tighter, and the
+  greeting is a quieter 18sp caption with a comma ("Good evening, Hurleys").
+- **One motion scale:** three speeds (focus, reveal, fade) instead of about thirty, fades drawn on
+  GPU layers, and the screen arrives top to bottom with the dock's tiles one after another. The
+  minute rolls over, and OK springs a tile back to its focused size.
+- **Continue Watching** uses the dock's focus language: a light edge, a shadow and a sheen.
+- **Readability:** stronger lower and left washes; stale values dim to 55% instead of 40%; sheet
+  rows spread their tiles when one is missing; the next event drops "in N min" before it is cut.
+- **The wired pill says "Gigabit adapter"** for a recognised USB adapter instead of a link rate it
+  never measured. A real or snapshot-supplied rate still reads "Link ...".
+
+### Fixed
+- **The wallpaper's slow zoom redrew the whole screen 60 times a second at idle.** It now steps
+  once a second (the screensaver four times a second): idle frames on the Cube fell from 302 to 19
+  per 5 seconds, and a typical frame while moving along the dock from 9.4 to 6.4 ms.
+- **The screensaver opens on the home screen's photo** and fades it in, instead of cutting to a
+  random one.
+- **`tools/install-tv.py` checks its own work.** It waits for the reboot, presses Home and reports
+  whether the Home-key service is bound and the launcher is in front. Any install that skips the
+  reboot leaves Home on Amazon's launcher.
+
+### Samsung (Tizen) dashboard
+- Installed and running on a 2020 75TU8000 for the first time; [tizen/INSTALL.md](tizen/INSTALL.md)
+  records what it took (a dead SDK mirror, an admin-only package manager, developer mode sent from
+  `tools/tizen.py devmode`).
+- **Black screen on the 2020 set fixed**: its Chromium 69 has no CSS `inset`, so the wallpaper had
+  no size.
+- **Sources first in the dock**: Fire TV (HDMI 1) and Live TV (the aerial) press their remote key
+  through a Home Assistant webhook (`--control-url`), then Samsung TV Plus and the apps.
+- **Live now on TV / Now Showing on Plex cards** from the Fire TV's own feed; the detail sheet on
+  OK; the greeting (`--family`); tinted glass; round buttons; spring and lean focus; a stepped
+  wallpaper zoom; restyled All apps and Settings; Back closes any sheet.
+- A missed snapshot read keeps the last good one, dimmed, and says "offline" instead of blanking.
+
 ## 1.4.1 — 2026-10-29
 
 ### Added
