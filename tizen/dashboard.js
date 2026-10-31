@@ -547,10 +547,8 @@
 
   /* ---------- live now / new on Plex ---------- */
 
-  /* The feed was written through a Latin-1 step somewhere, so its middle dots
-     arrive as "Â·". Put them back rather than show the mojibake. */
   function clean(text) {
-    return String(text || "").replace(/\u00c2\u00b7/g, "\u00b7").replace(/\s+/g, " ").trim();
+    return String(text || "").replace(/\s+/g, " ").trim();
   }
 
   function clock12(sec) {
