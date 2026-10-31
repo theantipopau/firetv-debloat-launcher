@@ -3,6 +3,24 @@
 All notable changes to the Fire TV Debloat Launcher. Versions match `versionName` in
 [`launcher/AndroidManifest.xml`](launcher/AndroidManifest.xml).
 
+## 1.5.2 — 2026-11-01
+
+### Added
+- **All apps at the end of the dock.** Right past the last app there is one more stop, a square
+  glass plate with the grid mark; OK opens All apps without a trip to the top buttons (which stay).
+  The Home-key cover draws the same plate so the dock keeps its width.
+- **Free-to-air TV.** A round aerial button joins the top row when `aerial_url` is set: it posts
+  `?key=KEY_TV` to the Home Assistant webhook that switches the Samsung to its aerial through
+  SmartThings, the same one the Samsung dashboard uses. TiviMate keeps its "Live TV" name in the dock.
+- **Rain in the status block, while it is coming**: "Rain on the way · 0.8 mm in 3 h" under the
+  weather, with a blue rain mark. A dry forecast adds nothing; the sheet keeps the whole forecast.
+
+### Changed
+- **The battery mark says the direction.** A bolt inside the battery while charging, and a small
+  house after the percentage while it powers the house, instead of ↑ and ↓. Producing solar uses the
+  sheet's solar-panel mark, in sun yellow.
+- **Card changes no longer stack two titles**: the old card leaves in 160 ms while the new one fades in.
+
 ## 1.5.1 — 2026-10-31
 
 ### Changed

@@ -10,6 +10,7 @@ public final class CardsTest {
         weatherWording();
         rainWording();
         peopleWording();
+        rainShort();
         glanceStaleness();
         System.out.println("CardsTest: " + checks + " checks passed");
     }
@@ -90,6 +91,14 @@ public final class CardsTest {
         eq("today only", "46.7 kWh today", Cards.solarLine("46.7", ""));
         eq("battery only", "Battery 8 h 38 m left", Cards.solarLine("", "8 h 38 m"));
         eq("no energy", "", Cards.solarLine("", ""));
+    }
+
+    private static void rainShort() {
+        eq("headline and amount", "Rain on the way · 0.8 mm in 3 h",
+                Cards.rainShort("Rain on the way  -  ~0.8 mm in 3 h  ·  13% chance"));
+        eq("a dry day keeps its next rain", "Next rain about 2pm",
+                Cards.rainShort("0.0 mm today - next rain about 2pm"));
+        eq("nothing", "", Cards.rainShort(""));
     }
 
     private static void glanceStaleness() {

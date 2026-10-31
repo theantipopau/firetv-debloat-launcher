@@ -142,6 +142,24 @@ final class AppTile {
         return v;
     }
 
+    /**
+     * The dock's last stop, All apps: a square glass plate with the grid mark. The Home-key cover
+     * draws the same plate so the pill keeps its width when the launcher arrives.
+     */
+    static FrameLayout appsMark(Context c, float d) {
+        FrameLayout tile = new FrameLayout(c);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(px(d, HomeTheme.DOCK_ICON_RADIUS));
+        bg.setColor(0x38FFFFFF);
+        bg.setStroke(Math.max(1, Math.round(d)), HomeTheme.RIM);
+        tile.setBackground(bg);
+        ImageView ic = new ImageView(c);
+        ic.setImageResource(R.drawable.ic_apps);
+        ic.setImageTintList(android.content.res.ColorStateList.valueOf(0xF2FFFFFF));
+        tile.addView(ic, new FrameLayout.LayoutParams(px(d, 22), px(d, 22), Gravity.CENTER));
+        return tile;
+    }
+
     /** Room the blur needs around the tile, and how far the shadow falls below it, in dp. */
     static final int SHADOW_PAD = 16;
     static final int SHADOW_DROP = 7;
