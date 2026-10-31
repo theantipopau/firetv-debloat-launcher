@@ -16,8 +16,17 @@ import android.view.animation.OvershootInterpolator;
 final class HomeTheme {
     private HomeTheme() { }
 
-    // TV-safe area: nothing important sits closer than this to an edge.
-    static final int SAFE = 48;
+    /**
+     * The whole home screen is drawn at 0.8x the TV's density: at Fire OS's own 960x540dp every
+     * size read as zoomed in next to the Samsung dashboard (clock 1.5x, lines 1.7x, tiles 1.6x).
+     * MainActivity and the Home-key cover both apply it, so every dp and sp below shrinks together
+     * and the screen becomes 1200x675dp. The screensaver keeps the TV's own density.
+     */
+    static final float UI_SCALE = 0.8f;
+
+    // TV-safe area: nothing important sits closer than this to an edge. 60dp at 0.8x is the same
+    // 96px the old 48dp was, so the margins do not creep in with the scale.
+    static final int SAFE = 60;
 
     // ---- top-left block: the greeting, the clock, the date, then three or four plain lines
     static final int CLOCK_TOP = 26;
@@ -63,8 +72,6 @@ final class HomeTheme {
     static final int NOW_H = 96;
     /** The gap between the two cards, centred on the screen. */
     static final int NOW_GAP_X = GUTTER;
-    /** Absolute: the row of cards starts here, 14dp above the dock's glass (540 - 56 - 99 - 14 - 96). */
-    static final int NOW_TOP = 275;
     static final int NOW_RADIUS = 16;
     /** From the last status line to the card. */
     static final int NOW_GAP = 12;
@@ -80,11 +87,11 @@ final class HomeTheme {
     /** 8dp above the 48dp safe margin: the pill sits lower now that the greeting needs the room. */
     static final int DOCK_BOTTOM = SAFE + 8;
     /**
-     * Eight 16:9 tiles, their gaps and the pill's padding fit inside the 48dp safe margins
-     * (8 * 102 + 7 * 2 + 24 = 854 of 864dp), so the dock lines up with the clock and the cards.
+     * Eight 16:9 tiles, their gaps and the pill's padding fit inside the safe margins of the
+     * 1200dp-wide scaled screen (8 * 116 + 7 * 2 + 24 = 966 of 1080dp), centred under the cards.
      */
-    static final int DOCK_W = 90;
-    static final int DOCK_H = 51;
+    static final int DOCK_W = 104;
+    static final int DOCK_H = 59;
     static final int DOCK_GAP = 14;
     static final int DOCK_PAD = 12;
     static final int DOCK_NAME = 12;      // sp

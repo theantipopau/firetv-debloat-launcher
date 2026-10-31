@@ -243,7 +243,8 @@ public class HomeKeyService extends AccessibilityService {
     private void showCover() {
         if (cover != null) return;
         try {
-            final float d = getResources().getDisplayMetrics().density;
+            // The launcher's scale, so the cover lands exactly where the home screen will.
+            final float d = getResources().getDisplayMetrics().density * HomeTheme.UI_SCALE;
             prefetchWallpaper();
             FrameLayout f = new FrameLayout(this);
             f.setBackgroundColor(Color.BLACK);
@@ -298,7 +299,7 @@ public class HomeKeyService extends AccessibilityService {
                 java.time.ZoneId.systemDefault());
         TextView g = new TextView(this);
         g.setText(Typo.hello(hello, family));
-        g.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+        g.setTextSize(TypedValue.COMPLEX_UNIT_SP, (18) * HomeTheme.UI_SCALE);
         g.setTypeface(Typo.medium(this));
         g.setTextColor(HomeTheme.TEXT_70);
         g.setIncludeFontPadding(false);
@@ -310,7 +311,7 @@ public class HomeKeyService extends AccessibilityService {
         final TextView clk = new TextView(this);
         clk.setText(Times.clockDigits(System.currentTimeMillis() / 1000L, is24(),
                 java.time.ZoneId.systemDefault()));
-        clk.setTextSize(TypedValue.COMPLEX_UNIT_SP, 56);
+        clk.setTextSize(TypedValue.COMPLEX_UNIT_SP, (56) * HomeTheme.UI_SCALE);
         clk.setTypeface(Typo.light(this));
         clk.setTextColor(Color.WHITE);
         clk.setIncludeFontPadding(false);
@@ -323,7 +324,7 @@ public class HomeKeyService extends AccessibilityService {
         TextView day = new TextView(this);
         day.setText(Times.dateLine(System.currentTimeMillis() / 1000L,
                 java.time.ZoneId.systemDefault()));
-        day.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+        day.setTextSize(TypedValue.COMPLEX_UNIT_SP, (18) * HomeTheme.UI_SCALE);
         day.setTypeface(Typo.regular(this));
         day.setTextColor(0xB3FFFFFF);
         day.setIncludeFontPadding(false);
@@ -410,7 +411,7 @@ public class HomeKeyService extends AccessibilityService {
 
                 TextView name = new TextView(this);
                 name.setText(apps.get(i).label);
-                name.setTextSize(TypedValue.COMPLEX_UNIT_SP, HomeTheme.DOCK_NAME);   // a label, not a caption
+                name.setTextSize(TypedValue.COMPLEX_UNIT_SP, (HomeTheme.DOCK_NAME) * HomeTheme.UI_SCALE);   // a label, not a caption
                 name.setTypeface(Typo.medium(this));
                 name.setTextColor(0xFFFFFFFF);
                 name.setAlpha(0f);   // only the focused app is named, as on the real dock
@@ -464,7 +465,7 @@ public class HomeKeyService extends AccessibilityService {
 
         TextView label = new TextView(this);
         label.setText("Please wait, Home loading\u2026");
-        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, (14) * HomeTheme.UI_SCALE);
         label.setTypeface(Typo.medium(this));
         label.setTextColor(0xD9FFFFFF);
         label.setIncludeFontPadding(false);

@@ -106,6 +106,8 @@ public final class TimesTest {
 
         expect("fresh at 15 min", "false", String.valueOf(Times.stale(900)));
         expect("stale after 15 min", "true", String.valueOf(Times.stale(901)));
+        expect("weather fresh at 22 min", "false", String.valueOf(Times.staleWeather(1327)));
+        expect("weather stale after an hour", "true", String.valueOf(Times.staleWeather(3601)));
         expect("age 41 min", "41m ago", Times.updatedAgo(41 * 60));
         expect("age 2 h", "2h ago", Times.updatedAgo(2 * 3600));
 

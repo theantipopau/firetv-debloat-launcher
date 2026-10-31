@@ -153,6 +153,14 @@ final class Times {
     }
 
     /**
+     * The weather's own rule: an hour. Forecast sources publish every 30 to 60 minutes, so the
+     * outside temperature looked stale under the 15-minute rule while it was perfectly current.
+     */
+    static boolean staleWeather(long ageSec) {
+        return ageSec > 60 * 60;
+    }
+
+    /**
      * "42m ago", for the label under a stale tile. The dimmed tile already says the value is stale,
      * and a tile column is about 87dp wide at the 18sp floor - "updated 42 min ago" measures 171dp,
      * so this keeps the age and drops the word.

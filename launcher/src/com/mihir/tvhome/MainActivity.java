@@ -186,6 +186,15 @@ public class MainActivity extends Activity {
     // ---------------------------------------------------------------- lifecycle
 
     @Override
+    protected void attachBaseContext(Context base) {
+        // One scale for the whole screen (see HomeTheme.UI_SCALE): every dp and sp follows it.
+        android.content.res.Configuration c =
+                new android.content.res.Configuration(base.getResources().getConfiguration());
+        c.densityDpi = Math.round(c.densityDpi * HomeTheme.UI_SCALE);
+        super.attachBaseContext(base.createConfigurationContext(c));
+    }
+
+    @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
         dockApps = getResources().getStringArray(R.array.dock_apps);
@@ -385,8 +394,11 @@ public class MainActivity extends Activity {
         page.addView(left, lp(dp(HomeTheme.NOW_W), -2, Gravity.TOP | Gravity.START,
                 dp(HomeTheme.SAFE), dp(HomeTheme.CLOCK_TOP), 0, 0));
 
-        page.addView(buildNowRow(), lp(-2, -2, Gravity.TOP | Gravity.START,
-                dp(HomeTheme.SAFE), dp(HomeTheme.NOW_TOP), 0, 0));
+        // Sat on the dock's glass, one gutter above it, and stretched between the margins as on the
+        // Samsung: anchoring to the bottom keeps the gap whatever the screen's height in dp.
+        page.addView(buildNowRow(), lp(-1, -2, Gravity.BOTTOM | Gravity.START,
+                dp(HomeTheme.SAFE), 0, dp(HomeTheme.SAFE),
+                dp(HomeTheme.DOCK_BOTTOM + HomeTheme.DOCK_PILL_H + HomeTheme.GUTTER)));
 
         topActions = buildTopActions();
         page.addView(topActions, lp(-2, -2, Gravity.TOP | Gravity.END,
@@ -690,6 +702,12 @@ public class MainActivity extends Activity {
         void advance() {
             handler.removeCallbacks(tick);
             if (items.size() < 2 || root.isFocused()) return;
+            // A full-card crossfade landing under a focus move was the slow tenth of frames:
+            // while the remote is in use, wait for a pause instead of turning mid-move.
+            if (SystemClock.uptimeMillis() - lastKeyAt < KEY_QUIET_MS) {
+                handler.postDelayed(tick, KEY_QUIET_MS);
+                return;
+            }
             int next = nextFrame();
             if (next < 0) return;
             render(next);
@@ -751,7 +769,8 @@ public class MainActivity extends Activity {
             Bitmap art = still ? img : (logo != null ? logo : img);
             p.art.setImageBitmap(art);
             p.art.setScaleType(still ? ImageView.ScaleType.CENTER_CROP : ImageView.ScaleType.FIT_CENTER);
-            int markLeft = dp(HomeTheme.NOW_W - HomeTheme.NOW_MARK_W);
+            int cardW = root.getWidth() > 0 ? root.getWidth() : dp(HomeTheme.NOW_W);
+            int markLeft = cardW - dp(HomeTheme.NOW_MARK_W);
             p.art.setPadding(still ? 0 : markLeft, still ? 0 : dp(14), still ? 0 : dp(16), still ? 0 : dp(14));
             p.scrim.setVisibility(still ? View.VISIBLE : View.GONE);
             // Over a still the words may run on; beside a contained mark they stop short of it.
@@ -825,9 +844,10 @@ public class MainActivity extends Activity {
         row.setClipToPadding(false);
         liveDeck = new Deck(true);
         plexDeck = new Deck(false);
-        row.addView(liveDeck.root, llp(dp(HomeTheme.NOW_W), dp(HomeTheme.NOW_H), 0, 0,
-                dp(HomeTheme.NOW_GAP_X), 0));
-        row.addView(plexDeck.root, llp(dp(HomeTheme.NOW_W), dp(HomeTheme.NOW_H), 0, 0, 0, 0));
+        LinearLayout.LayoutParams lp1 = new LinearLayout.LayoutParams(0, dp(HomeTheme.NOW_H), 1f);
+        lp1.rightMargin = dp(HomeTheme.NOW_GAP_X);
+        row.addView(liveDeck.root, lp1);
+        row.addView(plexDeck.root, new LinearLayout.LayoutParams(0, dp(HomeTheme.NOW_H), 1f));
         return row;
     }
 
@@ -1933,7 +1953,7 @@ public class MainActivity extends Activity {
             weather.append(Times.kw(inside)).append("\u00B0 inside");
         }
         setStatusLine(statusWeatherRow, statusWeather, weather.toString(), HomeTheme.TEXT_90,
-                Batteries.alpha(Times.stale(age(ages, "temp"))));
+                Batteries.alpha(Times.staleWeather(age(ages, "temp"))));
 
         String bat = j.optString("battery", "");
         if (bat.isEmpty()) {
@@ -2946,6 +2966,9 @@ public class MainActivity extends Activity {
 
     /** Last horizontal D-pad step, -1 left or +1 right: which way a newly focused tile leans. */
     private int lastStep;
+    /** When the remote was last pressed, and how long the cards wait after it before turning. */
+    private long lastKeyAt;
+    private static final long KEY_QUIET_MS = 1200;
 
     /**
      * The focus lift the dock and the apps grid share: a small overshoot in, an ease out, and on a
@@ -3033,6 +3056,7 @@ public class MainActivity extends Activity {
         if (e.getAction() == KeyEvent.ACTION_DOWN) {
             int k = e.getKeyCode();
             lastStep = k == KeyEvent.KEYCODE_DPAD_LEFT ? -1 : k == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : 0;
+            lastKeyAt = SystemClock.uptimeMillis();
             if (k == KeyEvent.KEYCODE_DPAD_UP || k == KeyEvent.KEYCODE_DPAD_DOWN
                     || k == KeyEvent.KEYCODE_DPAD_LEFT || k == KeyEvent.KEYCODE_DPAD_RIGHT
                     || k == KeyEvent.KEYCODE_DPAD_CENTER || k == KeyEvent.KEYCODE_ENTER) userNavigated = true;
