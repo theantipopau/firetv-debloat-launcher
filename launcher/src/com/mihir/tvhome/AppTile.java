@@ -80,7 +80,7 @@ final class AppTile {
 
     /**
      * A dock tile: the app's banner filling a 16:9 plate, or its icon centred when it has no banner
-     * (sideloaded apps). No name inside - the dock prints one under every tile - but the same
+     * (sideloaded apps). No name inside - the dock shows one under the focused tile - but the same
      * radius, rim and clip as the rest of the screen. Shared with the Home-key cover.
      */
     static FrameLayout dock(Context c, MainActivity.App app, float d) {
@@ -122,6 +122,37 @@ final class AppTile {
             }
         });
         return card;
+    }
+
+    /**
+     * The focused tile's light edge: 1dp on its own rim, laid over the tile. The tile's lift and
+     * shadow are the cue; this only keeps a white app plate from melting into a white sky.
+     */
+    static View focusRim(Context c, float d) {
+        GradientDrawable rim = new GradientDrawable();
+        rim.setCornerRadius(px(d, HomeTheme.DOCK_ICON_RADIUS));
+        rim.setStroke(Math.max(1, Math.round(d)), HomeTheme.FOCUS_RIM);
+        View v = new View(c);
+        v.setBackground(rim);
+        return v;
+    }
+
+    /** A soft band of light that crosses a tile once when it takes focus; see {@link #sweep}. */
+    static View sheen(Context c) {
+        View v = new View(c);
+        v.setBackground(new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{0x00FFFFFF, 0x2EFFFFFF, 0x00FFFFFF}));
+        v.setAlpha(0f);
+        return v;
+    }
+
+    static void sweep(View sheen, int width) {
+        sheen.animate().cancel();
+        sheen.setTranslationX(-width);
+        sheen.setAlpha(0.9f);
+        sheen.animate().translationX(width).alpha(0f)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator(1.4f))
+                .setDuration(520).start();
     }
 
     private static int px(float d, int dp) {

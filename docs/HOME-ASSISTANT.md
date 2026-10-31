@@ -33,7 +33,7 @@ Keys (all optional; an empty or missing value hides that tile):
 | key | example | shown as |
 |---|---|---|
 | `temp`, `feels` | `22`, `21` | 72sp temperature, condition and "feels" beside it |
-| `solar`, `battery`, `house` | `3.2`, `72`, `1.4` | top row of tiles: kW (one decimal), %, kW |
+| `solar`, `battery`, `house` | `3.2`, `72`, `1.4` | top row of tiles: kW (one decimal), %, kW; while producing, `solar` also prints beside the battery line as `☀ 3.2 kW` |
 | `bat_power` | `1916` | signed watts: the battery mark is green charging, orange discharging, red below 20%; the words stay white |
 | `inside`, `ac` | `24.5`, `cool` | bottom row: indoor temperature, air-con state |
 | `bins` | `General bins - out tonight` | "General" with `Tonight` / `Tomorrow` under it, in the one accent colour |
@@ -42,8 +42,7 @@ Keys (all optional; an empty or missing value hides that tile):
 | `wind`, `wind_unit`, `humidity` | `14`, `km/h`, `62` | one line: "14 km/h · 62% humidity" |
 | `sunrise_at`, `sunset_at` | `1793239200` | one line: "Sunrise 6:12 AM · Sunset 6:12 PM", in the TV's 12/24-hour format |
 | `energy_today`, `battery_left` | `46.7`, `8 h 38 m` | one line "46.7 kWh today · 9 h left", the runway rounded to whole hours |
-| `people`, `people_names` | `1`, `Matt` | "Matt is home", "Matt & Caitlyn are home", "1 person home" - hidden when you have no person entities |
-| `plex` | `Chuck - s01e02 - Chuck Versus the Helicopter` | last line: "Plex · Chuck · S01E02", from Tautulli's who-is-watching sensor |
+| `people`, `people_names` | `1`, `Matt` | last line: "Matt is home", "Matt & Caitlyn are home", "1 person home" - hidden when you have no person entities |
 | `media_title`, `media_artist`, `media_art` | `Do I Wanna Know?`, `Arctic Monkeys · Lounge`, a URL | the now-playing card on the Tizen dashboard; empty hides it |
 | `eth_mbps` | `1000` | the Ethernet pill's link rate, used only when the TV cannot read its own |
 | `ages` | `{"solar": 2400}` | a value older than 15 minutes dims to 40% and its label becomes `40m ago` |
@@ -53,7 +52,7 @@ accent colour (amber) is used - only where something needs attention (bins due, 
 rounded to one decimal place.
 
 The weather line only appears once your snapshot sends `wind`, `humidity`, `sunrise_at` or `sunset_at`; the solar
-line once it sends `energy_today`; the last lines once it sends `people` or `plex`. Nothing has to be there: a line
+line once it sends `energy_today`; the last line once it sends `people`. Nothing has to be there: a line
 with no data hides itself. `bat_power` only colours the battery mark - without it the charge still shows, in white,
 with a neutral mark. `people_names` is only used while it agrees with `people`, so a half-written snapshot can
 never say somebody is in when they are not.
@@ -65,10 +64,12 @@ The Tizen dashboard ([tizen/](../tizen/README.md)) reads this same file and noth
 appears there without a second feed. It draws only what the snapshot carries and removes an element whose key is
 empty — there is no demo data on screen.
 
-The Ethernet pill names the network and its rate ("Ethernet · Link 100 Mbps"). The launcher reads that from the
-network's own link bandwidth, because Fire OS refuses the driver's `/sys/class/net/<iface>/speed` file to apps and to
-the ADB shell alike. `eth_mbps` is an optional stand-in for a firmware that reports nothing at all - a router's port
-rate works - and is ignored while the TV can answer for itself.
+The Ethernet pill names the network and its rate ("Ethernet · Link 1 Gbps"). Fire OS refuses the driver's
+`/sys/class/net/<iface>/speed` file to apps and to the ADB shell alike, and its network capabilities advertise a flat
+100 Mbps for every wired adapter, so the launcher also reads the USB adapter's ids: a Realtek RTL8153 (or an ASIX
+AX88179) is a gigabit part, and the pill prints 1 Gbps instead of the 100 Mbps floor. `eth_mbps` is an optional
+override for a firmware that reports only that floor and an adapter the ids do not know; a real sysfs rate or a
+recognised gigabit part wins.
 
 The same file feeds the cover screen shown right after you press Home.
 Update speed is limited by your sensors (cloud inverter integrations often update every 5 minutes; local Modbus/MQTT is much faster).

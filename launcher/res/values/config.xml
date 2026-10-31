@@ -28,7 +28,9 @@
         <item>com.uptodown.installer</item>
     </string-array>
 
-    <!-- Optional extras. Leave empty to switch them off. -->
+    <!-- Optional extras. Leave empty to switch them off.
+         live_tv_package: your live TV app (e.g. ar.tvplayer.tv for TiviMate). Its tile is called
+         "Live TV" and an Inputs row is added. Empty keeps the app's own name and hides the row. -->
     <string name="live_tv_package" translatable="false"></string>
     <string name="input_picker_package" translatable="false"></string>
 

@@ -31,16 +31,16 @@ Other Fire OS 7 devices will probably work. Not tested on Fire OS 8 / Vega OS de
   (the same wallpaper, clock and dock, with skeleton lines) hides Amazon's home until the launcher opens.
 - Hold OK on any app to move it, add it to the main row, hide it, open its info or uninstall it. No rebuild needed.
 - Settings and the network pill open Amazon's own full-screen pages. The pill is an icon at rest and shows the
-  network's name and link rate on focus (Wi-Fi 720 Mbps, Ethernet 100 Mbps). **Inputs** sits in Settings on devices
-  that report an HDMI passthrough input.
+  network's name and link rate on focus (Wi-Fi 720 Mbps, Ethernet 1 Gbps on a gigabit adapter). **Inputs** sits in
+  Settings on devices that report an HDMI passthrough input.
 - Screensaver (big clock over a drifting wallpaper) instead of Amazon's ad-supported one.
 - Alert cards over whatever is playing: doorbell, bins, timers (`am broadcast`, or from Home Assistant). Only shell/ADB
   senders can trigger one, so an app installed on the TV cannot spoof a card.
 - **Debloat script** (reversible): disables Amazon shopping, ad-ID and content-recognition packages, limits ad tracking, speeds up animations.
-- Optional Home Assistant link: the frosted block top-left shows the weather and inside temperature, the house
-  battery, air con and bins; OK opens its detail sheet (solar, house load, sunrise/sunset, who is home, what Plex is
-  playing elsewhere). Down from the dock reveals **Continue Watching**, and the package adds a sleep timer and a
-  doorbell card.
+- Optional Home Assistant link: the frosted block top-left shows the weather and inside temperature, the battery
+  (with the roof's solar output beside it while producing), air con and bins; OK opens its detail sheet (solar,
+  house load, sunrise/sunset, who is home). Down from the dock reveals **Continue Watching**, and the package adds a
+  sleep timer and a doorbell card.
   Plus [prompts for Claude, Codex or any AI agent](docs/AI-PROMPTS.md) that do the setup for you.
 
 ## Quick start

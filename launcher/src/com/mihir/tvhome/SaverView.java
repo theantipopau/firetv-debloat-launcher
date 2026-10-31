@@ -51,20 +51,25 @@ public class SaverView extends FrameLayout {
         block = new LinearLayout(c);
         block.setOrientation(LinearLayout.VERTICAL);
         clock = label(Typo.CLOCK, Typo.light(c), Color.WHITE);
+        // A clock is never an ellipsis. The block used to wrap to its widest line, which on some
+        // minute widths was narrower than "08:26" and truncated the minutes to "08:...".
+        clock.setEllipsize(null);
         Typo.numbers(clock);
         date = label(Typo.BODY, Typo.regular(c), HomeTheme.TEXT_70);
         weather = label(Typo.CAPTION, Typo.regular(c), HomeTheme.TEXT_90);
         next = label(Typo.CAPTION, Typo.regular(c), HomeTheme.ACCENT);
-        block.addView(clock);
+        block.addView(clock, new LinearLayout.LayoutParams(-1, -2));
         block.addView(date, top(HomeTheme.DATE_TOP));
         block.addView(weather, top(18));
         block.addView(next, top(4));
         weather.setVisibility(GONE);
         next.setVisibility(GONE);
-        LayoutParams bp = new LayoutParams(-2, -2, Gravity.START | Gravity.BOTTOM);
+        // Full width between the home screen's safe margins, not a wrap to the longest line: the
+        // clock must keep its own measure however wide the next event happens to be.
+        LayoutParams bp = new LayoutParams(-1, -2, Gravity.START | Gravity.BOTTOM);
         float d = c.getResources().getDisplayMetrics().density;
-        // The home screen's safe margin and its dock floor, so the two screens share one grid.
-        bp.setMargins((int) (HomeTheme.SAFE * d), 0, 0, (int) (HomeTheme.DOCK_BOTTOM * d));
+        bp.setMargins((int) (HomeTheme.SAFE * d), 0, (int) (HomeTheme.SAFE * d),
+                (int) (HomeTheme.DOCK_BOTTOM * d));
         addView(block, bp);
         try { walls = c.getAssets().list("wallpapers"); } catch (java.io.IOException ignored) { }
     }

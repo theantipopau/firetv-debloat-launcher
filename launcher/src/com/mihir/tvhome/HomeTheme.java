@@ -1,6 +1,9 @@
 package com.mihir.tvhome;
 
+import android.animation.TimeInterpolator;
 import android.graphics.drawable.GradientDrawable;
+import android.view.animation.DecelerateInterpolator;
+import android.view.animation.OvershootInterpolator;
 
 /**
  * The home screen's geometry and light, in one place.
@@ -63,18 +66,23 @@ final class HomeTheme {
     static final int NOW_RADIUS = 16;
     /** From the last status line to the card. */
     static final int NOW_GAP = 12;
-    static final int NOW_PAD = 12;
-    static final int NOW_ART_W = 120;      // 16:9 inside the 96dp card
-    static final int NOW_ART_H = 68;
-    static final int NOW_ART_RADIUS = 10;
-    static final int NOW_TEXT_GAP = 14;
+    static final int NOW_PAD = 16;
+    /**
+     * The artwork fills the card, Apple TV "Up Next" style, under a scrim that darkens the left
+     * where the words sit. A logo or a transparent mark cannot be cropped that way, so it is
+     * contained in this much of the card's right end instead; the text stops short of it.
+     */
+    static final int NOW_MARK_W = 140;
 
     // ---- dock: one glass pill of banner tiles, name under each
     /** 8dp above the 48dp safe margin: the pill sits lower now that the greeting needs the room. */
     static final int DOCK_BOTTOM = SAFE + 8;
-    /** Eight 16:9 tiles and their gaps fit inside 960dp at this size. */
-    static final int DOCK_W = 100;
-    static final int DOCK_H = 56;
+    /**
+     * Eight 16:9 tiles, their gaps and the pill's padding fit inside the 48dp safe margins
+     * (8 * 102 + 7 * 2 + 24 = 854 of 864dp), so the dock lines up with the clock and the cards.
+     */
+    static final int DOCK_W = 90;
+    static final int DOCK_H = 51;
     static final int DOCK_GAP = 14;
     static final int DOCK_PAD = 12;
     static final int DOCK_NAME = 12;      // sp
@@ -95,9 +103,16 @@ final class HomeTheme {
      */
     static final int DOCK_PAD_TOP = 6;
     static final int DOCK_PAD_BOTTOM = 2;
-    /** Focus is a lift, not a new size: 1.06 with a soft white glow behind the tile. */
-    static final float DOCK_FOCUS_SCALE = 1.06f;
-    static final int DOCK_FOCUS_LIFT = 2;
+    /**
+     * Focus is depth, the way tvOS does it: the tile grows 1.10, rises, casts a shadow onto the
+     * wallpaper and a sheen crosses it once. No outline and no glow - a shadow reads on a bright
+     * wallpaper and under a white app plate alike. A 1dp light rim on the tile's own edge is all
+     * that marks a white plate against a white sky.
+     */
+    static final float DOCK_FOCUS_SCALE = 1.10f;
+    static final int DOCK_FOCUS_LIFT = 4;
+    static final int DOCK_FOCUS_Z = 12;         // dp of elevation: the shadow under a focused tile
+    static final int FOCUS_RIM = 0x80FFFFFF;    // 50% white on the tile's edge
 
     /**
      * The cover's loading line sits on the floor below the pill, not at the pill's own height: at the
@@ -121,7 +136,25 @@ final class HomeTheme {
     static final float CW_FOCUS_SCALE = 1.06f;
     /** The tile's floor gradient covers the lower 60%: title, metadata and bar all sit on it. */
     static final float CW_SHADE = 0.60f;
-    static final int CW_REVEAL_MS = 220;
+
+    // ---- motion: three speeds, one cadence and two curves, so every movement on the screen agrees
+    static final int MS_FOCUS = 160;      // focus arriving and leaving
+    static final int MS_REVEAL = 240;     // rows, sheets, panels and the dimming around them
+    static final int MS_FADE = 400;       // crossfades: the Now cards and the entrance
+    static final int STAGGER = 40;        // between the pieces of one entrance
+    /** Focus arrives leaning this many degrees the way the cursor travelled, then levels out. */
+    static final float TILT = 4f;
+    static final int MS_TILT = 320;
+
+    /** Arriving focus overshoots a touch and settles back: the lift reads as a spring, not a slide. */
+    static TimeInterpolator settle() {
+        return new OvershootInterpolator(0.6f);
+    }
+
+    /** Everything else decelerates into place. */
+    static TimeInterpolator ease() {
+        return new DecelerateInterpolator(1.8f);
+    }
 
     // ---- Home Assistant sheet
     static final int HA_W = 336;           // 35% of a 960dp screen

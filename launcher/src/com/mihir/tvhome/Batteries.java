@@ -66,14 +66,14 @@ final class Batteries {
         }
     }
 
-    /** "House 84%": the name and the number, which is all a line has room for. */
+    /** "Battery 84%": the name and the number, which is all a line has room for. */
     static String label(String name, double soc) {
         String n = name == null ? "" : name.trim();
         String pct = Math.round(soc) + "%";
         return n.isEmpty() ? pct : n + " " + pct;
     }
 
-    /** The line as the status block prints it, e.g. "House 84% ↑". */
+    /** The line as the status block prints it, e.g. "Battery 84% ↑". */
     static String line(String name, double soc, int state) {
         String g = glyph(state);
         return g.isEmpty() ? label(name, soc) : label(name, soc) + " " + g;
