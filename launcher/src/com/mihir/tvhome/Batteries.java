@@ -54,7 +54,7 @@ final class Batteries {
     }
 
     static float alpha(boolean stale) {
-        return stale ? 0.4f : 1f;
+        return stale ? HomeTheme.STALE : 1f;
     }
 
     /** The mark after the percentage: up while charging, down while supplying the house. */

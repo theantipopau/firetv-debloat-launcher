@@ -5,6 +5,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
@@ -54,9 +55,17 @@ public class SaverView extends FrameLayout {
         // A clock is never an ellipsis. The block used to wrap to its widest line, which on some
         // minute widths was narrower than "08:26" and truncated the minutes to "08:...".
         clock.setEllipsize(null);
+        clock.setLetterSpacing(HomeTheme.CLOCK_TRACKING);
         Typo.numbers(clock);
         date = label(Typo.BODY, Typo.regular(c), HomeTheme.TEXT_70);
         weather = label(Typo.CAPTION, Typo.regular(c), HomeTheme.TEXT_90);
+        // The same mark the home screen's weather line carries, so the two lines read as one.
+        Drawable th = c.getDrawable(R.drawable.ic_thermo).mutate();
+        int thPx = Math.round(18 * c.getResources().getDisplayMetrics().density);
+        th.setBounds(0, 0, thPx, thPx);
+        weather.setCompoundDrawables(th, null, null, null);
+        weather.setCompoundDrawablePadding(thPx / 2);
+        weather.setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(HomeTheme.TEXT_70));
         next = label(Typo.CAPTION, Typo.regular(c), HomeTheme.ACCENT);
         block.addView(clock, new LinearLayout.LayoutParams(-1, -2));
         block.addView(date, top(HomeTheme.DATE_TOP));
@@ -136,21 +145,52 @@ public class SaverView extends FrameLayout {
                 .setDuration(4000).start();
     }
 
+    /**
+     * The slow zoom, stepped four times a second rather than animated every frame: about half a
+     * pixel a step, and a quarter of the redraws. The saver runs all night, so frames are watts.
+     */
     private void drift() {
-        wall.setScaleX(1f);
-        wall.setScaleY(1f);
-        wall.animate().scaleX(1.12f).scaleY(1.12f).setDuration(120_000).setInterpolator(new LinearInterpolator()).start();
+        final long from = android.os.SystemClock.elapsedRealtime();
+        final Bitmap mine = currentWall;
+        h.post(new Runnable() {
+            @Override public void run() {
+                if (!running || mine != currentWall) return;
+                float t = Math.min(1f, (android.os.SystemClock.elapsedRealtime() - from) / 120_000f);
+                wall.setScaleX(1f + 0.12f * t);
+                wall.setScaleY(1f + 0.12f * t);
+                if (t < 1f) h.postDelayed(this, 250);
+            }
+        });
     }
+
+    private Bitmap currentWall;
+    private boolean firstWall = true;
 
     private void loadWall() {
         if (walls.length == 0) return;
-        final String name = "wallpapers/" + walls[rnd.nextInt(walls.length)];
+        // The first photo is the one the home screen was showing, so the saver arrives as that
+        // picture dimming down rather than a cut to a different one.
+        int index = rnd.nextInt(walls.length);
+        if (firstWall) {
+            int home = getContext().getSharedPreferences("MainActivity", Context.MODE_PRIVATE)
+                    .getInt("wallpaper", -1);
+            if (home >= 0 && home < walls.length) index = home;
+            firstWall = false;
+        }
+        final String name = "wallpapers/" + walls[index];
         new Thread(() -> {
             try (InputStream is = getContext().getAssets().open(name)) {
                 BitmapFactory.Options o = new BitmapFactory.Options();
                 o.inPreferredConfig = Bitmap.Config.RGB_565;
                 final Bitmap bm = BitmapFactory.decodeStream(is, null, o);
-                h.post(() -> { if (running) { wall.setImageBitmap(bm); drift(); } });
+                h.post(() -> {
+                    if (!running) return;
+                    currentWall = bm;
+                    wall.setAlpha(0f);
+                    wall.setImageBitmap(bm);
+                    wall.animate().alpha(0.55f).setDuration(1200).start();
+                    drift();
+                });
             } catch (Exception ignored) { }
         }).start();
     }

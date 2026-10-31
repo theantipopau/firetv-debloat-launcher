@@ -61,6 +61,11 @@ final class Typo {
         return regular(c);
     }
 
+    /** "Good morning, Hurleys": the greeting and the household, the way a person would write it. */
+    static String hello(String greeting, String family) {
+        return family == null || family.isEmpty() ? greeting : greeting + ", " + family;
+    }
+
     /** The floor: no role in this UI is smaller than a caption. */
     static float atLeastCaption(float sp) {
         return Math.max(CAPTION, sp);

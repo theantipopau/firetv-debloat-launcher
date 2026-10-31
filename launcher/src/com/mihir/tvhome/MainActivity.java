@@ -114,6 +114,10 @@ public class MainActivity extends Activity {
     private View actionApps, actionSettings;
     /** Wi-Fi or Ethernet, back where it always was: icon at rest, the network's name on focus. */
     private TextView netChip;
+    /** The glass colour, tinted by the wallpaper: the dock, the cards and the round buttons share it. */
+    private int glassColor = HomeTheme.GLASS;
+    private final List<GradientDrawable> glasses = new ArrayList<>();
+    private final List<TextView> chips = new ArrayList<>();
     /** The dock as drawn, so the cover can paint the same icons without a package lookup. */
     static volatile List<App> dockSnapshot;
     private String netLabel = "Wi-Fi";
@@ -471,7 +475,8 @@ public class MainActivity extends Activity {
                 bg.setColor(has ? 0x14FFFFFF : Color.TRANSPARENT));
 
         // The greeting sits above the clock, quiet enough to read as a caption on the wallpaper.
-        greet = text(20, "sans-serif-medium", 0xD9FFFFFF);
+        // 18sp at 70%: a caption to the clock, so the time is plainly the first thing read.
+        greet = text(18, "sans-serif-medium", HomeTheme.TEXT_70);
         greet.setSingleLine(true);
         greet.setEllipsize(android.text.TextUtils.TruncateAt.END);
         greet.setIncludeFontPadding(false);
@@ -479,6 +484,7 @@ public class MainActivity extends Activity {
         statusBlock.addView(greet, llp(-1, -2, 0, 0, 0, dp(HomeTheme.GREET_GAP)));
 
         clock = text(56, "sans-serif-light", Color.WHITE);
+        clock.setLetterSpacing(HomeTheme.CLOCK_TRACKING);
         Typo.numbers(clock);
         clock.setIncludeFontPadding(false);
         clock.setShadowLayer(dp(8), 0, dp(1), 0x80000000);
@@ -509,7 +515,7 @@ public class MainActivity extends Activity {
         statusSolarGroup.setGravity(Gravity.CENTER_VERTICAL);
         statusSolarGroup.setVisibility(View.GONE);
         ImageView solarMark = new ImageView(this);
-        solarMark.setImageResource(R.drawable.ic_solar);
+        solarMark.setImageResource(R.drawable.ic_sun);
         solarMark.setImageTintList(android.content.res.ColorStateList.valueOf(HomeTheme.TEXT_70));
         LinearLayout.LayoutParams smp = new LinearLayout.LayoutParams(
                 dp(HomeTheme.LINE_ICON), dp(HomeTheme.LINE_ICON));
@@ -576,12 +582,12 @@ public class MainActivity extends Activity {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setClipChildren(false);
-        netChip = chipAction(isEthernet() ? R.drawable.ic_ethernet : R.drawable.ic_wifi,
-                v -> openWifiSettings());
-        row.addView(netChip, llp(-2, -2, 0, 0, dp(HomeTheme.ACTION_GAP), 0));
-        actionApps = action(R.drawable.ic_apps, "All apps", v -> showAllApps());
-        row.addView(actionApps, llp(-2, -2, 0, 0, dp(HomeTheme.ACTION_GAP), 0));
-        actionSettings = action(R.drawable.ic_settings, "Settings", v -> showSettings());
+        netChip = chip(isEthernet() ? R.drawable.ic_ethernet : R.drawable.ic_wifi,
+                () -> netLabel, v -> openWifiSettings());
+        row.addView(netChip, llp(-2, dp(HomeTheme.ACTION_SIZE), 0, 0, dp(HomeTheme.ACTION_GAP), 0));
+        actionApps = chip(R.drawable.ic_apps, () -> "All apps", v -> showAllApps());
+        row.addView(actionApps, llp(-2, dp(HomeTheme.ACTION_SIZE), 0, 0, dp(HomeTheme.ACTION_GAP), 0));
+        actionSettings = chip(R.drawable.ic_settings, () -> "Settings", v -> showSettings());
         actionSettings.setOnLongClickListener(v -> {
             getSharedPreferences("launcher", MODE_PRIVATE).edit()
                     .remove("hidden").remove("dock_order").apply();
@@ -590,77 +596,52 @@ public class MainActivity extends Activity {
             buildApps();
             return true;
         });
-        row.addView(actionSettings);
+        row.addView(actionSettings, llp(-2, dp(HomeTheme.ACTION_SIZE), 0, 0, 0, 0));
         return row;
     }
 
-    /** A word, not an icon: the bar keeps two obvious doors instead of five symbols. */
-    private TextView action(int iconRes, String label, View.OnClickListener click) {
-        TextView b = text(18, "sans-serif-medium", 0xE6FFFFFF);
-        b.setText(label);
-        b.setGravity(Gravity.CENTER);
-        b.setPadding(dp(14), dp(10), dp(16), dp(10));
-        b.setFocusable(true);
-        b.setId(View.generateViewId());
-        Drawable ic = getDrawable(iconRes);
-        ic.setBounds(0, 0, dp(20), dp(20));
-        b.setCompoundDrawables(ic, null, null, null);
-        b.setCompoundDrawablePadding(dp(10));
-        b.setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(0xE6FFFFFF));
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(dp(22));
-        bg.setColor(Color.TRANSPARENT);
-        b.setBackground(bg);
-        b.setOnClickListener(click);
-        b.setOnFocusChangeListener((v, has) -> {
-            bg.setColor(has ? 0x1FFFFFFF : Color.TRANSPARENT);
-            b.setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(
-                    has ? 0xFFFFFFFF : 0xE6FFFFFF));
-            b.setTextColor(has ? Color.WHITE : 0xE6FFFFFF);
-            v.animate().scaleX(has ? 1.04f : 1f).scaleY(has ? 1.04f : 1f)
-                    .setDuration(HomeTheme.MS_FOCUS).start();
-            if (has) lastFocusedId = v.getId();
-        });
-        return b;
-    }
-
     /**
-     * An icon-only chip: its label appears while it has focus, so the bar stays quiet at rest but
-     * a focused chip still says what it does - and the network one says the network's name.
+     * The top-right controls, drawn the way tvOS draws its own: an icon in a 44dp glass circle at
+     * rest, and under the cursor a white capsule with dark ink that says what it does. The network
+     * chip's label is the network itself.
      */
-    private TextView chipAction(int iconRes, View.OnClickListener click) {
-        final TextView b = text(18, "sans-serif-medium", 0xE6FFFFFF);
+    private TextView chip(int iconRes, java.util.function.Supplier<String> label, View.OnClickListener click) {
+        final TextView b = text(18, "sans-serif-medium", Color.WHITE);
         b.setGravity(Gravity.CENTER);
-        b.setPadding(dp(12), dp(10), dp(14), dp(10));
+        b.setSingleLine(true);
+        b.setMinWidth(dp(HomeTheme.ACTION_SIZE));
         b.setFocusable(true);
         b.setId(View.generateViewId());
-        b.setCompoundDrawablePadding(dp(10));
         b.setTag(iconRes);
-        final GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(dp(22));
-        bg.setColor(Color.TRANSPARENT);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(dp(HomeTheme.ACTION_SIZE / 2));
+        bg.setStroke(Math.max(1, Math.round(getResources().getDisplayMetrics().density)), HomeTheme.GLASS_EDGE);
         b.setBackground(bg);
-        paintChip(b, iconRes, false, false);
+        chips.add(b);
+        paintChip(b, iconRes, false, "");
         b.setOnClickListener(click);
         b.setOnFocusChangeListener((v, has) -> {
-            bg.setColor(has ? 0x1FFFFFFF : Color.TRANSPARENT);
-            paintChip(b, (Integer) v.getTag(), has, has);
-            v.animate().scaleX(has ? 1.04f : 1f).scaleY(has ? 1.04f : 1f)
+            paintChip(b, (Integer) v.getTag(), has, label.get());
+            v.animate().scaleX(has ? 1.06f : 1f).scaleY(has ? 1.06f : 1f)
+                    .setInterpolator(has ? HomeTheme.settle() : HomeTheme.ease())
                     .setDuration(HomeTheme.MS_FOCUS).start();
             if (has) lastFocusedId = v.getId();
         });
         return b;
     }
 
-    /** Draws the chip: its mark, and the label only while focused (or pinned by the caller). */
-    private void paintChip(TextView chip, int iconRes, boolean focused, boolean withLabel) {
-        Drawable ic = getDrawable(iconRes);
+    private void paintChip(TextView chip, int iconRes, boolean focused, String label) {
+        Drawable ic = getDrawable(iconRes).mutate();
         ic.setBounds(0, 0, dp(20), dp(20));
         chip.setCompoundDrawables(ic, null, null, null);
-        chip.setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(
-                focused ? 0xFFFFFFFF : 0xE6FFFFFF));
-        chip.setTextColor(focused ? Color.WHITE : 0xE6FFFFFF);
-        chip.setText(withLabel ? netLabel : "");
+        int ink = focused ? 0xFF111114 : 0xF2FFFFFF;
+        chip.setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(ink));
+        chip.setTextColor(ink);
+        String text = focused && label != null ? label : "";
+        chip.setText(text);
+        chip.setCompoundDrawablePadding(text.isEmpty() ? 0 : dp(8));
+        chip.setPadding(dp(12), 0, dp(text.isEmpty() ? 12 : 18), 0);
+        ((GradientDrawable) chip.getBackground()).setColor(focused ? 0xF2FFFFFF : glassColor);
     }
 
     // ---------------------------------------------------------------- Now Showing
@@ -860,6 +841,7 @@ public class MainActivity extends Activity {
         card.setVisibility(View.GONE);
         final GradientDrawable glass = HomeTheme.glassPill(HomeTheme.NOW_RADIUS,
                 getResources().getDisplayMetrics().density);
+        glasses.add(glass);
         card.setBackground(glass);
 
         for (int i = 0; i < 2; i++) {
@@ -882,7 +864,7 @@ public class MainActivity extends Activity {
             // Highlighted in place: the rim and a lighter glass, no size change, so the 14dp gutter
             // between the cards (and down to the dock) is the same gap, focused or not.
             halo.setStroke(dp(2), has ? 0xB3FFFFFF : 0x00FFFFFF);
-            glass.setColor(has ? 0x7A101014 : HomeTheme.GLASS);
+            glass.setColor(has ? 0x7A101014 : glassColor);
             // Focus is the pause: OK must open exactly what is on screen.
             handler.removeCallbacks(deck.tick);
             if (!has) deck.start();   // back on its own slot, not on whichever moment focus left
@@ -940,6 +922,7 @@ public class MainActivity extends Activity {
         col.addView(eyebrow, new LinearLayout.LayoutParams(-1, -2));
 
         TextView title = text(20, "sans-serif-semibold", Color.WHITE);
+        title.setLetterSpacing(HomeTheme.TITLE_TRACKING);
         title.setSingleLine(true);
         title.setEllipsize(android.text.TextUtils.TruncateAt.END);
         col.addView(title, llp(-1, -2, 0, dp(3), 0, 0));
@@ -1196,8 +1179,10 @@ public class MainActivity extends Activity {
         // is 8 less: the glass reads as 14dp of air while the pill stays 92dp tall.
         dockPillRow.setPadding(dp(HomeTheme.DOCK_PAD), dp(HomeTheme.DOCK_PAD_TOP),
                 dp(HomeTheme.DOCK_PAD), dp(HomeTheme.DOCK_PAD_BOTTOM));
-        dockPillRow.setBackground(HomeTheme.glassPill(HomeTheme.DOCK_PILL_RADIUS,
-                getResources().getDisplayMetrics().density));
+        GradientDrawable pillGlass = HomeTheme.glassPill(HomeTheme.DOCK_PILL_RADIUS,
+                getResources().getDisplayMetrics().density);
+        glasses.add(pillGlass);
+        dockPillRow.setBackground(pillGlass);
         return dockPillRow;
     }
 
@@ -1263,14 +1248,14 @@ public class MainActivity extends Activity {
             glideTo(0);
         });
         holder.setOnClickListener(v -> {
-            pressDip(v, 1f);
+            pressDip(v, HomeTheme.DOCK_FOCUS_SCALE);
             getSharedPreferences("launches", MODE_PRIVATE).edit()
                     .putLong(app.pkg, System.currentTimeMillis()).apply();
             boolean opened = launch(new Intent(Intent.ACTION_MAIN)
                     .addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
                     .setComponent(app.component)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED));
-            if (!opened) pressUndo(v, 1f);
+            if (!opened) pressUndo(v, HomeTheme.DOCK_FOCUS_SCALE);
         });
         holder.setOnLongClickListener(v -> { showAppMenu(v, app); return true; });
         return holder;
@@ -1872,12 +1857,14 @@ public class MainActivity extends Activity {
 
     private void setHaTile(int i, String value, String raw, JSONObject ages, String label) {
         boolean has = !raw.isEmpty() && !raw.startsWith("unknown") && !raw.startsWith("unavailable");
-        haTileBox[i].setVisibility(has ? View.VISIBLE : View.INVISIBLE);
+        // Gone, not invisible: a row with a missing tile spreads the rest across it instead of
+        // leaving a hole at its end (Inside and AC with no bins left the right third empty).
+        haTileBox[i].setVisibility(has ? View.VISIBLE : View.GONE);
         if (!has) return;
         haTileValue[i].setText(value);
         long age = ages == null ? 0 : ages.optLong(HA_KEYS[i], 0);
         boolean stale = Times.stale(age);
-        haTileBox[i].setAlpha(stale ? 0.4f : 1f);
+        haTileBox[i].setAlpha(stale ? HomeTheme.STALE : 1f);
         haTileLabel[i].setText(stale ? Times.updatedAgo(age) : label);
     }
 
@@ -1962,7 +1949,7 @@ public class MainActivity extends Activity {
             statusSolarGroup.setVisibility(producing ? View.VISIBLE : View.GONE);
             if (producing) {
                 statusSolar.setText(Times.kw(solar) + " kW");
-                statusSolarGroup.setAlpha(Times.stale(age(ages, "solar")) ? 0.4f : 1f);
+                statusSolarGroup.setAlpha(Times.stale(age(ages, "solar")) ? HomeTheme.STALE : 1f);
             }
         }
 
@@ -2069,6 +2056,13 @@ public class MainActivity extends Activity {
                 is24, j.optLong("next_at", 0), now);
         haNextRow.setVisibility(next.isEmpty() ? View.GONE : View.VISIBLE);
         haNext.setText(next);
+        // "in 47 min" is the first thing to go when the line will not fit: the time and the event
+        // are the news, and an ellipsis through the event's name says neither.
+        final String nextShort = Times.calendarLine(j.optString("next", ""), is24, 0, now);
+        haNext.post(() -> {
+            android.text.Layout l = haNext.getLayout();
+            if (l != null && l.getLineCount() > 0 && l.getEllipsisCount(0) > 0) haNext.setText(nextShort);
+        });
 
         // Who is in, named when the snapshot names them. Silent when there are no person entities.
         String people = Cards.peopleLine(j.optString("people", ""), j.optString("people_names", ""));
@@ -2194,13 +2188,13 @@ public class MainActivity extends Activity {
         card.setLongClickable(true);
         card.setOnLongClickListener(v -> { showAppMenu(v, app); return true; });
         card.setOnClickListener(v -> {
-            pressDip(v, 1.08f);
+            pressDip(v, HomeTheme.DOCK_FOCUS_SCALE);
             getSharedPreferences("launches", MODE_PRIVATE).edit().putLong(app.pkg, System.currentTimeMillis()).apply();
             boolean opened = launch(new Intent(Intent.ACTION_MAIN)
                     .addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
                     .setComponent(app.component)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED));
-            if (!opened) pressUndo(v, 1.08f);
+            if (!opened) pressUndo(v, HomeTheme.DOCK_FOCUS_SCALE);
         });
         card.setOnFocusChangeListener((v, has) -> {
             lift(v, has, HomeTheme.DOCK_FOCUS_SCALE);
@@ -2364,9 +2358,13 @@ public class MainActivity extends Activity {
 
     /** Half a press before the launch. The gap between OK and the app's first frame is a few hundred ms,
      *  and without this the remote gets no acknowledgement at all in that time. */
+    /** OK pressed: the tile gives under the press, then springs back to its focused size. */
     private void pressDip(View v, float base) {
         v.animate().scaleX(base * 0.94f).scaleY(base * 0.94f).setDuration(90)
-                .setInterpolator(new DecelerateInterpolator()).start();
+                .setInterpolator(new DecelerateInterpolator())
+                .withEndAction(() -> v.animate().scaleX(base).scaleY(base)
+                        .setInterpolator(HomeTheme.settle()).setDuration(HomeTheme.MS_REVEAL).start())
+                .start();
     }
 
     /** Only if nothing opened: the tile would otherwise stay slightly small until focus moves. */
@@ -2586,11 +2584,8 @@ public class MainActivity extends Activity {
         // Digits only, in the device's own zone: the meridian is noise on a screen this quiet.
         long now = System.currentTimeMillis() / 1000L;
         java.time.ZoneId zone = java.time.ZoneId.systemDefault();
-        clock.setText(Times.clockDigits(now, android.text.format.DateFormat.is24HourFormat(this), zone));
-        if (greet != null) {
-            String hello = Times.greeting(now, zone);
-            greet.setText(familyName.isEmpty() ? hello : hello + " " + familyName);
-        }
+        rollClock(Times.clockDigits(now, android.text.format.DateFormat.is24HourFormat(this), zone));
+        if (greet != null) greet.setText(Typo.hello(Times.greeting(now, zone), familyName));
         if (dateLine != null) dateLine.setText(Times.dateLine(now, zone));
     }
 
@@ -2701,7 +2696,7 @@ public class MainActivity extends Activity {
         if (netChip == null) return;
         int icon = isEthernet() ? R.drawable.ic_ethernet : R.drawable.ic_wifi;
         netChip.setTag(icon);
-        paintChip(netChip, icon, netChip.isFocused(), netChip.isFocused());
+        paintChip(netChip, icon, netChip.isFocused(), netLabel);
     }
 
     private void updateWifi() {
@@ -2766,6 +2761,48 @@ public class MainActivity extends Activity {
         scheduleWallpaper(WALLPAPER_INTERVAL_MS);
     }
 
+    /** The minute turns over like the Lock Screen's: the old time lifts away, the new one rises in. */
+    private void rollClock(String digits) {
+        CharSequence was = clock.getText();
+        if (digits.contentEquals(was)) return;
+        if (was.length() == 0 || !clock.isShown()) {
+            clock.setText(digits);
+            return;
+        }
+        clock.animate().alpha(0f).translationY(-dp(4)).setDuration(HomeTheme.MS_FOCUS)
+                .setInterpolator(HomeTheme.ease()).withLayer().withEndAction(() -> {
+                    clock.setText(digits);
+                    clock.setTranslationY(dp(4));
+                    clock.animate().alpha(1f).translationY(0).setDuration(HomeTheme.MS_REVEAL)
+                            .setInterpolator(HomeTheme.ease()).withLayer().start();
+                }).start();
+    }
+
+    /**
+     * The glass takes a little of the photo's colour (see {@link HomeTheme#glassFor}) and eases over
+     * with the photo's own crossfade. The colour is saved so the Home-key cover's dock matches.
+     */
+    private void tintGlass(Bitmap bm) {
+        Bitmap small = Bitmap.createScaledBitmap(bm, 16, 9, true);
+        long r = 0, g = 0, b = 0;
+        for (int y = 0; y < 9; y++) for (int x = 0; x < 16; x++) {
+            int p = small.getPixel(x, y);
+            r += Color.red(p); g += Color.green(p); b += Color.blue(p);
+        }
+        if (small != bm) small.recycle();
+        int to = HomeTheme.glassFor(Color.rgb((int) (r / 144), (int) (g / 144), (int) (b / 144)));
+        getSharedPreferences("launcher", MODE_PRIVATE).edit().putInt("glass", to).apply();
+        ValueAnimator a = ValueAnimator.ofArgb(glassColor, to);
+        a.setDuration(2000);
+        a.addUpdateListener(an -> {
+            glassColor = (int) an.getAnimatedValue();
+            for (GradientDrawable gd : glasses) gd.setColor(glassColor);
+            for (TextView c : chips)
+                if (!c.isFocused()) ((GradientDrawable) c.getBackground()).setColor(glassColor);
+        });
+        a.start();
+    }
+
     private void showWallpaper(Bitmap bm) {
         if (bm == null || isDestroyed()) return;
         // Swap roles: the old front becomes the back, the new photo fades in on top.
@@ -2777,6 +2814,7 @@ public class MainActivity extends Activity {
         root.addView(wallFront, 1, new FrameLayout.LayoutParams(-1, -1));
         wallFront.setImageBitmap(bm);
         currentWall = bm;
+        tintGlass(bm);
         // One small blurred copy per photo, for the frosted panel to sample.
         new Thread(() -> {
             final Bitmap f = Blur.frost(bm, 160, 90);

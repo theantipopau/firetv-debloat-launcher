@@ -46,7 +46,9 @@ final class HomeTheme {
 
     // ---- top-right actions
     static final int ACTION_TOP = 46;
-    static final int ACTION_GAP = 28;
+    /** Between the round top-right buttons: tvOS spaces its controls by their own radius or so. */
+    static final int ACTION_GAP = 14;
+    static final int ACTION_SIZE = 44;
 
     // ---- Now Showing card
     /**
@@ -163,6 +165,14 @@ final class HomeTheme {
     /** 98% #0E0E10 over the sampled blur: nothing behind the sheet reads through it. */
     static final int HA_TINT = 0xFA0E0E10;
 
+    // ---- type
+    /** Display sizes track tighter, as Apple's do: Inter Light at 56sp reads loose at 0. */
+    static final float CLOCK_TRACKING = -0.02f;
+    static final float TITLE_TRACKING = -0.01f;
+
+    /** A value whose sensor has gone quiet: dimmed, but still readable on a bright wallpaper. */
+    static final float STALE = 0.55f;
+
     // ---- glass
     /** The dock pill and the Now Showing card: black 35% plus a 1dp white 12% hairline. */
     static final int GLASS = 0x59000000;
@@ -184,11 +194,20 @@ final class HomeTheme {
 
     // ---- backdrop: two gradients, nothing else
     static GradientDrawable leftWash() {
-        return horizontal(new int[]{0x73000000, 0x1F000000, 0x00000000});
+        return horizontal(new int[]{0x8C000000, 0x26000000, 0x00000000});
     }
 
+    /** Deep enough that the dock and the card text hold up over snow, sky and surf. */
     static GradientDrawable bottomWash() {
-        return vertical(new int[]{0x00000000, 0x33000000, 0x80000000});
+        return vertical(new int[]{0x00000000, 0x4D000000, 0xB3000000});
+    }
+
+    /**
+     * The glass over a given wallpaper, as tvOS tints its own: the photo's average colour at a fifth
+     * of its brightness, 42% strong. Grey glass on a warm sunset is what made the dock look pasted on.
+     */
+    static int glassFor(int average) {
+        return withAlpha(darken(average, 0.2f), 0.42f);
     }
 
     /** Deeper floor behind a revealed Continue Watching row; drawn in, never at rest. */

@@ -297,10 +297,10 @@ public class HomeKeyService extends AccessibilityService {
         String hello = Times.greeting(System.currentTimeMillis() / 1000L,
                 java.time.ZoneId.systemDefault());
         TextView g = new TextView(this);
-        g.setText(family.isEmpty() ? hello : hello + " " + family);
-        g.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
+        g.setText(Typo.hello(hello, family));
+        g.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
         g.setTypeface(Typo.medium(this));
-        g.setTextColor(0xD9FFFFFF);
+        g.setTextColor(HomeTheme.TEXT_70);
         g.setIncludeFontPadding(false);
         g.setShadowLayer(px(d, 8), 0, px(d, 1), 0x80000000);
         LinearLayout.LayoutParams gp = new LinearLayout.LayoutParams(-2, -2);
@@ -315,6 +315,7 @@ public class HomeKeyService extends AccessibilityService {
         clk.setTextColor(Color.WHITE);
         clk.setIncludeFontPadding(false);
         clk.setFontFeatureSettings("tnum");
+        clk.setLetterSpacing(HomeTheme.CLOCK_TRACKING);
         clk.setShadowLayer(px(d, 8), 0, px(d, 1), 0x80000000);
         block.addView(clk);
 
@@ -374,7 +375,10 @@ public class HomeKeyService extends AccessibilityService {
         pill.setClipToPadding(false);
         pill.setPadding(px(d, HomeTheme.DOCK_PAD), px(d, HomeTheme.DOCK_PAD_TOP),
                 px(d, HomeTheme.DOCK_PAD), px(d, HomeTheme.DOCK_PAD_BOTTOM));
-        pill.setBackground(HomeTheme.glassPill(HomeTheme.DOCK_PILL_RADIUS, d));
+        // The launcher saves the glass it tinted from the wallpaper, so this dock wears it too.
+        GradientDrawable glass = HomeTheme.glassPill(HomeTheme.DOCK_PILL_RADIUS, d);
+        glass.setColor(getSharedPreferences("launcher", MODE_PRIVATE).getInt("glass", HomeTheme.GLASS));
+        pill.setBackground(glass);
 
         List<MainActivity.App> apps = MainActivity.dockSnapshot != null
                 ? MainActivity.dockSnapshot : coverDock;
