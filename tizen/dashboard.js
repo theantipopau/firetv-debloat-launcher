@@ -39,7 +39,11 @@
 
     firetv: '<span class="mark"><span class="word firetv">fire tv</span></span>',
 
-    livetv: '<span class="mark"><span class="badge">LIVE</span></span>',
+    // An aerial on a set: the tile switches to the TV's own tuner.
+    livetv: '<span class="mark"><svg class="g-aerial" viewBox="0 0 34 30" aria-hidden="true">' +
+      '<path d="M10 2.5l7 8 7-8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '<rect x="2.5" y="11" width="29" height="16.5" rx="3.5" fill="none" stroke="currentColor" stroke-width="2.2"/>' +
+      '<path d="M12 30h10" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></span>',
 
     tvplus: '<span class="mark"><span class="badge tvplus">TV+</span></span>',
 
@@ -91,6 +95,11 @@
      instead of blanking the panel until the next good read. */
   var lastSnap = null;
   var loading = false;
+
+  /* The Fire TV's two rotating cards, read from the same tvhome_new.json:
+     what is on live now (TiviMate on the Fire TV) and the newest on Plex. */
+  var decks = [];
+  var DECK_EVERY = 10000;
 
   /* ---------- helpers ---------- */
 
@@ -536,6 +545,125 @@
       });
   }
 
+  /* ---------- live now / new on Plex ---------- */
+
+  /* The feed was written through a Latin-1 step somewhere, so its middle dots
+     arrive as "Â·". Put them back rather than show the mojibake. */
+  function clean(text) {
+    return String(text || "").replace(/\u00c2\u00b7/g, "\u00b7").replace(/\s+/g, " ").trim();
+  }
+
+  function clock12(sec) {
+    var d = new Date(sec * 1000);
+    var h = d.getHours();
+    var m = pad(d.getMinutes());
+    if (!hour12) { return pad(h) + ":" + m; }
+    return (h % 12 || 12) + ":" + m + (h < 12 ? "am" : "pm");
+  }
+
+  function cardsUrl() {
+    if (cfg.cardsUrl) { return cfg.cardsUrl; }
+    return cfg.snapshotUrl ? cfg.snapshotUrl.replace(/tvhome\.json(\?.*)?$/, "tvhome_new.json") : "";
+  }
+
+  function paneFor(item, live) {
+    var p = document.createElement("div");
+    p.className = "pane" + (live ? "" : " plex");
+    var art = document.createElement("div");
+    art.className = "art";
+    if (item.image) { art.style.backgroundImage = "url('" + item.image + "')"; }
+    var words = document.createElement("div");
+    words.className = "words";
+    var eyebrow = document.createElement("div");
+    eyebrow.className = "eyebrow";
+    eyebrow.innerHTML = '<span class="dot"></span>';
+    eyebrow.appendChild(document.createTextNode(live ? "Live now on TV" : "Now Showing on Plex"));
+    var t = document.createElement("div");
+    t.className = "t";
+    t.textContent = clean(item.title);
+    var s = document.createElement("div");
+    s.className = "s";
+    s.textContent = live
+      ? [clean(item.channel), item.until ? "ends " + clock12(item.until) : ""].filter(Boolean).join(" \u00b7 ")
+      : clean(item.sub);
+    words.appendChild(eyebrow);
+    words.appendChild(t);
+    words.appendChild(s);
+    p.appendChild(art);
+    p.appendChild(words);
+    return p;
+  }
+
+  /* One card: its list, the pane on screen, and its own slot on a shared 10 s
+     grid (live on the beat, Plex half a beat later) so the two never turn together. */
+  function makeDeck(live, items, open) {
+    var el = document.createElement("button");
+    el.type = "button";
+    el.className = "deck";
+    var deck = { el: el, live: live, items: items, cur: 0 };
+    items.forEach(function (item, i) {
+      var p = paneFor(item, live);
+      if (i === 0) { p.className += " on"; }
+      el.appendChild(p);
+    });
+    el.addEventListener("click", function () { open(items[deck.cur]); });
+    deck.turn = function () {
+      if (items.length < 2 || document.activeElement === el) { return; }
+      var panes = el.children;
+      panes[deck.cur].className = panes[deck.cur].className.replace(" on", "");
+      deck.cur = (deck.cur + 1) % items.length;
+      panes[deck.cur].className += " on";
+    };
+    return deck;
+  }
+
+  function sourceApp(key) {
+    return (cfg.apps || []).filter(function (a) { return a.key === key; })[0];
+  }
+
+  function renderDecks(items) {
+    var box = $("decks");
+    var now = Date.now() / 1000;
+    var live = items.filter(function (i) { return i.kind === "live" && (!i.until || i.until > now); }).slice(0, 10);
+    var plex = items.filter(function (i) { return i.kind !== "live" && i.app === "Plex"; }).slice(0, 10);
+    var sig = JSON.stringify([live, plex]);
+    if (box.getAttribute("data-sig") === sig) { return; }
+    box.setAttribute("data-sig", sig);
+    var had = document.activeElement && document.activeElement.className === "deck";
+    box.innerHTML = "";
+    decks = [];
+    // Live is TiviMate on the Fire TV, so its card switches to the Fire TV's input;
+    // the Plex card opens Plex on this TV.
+    if (live.length) {
+      decks.push(makeDeck(true, live, function () {
+        var ft = sourceApp("firetv");
+        if (ft) { launch(ft); }
+      }));
+    }
+    if (plex.length) {
+      decks.push(makeDeck(false, plex, function () {
+        var px = sourceApp("plex");
+        if (px) { launch(px); } else { toast("Plex is not on this TV"); }
+      }));
+    }
+    decks.forEach(function (d) { box.appendChild(d.el); });
+    box.hidden = !decks.length;
+    if (had && decks.length) { decks[0].el.focus(); }
+  }
+
+  function loadCards() {
+    var url = cardsUrl();
+    if (!url || !window.fetch) { return; }
+    fetch(url + (url.indexOf("?") < 0 ? "?" : "&") + "_=" + Date.now(), { cache: "no-store" })
+      .then(function (r) { if (!r.ok) { throw new Error("HTTP " + r.status); } return r.json(); })
+      .then(function (feed) { renderDecks((feed && feed.items) || []); })
+      .catch(function () { /* keep whatever cards are on screen */ });
+  }
+
+  function deckEls() {
+    return decks.map(function (d) { return d.el; });
+  }
+
   /* ---------- dock ---------- */
 
   function markFor(app) {
@@ -791,6 +919,13 @@
     load();
     setInterval(load, Math.max(15, cfg.refreshSeconds || 15) * 1000);
 
+    loadCards();
+    setInterval(loadCards, 60000);
+    setInterval(function () { if (decks[0]) { decks[0].turn(); } }, DECK_EVERY);
+    setTimeout(function () {
+      setInterval(function () { if (decks[1]) { decks[1].turn(); } }, DECK_EVERY);
+    }, DECK_EVERY / 2);
+
     setSwitch($("toggle24"), !hour12);
 
     $("toggle24").addEventListener("click", function () {
@@ -834,7 +969,12 @@
 
       var top = [$("allAppsBtn"), $("settingsBtn")];
       var t = top.indexOf(document.activeElement);
-      if (t >= 0 && (k === 37 || k === 39)) {
+      var di = deckEls().indexOf(document.activeElement);
+      if (di >= 0 && (k === 37 || k === 39)) {
+        e.preventDefault();
+        var dn = di + (k === 39 ? 1 : -1);
+        if (dn >= 0 && dn < decks.length) { decks[dn].el.focus(); }
+      } else if (t >= 0 && (k === 37 || k === 39)) {
         // Left and right move between the round buttons; they used to drop into the dock.
         e.preventDefault();
         top[Math.max(0, Math.min(top.length - 1, t + (k === 39 ? 1 : -1)))].focus();
@@ -845,14 +985,17 @@
         else { focusTile(i < 0 ? 0 : i + 1, "r"); }
       } else if (k === 38) {
         e.preventDefault();
+        // Up from the dock lands on the cards, up again on the round buttons.
+        var onTile = tiles().indexOf(document.activeElement) >= 0;
         spot(null);
-        $("allAppsBtn").focus();
+        if (onTile && decks.length) { decks[0].el.focus(); } else { $("allAppsBtn").focus(); }
       } else if (k === 40) {
         e.preventDefault();
-        if (document.activeElement === $("allAppsBtn") || document.activeElement === $("settingsBtn")) {
-          focusTile(tileIndex);
+        var fromTop = document.activeElement === $("allAppsBtn") || document.activeElement === $("settingsBtn");
+        if (fromTop && decks.length) {
+          decks[0].el.focus();
         } else {
-          focusTile(0);
+          focusTile(fromTop || deckEls().indexOf(document.activeElement) >= 0 ? tileIndex : 0);
         }
       }
     });
@@ -864,7 +1007,7 @@
 
   /* Console hook: feed it a snapshot to see how the screen lays it out.
      window.TVH_debug.render({ temp: 24, inside: 21.6 }) */
-  window.TVH_debug = { render: render, load: load };
+  window.TVH_debug = { render: render, load: load, loadCards: loadCards };
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);
