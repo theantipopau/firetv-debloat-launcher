@@ -169,6 +169,14 @@ behaviour across years is falling back to the Home screen or the last source.
 Alternative: the TV's own remote key `KEY_HOME`, then pick **TV Home** — `python tools/tizen.py key
 KEY_HOME` does that from a shell.
 
+If a Fire TV powers the set on over HDMI-CEC, leave Autorun Last App **off** instead: CEC already
+switches to the Fire TV's input, and an autorun dashboard would only compete with it.
+
+**The Home button always opens Samsung's own bar.** A web app cannot catch it or replace the home
+screen. Pin TV Home first so Home then OK gets back to it: Home → Apps → TV Home → hold OK →
+**Add to Home**, then on the bar its options → **Move** → far left. Back from the bar usually
+returns to the dashboard too.
+
 ## Rollback
 
 ```sh
