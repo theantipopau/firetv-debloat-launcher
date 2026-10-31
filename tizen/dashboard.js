@@ -515,21 +515,9 @@
     var art = words(snap.media_art);
     var warm = true;
 
-    if (!title) {
-      var plex = words(snap.plex);
-      if (!plex) { box.hidden = true; return; }
-      var bits = plex.split(/\s+[-\u2013]\s+/);
-      title = bits[0];
-      var code = "";
-      var m = plex.match(/s(\d{1,2})e(\d{1,2})/i);
-      if (m) {
-        code = "S" + m[1] + "E" + m[2];
-      } else if (bits.length > 1 && bits[1].length <= 4) {
-        code = bits[1].toUpperCase();
-      }
-      sub = (code ? code + " · " : "") + "Plex";
-      warm = false;
-    }
+    // Only what is playing on a media player you name in the snapshot. The `plex` key is
+    // whoever is streaming from your Plex server, shared users included, so it is not shown.
+    if (!title) { box.hidden = true; return; }
 
     box.hidden = false;
     $("nowTitle").textContent = title;
@@ -934,7 +922,10 @@
     }
     var url = cfg.controlUrl + (cfg.controlUrl.indexOf("?") < 0 ? "?" : "&") + "key=" + encodeURIComponent(key);
     fetch(url, { method: "POST" })
-      .then(function (r) { toast(r && r.ok ? "Switching to " + app.label : "Control URL returned an error"); })
+      .then(function (r) {
+        if (!r || !r.ok) { toast("Control URL returned an error"); return; }
+        toast("Switching to " + app.label);
+      })
       .catch(function () { toast("Could not reach the control URL"); });
   }
 
@@ -948,6 +939,20 @@
     sheet = el;
     var first = el.querySelector("button");
     if (first) { first.focus(); }
+  }
+
+  /* Arrows inside a sheet. The apps grid moves by its own column count; the settings
+     rows are a single column, so left and right do nothing there. */
+  function moveInSheet(k) {
+    var items = Array.prototype.slice.call(sheet.querySelectorAll("button"));
+    if (!items.length) { return; }
+    var i = items.indexOf(document.activeElement);
+    if (i < 0) { items[0].focus(); return; }
+    var cols = sheet === $("appsSheet") ? 6 : 1;
+    var step = k === 37 ? -1 : k === 39 ? 1 : k === 38 ? -cols : cols;
+    if (cols === 1 && (k === 37 || k === 39)) { return; }
+    var n = i + step;
+    if (n >= 0 && n < items.length) { items[n].focus(); }
   }
 
   function closeSheet() {
@@ -1048,6 +1053,10 @@
         if (k === 27 || k === 8 || k === 461 || k === 10009) {
           e.preventDefault();
           closeSheet();
+        } else if (k >= 37 && k <= 40) {
+          // The TV's browser has no spatial navigation: move between the sheet's buttons here.
+          e.preventDefault();
+          moveInSheet(k);
         }
         return;
       }
