@@ -190,6 +190,9 @@ boot path lands on Home before any app can take over.
 | install: `-3 invalid certificate chain` | Tizen/public certificate used, or "Permit to install apps" not run | recreate the profile as **Samsung**; run Permit again |
 | install: `-4 invalid signature` | distributor certificate does not include this TV's DUID | connect the TV in Device Manager, delete and recreate the distributor certificate |
 | packaging: `profile not found` | TV Extensions not installed | Package Manager → Extension SDK → TV Extensions |
+| Package Manager: `Cannot connect the repository server` | the default mirror `usa.sdk-dl.tizen.org` answers 403 | set `Repository:` in `C:	izen-studio\.infoepository.info` to `https://download.tizen.org/sdk/tizenstudio` |
+| Package Manager: `Directory creation failed` / `Installation has been failed` | it needs admin rights | run `package-manager-cli.exe` (or the GUI) as administrator |
+| 12345 on Apps does nothing | the remote has no number pad, or Apps was not the focused screen | `python tools/tizen.py devmode` sends the digits while the TV sits on Apps |
 | app installs but shows a blank screen | page error, not a certificate error | open `build/tizen/index.html` over http in a browser first; the same page must render |
 | screen shows `no data` | CORS, wrong IP, or self-signed HTTPS | step 6; check the exact URL in a PC browser on the same LAN |
 | dock tiles do nothing | app not installed, or its name differs from `names` in `config.js` | add the name the TV reports; the tile says when it cannot find one |
@@ -202,5 +205,7 @@ boot path lands on Home before any app can take over.
 - `--snapshot-url` rewrites the shipped `config.js` and nothing else; an `ftp://` value is refused.
 - The staged build renders at 1920×1080 in Chromium with the dock and clock, and honestly reports
   **no data** when the snapshot is absent — the bundled widget cannot show demo values.
-- `tizen`/`sdb` are not installed on this machine and `26101` is closed, so signing and the
-  on-TV install have not been exercised. That is what steps 3–5 are for.
+- On the 75TU8000 (Tizen 5.5, 2026-10-31): developer mode via `tools/tizen.py devmode` and a
+  held-power restart, a Samsung `tvhome` profile, then `package-tizen.py --install --run` signed,
+  installed and launched `TVHOME0001.TVHome`. The widget read Home Assistant's `tvhome.json`
+  without any `cors_allowed_origins` change: the `<access origin="*">` whitelist was enough.
