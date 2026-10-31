@@ -39,3 +39,6 @@ launcher/out/
 
 # Local captures and one-off dumps
 screenshots/
+
+# Tizen widget build output (staged project and signed .wgt)
+/build/

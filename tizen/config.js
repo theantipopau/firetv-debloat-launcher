@@ -2,43 +2,68 @@
 
 window.TVH = {
 
-  /* Where the home screen gets its data. Any URL works; keep data/dashboard.json
-     next to this page, or point this at Home Assistant's /local/dashboard.json. */
-  feedUrl: "data/dashboard.json",
-  refreshSeconds: 60,
+  /* Where the snapshot comes from. Your existing Home Assistant package already
+     writes this file every 15 seconds (docs/HOME-ASSISTANT.md):
 
-  /* 12-hour clock without AM/PM, like the reference. Set false for 19:55. */
+       snapshotUrl: "http://192.168.1.10:8123/local/tvhome.json"
+
+     Use the HA machine's IP, not homeassistant.local: the TV does not always
+     resolve .local. Empty means "read data/tvhome.sample.json", with a small
+     "sample data" chip in the corner so it is never mistaken for live. */
+  snapshotUrl: "",
+  sampleUrl: "data/tvhome.sample.json",
+
+  /* tvhome.yaml republishes every 15 s; polling faster only re-reads the file. */
+  refreshSeconds: 15,
+
+  /* Lines under the battery row. They fill in this order: bins, the next
+     event, rain (unless the forecast is dry), who is home, the day's solar,
+     sunrise/sunset, wind. Raise this only if your snapshot is quiet. */
+  maxLines: 3,
+
+  /* 12-hour clock, and 12-hour sunrise/sunset times. Set false for 19:55. */
   hour12: true,
 
-  /* Live TV cannot be opened from a web page: it needs a remote key sent over the
-     network, so that action posts to this URL (see README.md). Empty = the tile
-     explains itself instead of failing silently. */
+  /* A web page cannot switch the TV's input, so the source tiles (Fire TV on
+     HDMI, Live TV on the aerial) post their remote key to this URL as
+     ?key=KEY_HDMI1, and Home Assistant presses it (README.md, "Sources"):
+
+       controlUrl: "http://192.168.1.10:8123/api/webhook/tvhome_key_x7Rq2"
+
+     Empty = the tile explains itself instead of failing silently. */
   controlUrl: "",
 
-  /* Full-bleed background. Packaged as a Tizen app, copy these into tizen/wallpapers/
-     and change the paths. Seconds = 0 keeps the first one. */
+  /* Full-bleed background, self-contained: a widget cannot read outside its
+     own folder, so these live in tizen/wallpapers/. Seconds = 0 keeps the
+     first one; anything else slowly crossfades through the list. */
   wallpapers: [
-    "../launcher/assets/wallpapers/09.jpg",
-    "../launcher/assets/wallpapers/01.jpg",
-    "../launcher/assets/wallpapers/05.jpg"
+    "wallpapers/09.jpg",
+    "wallpapers/01.jpg",
+    "wallpapers/05.jpg"
   ],
   wallpaperSeconds: 0,
 
   /* The dock, left to right. `divider: true` draws the vertical rule.
-     ids are Tizen app ids, not Android package names: run
-         python tools/tizen.py apps
-     once the TV is answering as its host client, and paste them in.
-     keyAction sends a remote key through controlUrl instead. */
+     `names` are what the app is called on the TV: on the Tizen runtime the page
+     asks the TV for its installed apps, matches these, and **hides the tile when
+     nothing matches** — so the dock is what this set actually has, not a wish
+     list. `id` pins one anyway. `keyAction` sends a remote key through controlUrl
+     and is never hidden (it is a source, not an app). */
   apps: [
-    { key: "plex",    label: "Plex",             id: "" },
-    { key: "netflix", label: "Netflix",          id: "3201907018784" },
-    { key: "prime",   label: "Prime Video",      id: "" },
-    { key: "youtube", label: "YouTube",          id: "" },
-    { key: "disney",  label: "Disney+",          id: "" },
-    { key: "spotify", label: "Spotify",          id: "" },
+    /* Sources first: the Fire TV on its HDMI port (change KEY_HDMI1 to the
+       port it is plugged into), the aerial tuner, and Samsung TV Plus. */
+    { key: "firetv",  label: "Fire TV",         keyAction: "KEY_HDMI1" },
+    { key: "livetv",  label: "Live TV",         keyAction: "KEY_TV" },
+    { key: "tvplus",  label: "Samsung TV Plus", names: ["Samsung TV Plus", "TV Plus"] },
 
-    { key: "livetv",  label: "Live TV",          keyAction: "KEY_TV", divider: true },
-    { key: "tvplus",  label: "Samsung TV Plus",  id: "" },
-    { key: "iview",   label: "ABC iview",        id: "" }
+    { key: "plex",    label: "Plex",            names: ["Plex"], divider: true },
+    { key: "netflix", label: "Netflix",         names: ["Netflix"] },
+    { key: "prime",   label: "Prime Video",     names: ["Prime Video", "Amazon Prime Video"] },
+    { key: "youtube", label: "YouTube",         names: ["YouTube"] },
+    { key: "disney",  label: "Disney+",         names: ["Disney+", "Disney Plus"] },
+    { key: "spotify", label: "Spotify",         names: ["Spotify"] },
+    { key: "iview",   label: "ABC iview",       names: ["ABC iview", "ABC iView"] },
+    { key: "sbs",     label: "SBS On Demand",   names: ["SBS On Demand", "SBS"] },
+    { key: "nine",    label: "9Now",            names: ["9Now", "Nine Now", "9 Now"] }
   ]
 };

@@ -117,15 +117,16 @@ build is as likely to be slower as faster.
 
 Realistic scope: a dashboard you land on, not a home screen you live in. Rough shape, smallest first.
 
-1. **Static page** at 1920×1080, Chromium‑69‑safe JS, served from Home Assistant or any local web
-   server: greeting, clock, wallpaper rotation, app tiles, HA panel, keep‑watching row. Test in a
-   desktop browser first — it needs no TV.
-2. **App IDs**: harvest them from the TV (needs host status, see above) and record them in the page.
-   Include a fallback: if nothing launches, the tile still links out.
-3. **Package as a Tizen web app** (`config.xml`, `index.html`), signed with a Samsung certificate
-   from Tizen Studio, installed over the TV's developer mode (Host PC IP → Developer mode, then
-   `sdb` from a machine on the same LAN). This is the only route to something that appears in the
-   TV's own app list.
+1. **Static page** — built: [tizen/](../tizen/README.md). Clock, weather/battery/climate stack,
+   now‑playing card, `All apps` / `Settings`, and a dock with the apps plus Live TV and Samsung TV
+   Plus, matching the reference layout. 1920×1080, Chromium‑69‑safe, runs in any browser first.
+2. **App list**: the widget asks the TV for its installed apps (`tizen.application.getAppsInfo`)
+   and matches names, so tiles follow what this set actually has; no id harvesting from outside.
+   `id` can still pin one in `config.js`.
+3. **Package as a signed widget** — `tizen/config.xml`, the icon and the wallpapers are in place;
+   `python tools/package-tizen.py` stages, validates and signs it into `build/TVHome.wgt`, and
+   [tizen/INSTALL.md](../tizen/INSTALL.md) covers the certificate, the TV's developer mode, the
+   `sdb` install and the rollback. Still the only route to something in the TV's own app list.
 4. **Autorun Last App** pointed at it.
 5. **Optional extras**, each needing its own check: `tizen.tvwindow` for an HDMI‑in tile (proven on
    other models, unverified on 2020), HA‑side sleep timer using `KEY_POWER`, doorbell/alert cards

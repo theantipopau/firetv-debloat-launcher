@@ -55,7 +55,7 @@ html, body {
   position: absolute;
   top: 76px;
   left: 120px;
-  right: 100px;
+  right: 120px;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -119,14 +119,28 @@ html, body {
 .pill.warn svg { color: #f0c45a; }
 .pill.low svg  { color: #ef6a6a; }
 
+/* Solar and house load are not batteries, so their glyphs are not squashed
+   into the battery's 26x15 box, and they carry no level colour. */
+.pill svg.g { width: 18px; height: 18px; margin-right: 9px; }
+.pill.solar svg { color: rgba(255,255,255,.9); }
+.pill.using svg { color: rgba(255,255,255,.6); }
+
+.pill.stale { opacity: .45; }
+.row .dim { color: rgba(255,255,255,.5); }
+
 /* ---------- now playing ---------- */
 
+/* Apple TV "Up Next": the artwork fills the card and the words sit on its
+   darkened left. A missing still leaves the colour wash, edge to edge. */
 .now {
+  position: relative;
+  overflow: hidden;
   display: flex;
   align-items: center;
   width: 470px;
-  margin-top: 27px;
-  padding: 14px 16px;
+  min-height: 124px;
+  margin-top: 17px;
+  padding: 18px 120px 18px 24px;
   border-radius: 19px;
   background: rgba(16,16,19,.58);
   border: 1px solid rgba(255,255,255,.07);
@@ -138,16 +152,28 @@ html, body {
 .now[hidden] { display: none; }
 
 .now .art {
-  width: 88px;
-  height: 88px;
-  border-radius: 15px;
-  margin-right: 19px;
-  flex: 0 0 auto;
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   background: linear-gradient(140deg, #f0b47a, #9a7bd6);
   background-size: cover;
   background-position: center;
-  box-shadow: 0 6px 18px rgba(0,0,0,.28);
 }
+
+.now .art::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: linear-gradient(90deg, rgba(0,0,0,.85) 0%, rgba(0,0,0,.5) 45%, rgba(0,0,0,0) 78%);
+}
+
+.now .meta { position: relative; min-width: 0; }
+.now .t, .now .s { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .now .t {
   font-size: 24px;
@@ -158,7 +184,7 @@ html, body {
 .now .s {
   margin-top: 6px;
   font-size: 18px;
-  color: rgba(255,255,255,.62);
+  color: rgba(255,255,255,.72);
 }
 
 /* ---------- top right ---------- */
@@ -209,6 +235,7 @@ html, body {
   display: flex;
   align-items: center;
   height: 94px;
+  max-width: 1680px;    /* 120px safe margin either side, the same as the clock */
   padding: 0 40px;
   border-radius: 47px;
   background: rgba(38,38,42,.40);
@@ -247,15 +274,51 @@ html, body {
 
 .tile .mark svg { height: 100%; width: 100%; display: block; fill: currentColor; }
 
+/* optical sizes: a badge and a letter do not want the same box */
+.tile .mark svg.g-netflix { height: 34px; width: auto; }
+.tile .mark svg.g-youtube { width: 42px; height: auto; }
+.tile .mark svg.g-spotify { width: 36px; height: 36px; }
+.tile .mark svg.g-prime   { width: 44px; height: auto; }
+
+/* Focus is depth, the way tvOS does it: the tile rises onto a light plate,
+   casts a shadow, a sheen crosses it once and its name appears underneath.
+   No white glow: a shadow reads on a bright wallpaper, a glow does not. */
 .tile:focus,
 .tile:hover,
 .tile.focused {
   outline: none;
-  transform: scale(1.16);
+  transform: translateY(-6px) scale(1.12);
   opacity: 1;
-  background: rgba(255,255,255,.11);
-  box-shadow: 0 0 0 1px rgba(255,255,255,.22), 0 16px 36px rgba(0,0,0,.45);
+  background-color: rgba(255,255,255,.16);
+  background-image: linear-gradient(105deg, rgba(255,255,255,0) 38%, rgba(255,255,255,.26) 50%, rgba(255,255,255,0) 62%);
+  background-size: 260% 100%;
+  background-repeat: no-repeat;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.32) inset, 0 16px 28px rgba(0,0,0,.42);
+  -webkit-animation: sheen .6s ease-out 1 both;
+  animation: sheen .6s ease-out 1 both;
 }
+
+@-webkit-keyframes sheen { from { background-position: 130% 0; } to { background-position: -30% 0; } }
+@keyframes sheen { from { background-position: 130% 0; } to { background-position: -30% 0; } }
+
+.tile .name {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-top: 22px;
+  transform: translateX(-50%);
+  font-size: 17px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: #fff;
+  text-shadow: 0 1px 10px rgba(0,0,0,.6);
+  opacity: 0;
+  transition: opacity .16s ease;
+  pointer-events: none;
+}
+
+.tile:focus .name,
+.tile.focused .name { opacity: 1; }
 
 .tile .word {
   font-weight: 800;
@@ -268,6 +331,9 @@ html, body {
 .word.plex   { font-size: 31px; letter-spacing: -1px; }
 .word.disney { font-size: 24px; font-weight: 600; font-style: italic; letter-spacing: -.3px; }
 .word.iview  { font-size: 19px; font-weight: 700; letter-spacing: -.3px; }
+.word.sbs    { font-size: 22px; font-weight: 800; letter-spacing: -.7px; }
+.word.nine   { font-size: 22px; font-weight: 800; letter-spacing: -.6px; }
+.word.firetv { font-size: 22px; font-weight: 700; letter-spacing: -.5px; }
 
 .divider {
   width: 1px;
@@ -351,6 +417,7 @@ html, body {
 
 .card .mark { min-width: 92px; height: 56px; }
 .card .mark svg { height: 100%; width: 100%; display: block; fill: currentColor; }
+.card .mark svg.g-prime { width: 64px; height: auto; }
 .card .word { font-size: 26px; }
 
 .card .label {
@@ -423,6 +490,20 @@ html, body {
 .ghost:focus { outline: none; background: rgba(255,255,255,.18); }
 
 /* ---------- toast ---------- */
+
+/* Only shown while on the sample file, or when the snapshot cannot be read. */
+.sample {
+  position: absolute;
+  left: 120px;
+  bottom: 46px;
+  font-size: 12px;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.34);
+  text-shadow: 0 1px 8px rgba(0,0,0,.5);
+}
+
+.sample[hidden] { display: none; }
 
 .toast {
   position: absolute;
