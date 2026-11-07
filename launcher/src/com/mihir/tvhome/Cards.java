@@ -140,15 +140,39 @@ final class Cards {
 
     /**
      * The day's solar, and how long the battery can carry the house: "46.7 kWh today · 8 h 38 m left".
-     * Either half can be missing; empty when both are.
+     * Either half can be missing; empty when both are. A sensor that already writes a sentence
+     * ("Full in 8 h 8 m" while charging, "Empty in 5 h" while draining) keeps its own words
+     * instead of gaining a second "left".
      */
     static String solarLine(String todayKwh, String left) {
         String today = todayKwh == null ? "" : todayKwh.trim();
         String span = left == null ? "" : left.trim();
         String first = today.isEmpty() ? "" : today + " kWh today";
-        String second = span.isEmpty() ? "" : span + " left";
-        if (first.isEmpty()) return second.isEmpty() ? "" : "Battery " + second;
+        String second = span.isEmpty() ? "" : leftText(span);
+        if (first.isEmpty()) {
+            if (second.isEmpty()) return "";
+            return batteryPhrase(span) ? second : "Battery " + second;
+        }
         return second.isEmpty() ? first : first + " \u00B7 " + second;
+    }
+
+    /** The battery half of {@link #solarLine}, with the one word a bare span needs. */
+    private static String leftText(String span) {
+        String l = span.toLowerCase(Locale.US);
+        if (l.startsWith("unknown") || l.startsWith("unavailable")) return "";
+        // The old template stripped "Lasts "; if a sensor still sends it, keep the sentence form.
+        if (l.startsWith("lasts ")) return span.substring(6).trim() + " left";
+        return batteryPhrase(span) ? span : span + " left";
+    }
+
+    /** True when the sensor's value is already a phrase rather than a bare duration. */
+    private static boolean batteryPhrase(String span) {
+        String l = span.toLowerCase(Locale.US);
+        return l.startsWith("full") || l.startsWith("empty") || l.startsWith("charging")
+                || l.startsWith("discharging") || l.startsWith("battery")
+                || l.startsWith("until ") || l.startsWith("in ")
+                || l.contains(" left") || l.contains(" in ") || l.contains(" until ")
+                || l.contains(" to full") || l.contains(" to empty");
     }
 
     /**

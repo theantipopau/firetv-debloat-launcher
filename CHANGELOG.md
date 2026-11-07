@@ -3,6 +3,23 @@
 All notable changes to the Fire TV Debloat Launcher. Versions match `versionName` in
 [`launcher/AndroidManifest.xml`](launcher/AndroidManifest.xml).
 
+## 1.5.3 — 2026-11-08
+
+### Added
+- **The screensaver is a gallery.** It shows four public-domain paintings (Van Gogh, Whistler,
+  Turner, Constable) from `launcher/assets/art/`, never the same one twice in a row; the home screen
+  keeps the landscape photographs. The title and painter fade in at the top right and leave after
+  12 seconds.
+- **The house at a glance on the screensaver**: battery, solar output and house load on one line
+  under the weather, then the day's generation and the battery's runway. Solar hides at night, and
+  each value dims when its sensor goes quiet. A 12-hour TV shows AM/PM beside the clock.
+- **"Details ›"** appears beside the greeting while the status block has focus, so it is clear OK
+  opens the sheet.
+
+### Fixed
+- **Battery runway wording** on the Fire TV and the Samsung: a sensor that already writes a sentence
+  ("Full in 8 h 8 m", "Empty in 5 h") keeps its words instead of gaining a second "left".
+
 ## 1.5.2 — 2026-11-01
 
 ### Added

@@ -5,7 +5,7 @@ A fast, ad-free, Apple TV style home screen for Fire TV, forked from
 Not affiliated with Amazon. Everything here is reversible; nothing is uninstalled.
 
 ## What you get
-- Clean home: greeting, a large clock, wallpaper slideshow (slow zoom, time-of-day tint), app dock plus an apps list.
+- Clean home: greeting, a large clock, landscape slideshow (slow zoom, time-of-day tint), app dock plus an apps list.
   Inter throughout, frosted panels, and a single focus language of scale, shadow and light rather than borders.
 - **Home button works, and a reboot comes back here.** Fire OS starts its own launcher at boot even when this
   one is selected as home, so the app takes the screen back a few seconds after boot. An accessibility service
@@ -23,7 +23,9 @@ Not affiliated with Amazon. Everything here is reversible; nothing is uninstalle
 - **The clock follows the TV's own 12/24-hour setting.** On a TV set to 12-hour, switch it with
   `adb shell settings put system time_12_24 24` (and `12` to go back); the clock, the sun times in the HA sheet and
   the Inputs menu all follow it.
-- **Screensaver**: big clock over a drifting wallpaper after 3 minutes idle on Home (also registered as the system screensaver).
+- **Screensaver**: big clock over a drifting painting after 3 minutes idle on Home (also registered as the system
+  screensaver); the painting's title and artist fade in briefly in the corner. Under the weather it shows the house's
+  battery, solar output and load, then today's generation and the battery's runway when Home Assistant supplies them.
 - **Alert cards** over any app (`am broadcast ...`), for doorbell, bins, timers. Optional.
 - With **Home Assistant** (optional): info panel (weather, solar, battery, house power, bins, next event),
   "keep watching" cards from Plex, alerts, sleep timer. See [docs/HOME-ASSISTANT.md](docs/HOME-ASSISTANT.md).
@@ -59,9 +61,11 @@ Edit [`launcher/res/values/config.xml`](launcher/res/values/config.xml) (or, to 
 | `ha_json_url`, `keep_json_url` | Home Assistant files. Empty = no panel / no keep-watching row. |
 | `columns` | Tiles per row in the apps list. |
 
-**Wallpapers**: drop any 1920x1080 (or larger) `.jpg` into `launcher/assets/wallpapers/` and rebuild.
-`python tools/fetch_wallpapers.py --nasa 10` downloads NASA public-domain space pictures and records credits in
-`launcher/WALLPAPER-CREDITS.md`. Delete pictures you do not want first; every picture adds to the APK size.
+**Wallpapers**: the home screen rotates `launcher/assets/wallpapers/` (landscapes); the screensaver rotates
+`launcher/assets/art/` (paintings). Both take 1920x1080 (or larger) `.jpg` files; rebuild after adding.
+`python tools/fetch_wallpapers.py --nasa 10` downloads NASA public-domain space pictures for the home screen and
+records credits in `launcher/WALLPAPER-CREDITS.md`. Delete pictures you do not want first; every picture adds to the
+APK size.
 
 **Rename the TV on screen**: set `device_name`, rebuild, reinstall (settings are compiled in, so the launcher needs no account).
 

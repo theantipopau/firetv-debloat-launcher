@@ -5,7 +5,7 @@
 A clean, fast, ad-free home screen for **Amazon Fire TV**, plus a reversible debloat script. No ads, no sponsored rows, no
 account, no cloud. Works on its own; [Home Assistant](docs/HOME-ASSISTANT.md) is optional.
 
-Current release: **v1.5.2** — see the [changelog](CHANGELOG.md).
+Current release: **v1.5.3** — see the [changelog](CHANGELOG.md).
 
 ![Home screen](docs/img/home.jpg)
 
@@ -20,7 +20,7 @@ Current release: **v1.5.2** — see the [changelog](CHANGELOG.md).
 Other Fire OS 7 devices will probably work. Not tested on Fire OS 8 / Vega OS devices.
 
 ## Features
-- Apple TV style home: a greeting, the clock and a few plain lines at a glance over a slow-zoom wallpaper slideshow,
+- Apple TV style home: a greeting, the clock and a few plain lines at a glance over a slow-zoom landscape slideshow,
   one glass dock of your main apps, and every other app behind **All apps**. The clock follows the TV's own
   12/24-hour setting.
 - **Live now, then new on Plex.** Two rotating cards above the dock: what is on TiviMate right now, read from your
@@ -28,12 +28,13 @@ Other Fire OS 7 devices will probably work. Not tested on Fire OS 8 / Vega OS de
   a beat apart, so the two never turn together, hold still while focused, and OK opens the one on screen. Ten of
   each take a turn.
 - **Home button takes you here.** Fire OS blocks other apps for a few seconds after Home is pressed, so a cover screen
-  (the same wallpaper, clock and dock, with skeleton lines) hides Amazon's home until the launcher opens.
+  (the same landscape, clock and dock, with skeleton lines) hides Amazon's home until the launcher opens.
 - Hold OK on any app to move it, add it to the main row, hide it, open its info or uninstall it. No rebuild needed.
 - Settings and the network pill open Amazon's own full-screen pages. The pill is an icon at rest and shows the
   network's name and link rate on focus (Wi-Fi 720 Mbps, Ethernet 1 Gbps on a gigabit adapter). **Inputs** sits in
   Settings on devices that report an HDMI passthrough input.
-- Screensaver (big clock over a drifting wallpaper) instead of Amazon's ad-supported one.
+- Screensaver (big clock over a drifting painting; its title and artist fade in briefly, and the house's battery,
+  solar and load sit at a glance) instead of Amazon's ad-supported one.
 - Alert cards over whatever is playing: doorbell, bins, timers (`am broadcast`, or from Home Assistant). Only shell/ADB
   senders can trigger one, so an app installed on the TV cannot spoof a card.
 - **Debloat script** (reversible): disables Amazon shopping, ad-ID and content-recognition packages, limits ad tracking, speeds up animations.
@@ -75,4 +76,5 @@ MIT. Forked from [mihirgupta0900/tv-home](https://github.com/mihirgupta0900/tv-h
 [docs/UPSTREAM-README.md](docs/UPSTREAM-README.md)). Fire TV port, Home-key service, cover screen, alerts, screensaver, debloat tools and
 Home Assistant integration added here. App tiles use each app's own banner from your device. Typeface: Inter, SIL Open Font
 Licence in [LICENSES/Inter-OFL.txt](LICENSES/Inter-OFL.txt). Wallpapers: see
-[`launcher/WALLPAPER-CREDITS.md`](launcher/WALLPAPER-CREDITS.md) (Wikimedia Commons: nature photos CC BY-SA, paintings public domain).
+[`launcher/WALLPAPER-CREDITS.md`](launcher/WALLPAPER-CREDITS.md) (Wikimedia Commons: landscape photographs CC BY-SA,
+screensaver paintings public domain).

@@ -25,9 +25,10 @@ Never print tokens or passwords.
 In this repo (see FIRETV.md "Make it yours") create a private profile launcher/profiles/<my-name>/config.xml copied from
 launcher/res/values/config.xml with: family_name "<Smith Family>", device_name "<Living room>", and dock_apps in this order:
 <list of apps>. Find package names with `adb -s <TV_IP>:5555 shell pm list packages -3`. Only include apps that are installed.
-Add my wallpapers: copy the .jpg files from <folder> into launcher/assets/wallpapers (resize anything larger than 3840 wide) and
-add credits to launcher/WALLPAPER-CREDITS.md. Build with `python launcher/build_win.py <my-name>` and install with
-tools/firetv-install.sh. Do not commit launcher/profiles/<my-name>/.
+Add my wallpapers: copy landscape .jpg files from <folder> into launcher/assets/wallpapers and paintings into
+launcher/assets/art (resize anything larger than 3840 wide) and add credits to launcher/WALLPAPER-CREDITS.md.
+Build with `python launcher/build_win.py <my-name>` and install with tools/firetv-install.sh. Do not commit
+launcher/profiles/<my-name>/.
 ```
 
 ## 3. Link Home Assistant: info panel + keep watching + alerts
