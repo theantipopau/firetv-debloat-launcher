@@ -60,6 +60,12 @@ never say somebody is in when they are not.
 The sheet's content must fit a 1080p TV's 540dp of screen: it is measured to nothing if it grows past that, so extra
 values belong in a line rather than in another row of tiles.
 
+The screensaver reads the same snapshot. Under the clock it shows the outside temperature, condition and
+inside temperature, then a row of battery percentage, solar output and house load, and under that the day's
+generation and the battery's runway (`energy_today`, `battery_left`). The battery mark follows `bat_power`
+exactly as it does on the home screen; the battery, solar and house values dim after 15 minutes, the weather
+after an hour, and solar disappears at night rather than printing 0 kW. Any remote button leaves the saver.
+
 The Tizen dashboard ([tizen/](../tizen/README.md)) reads this same file and nothing else, so a sensor you add here
 appears there without a second feed. It draws only what the snapshot carries and removes an element whose key is
 empty — there is no demo data on screen.

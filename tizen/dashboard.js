@@ -378,11 +378,26 @@
 
   function energyText(snap) {
     var kwh = num(snap.energy_today);
-    var left = words(snap.battery_left);
-    if (kwh !== null && left) { return one(kwh) + " kWh today · " + left + " left"; }
+    var left = leftText(words(snap.battery_left));
+    if (kwh !== null && left) { return one(kwh) + " kWh today · " + left; }
     if (kwh !== null) { return one(kwh) + " kWh today"; }
-    if (left) { return "Battery " + left + " left"; }
+    if (left) { return batteryPhrase(left) ? left : "Battery " + left; }
     return "";
+  }
+
+  // Same rules as Cards.solarLine on the Fire TV: a sensor that already writes a sentence
+  // ("Full in 8 h 8 m", "Empty in 5 h") keeps its words; a bare span gains "left".
+  function leftText(span) {
+    var l = span.toLowerCase();
+    if (!span || l.indexOf("unknown") === 0 || l.indexOf("unavailable") === 0) { return ""; }
+    if (l.indexOf("lasts ") === 0) { return span.substring(6).trim() + " left"; }
+    return batteryPhrase(span) ? span : span + " left";
+  }
+
+  function batteryPhrase(span) {
+    var l = span.toLowerCase();
+    return /^(full|empty|charging|discharging|battery|until |in )/.test(l) ||
+      / left| in | until | to full| to empty/.test(l);
   }
 
   function sunText(snap) {

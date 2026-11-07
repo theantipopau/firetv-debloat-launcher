@@ -105,7 +105,8 @@ public class MainActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable rotateWallpaper = this::nextWallpaper;
     static final long WALLPAPER_INTERVAL_MS = 10 * 60 * 1000;
-    private TextView clock, greet, dateLine, appsLabel, statusWeather, statusBattery, statusSolar, statusAc, statusBins;
+    private TextView clock, greet, dateLine, appsLabel, statusWeather, statusBattery, statusSolar, statusAc,
+            statusBins, statusHint;
     private LinearLayout statusBlock, statusLineBox;
     private View statusWeatherRow, statusBatteryRow, statusAcRow, statusBinsRow;
     private LinearLayout statusSolarGroup;
@@ -489,8 +490,12 @@ public class MainActivity extends Activity {
         statusBlock.setBackground(bg);
         // OK on the block opens the detail sheet; the block is the only way in.
         statusBlock.setOnClickListener(v -> openHa());
-        statusBlock.setOnFocusChangeListener((v, has) ->
-                bg.setColor(has ? 0x14FFFFFF : Color.TRANSPARENT));
+        statusBlock.setOnFocusChangeListener((v, has) -> {
+            bg.setColor(has ? 0x14FFFFFF : Color.TRANSPARENT);
+            if (statusHint != null)
+                statusHint.animate().alpha(has ? 1f : 0f)
+                        .setDuration(HomeTheme.MS_FOCUS).start();
+        });
 
         // The greeting sits above the clock, quiet enough to read as a caption on the wallpaper.
         // 18sp at 70%: a caption to the clock, so the time is plainly the first thing read.
@@ -499,7 +504,23 @@ public class MainActivity extends Activity {
         greet.setEllipsize(android.text.TextUtils.TruncateAt.END);
         greet.setIncludeFontPadding(false);
         greet.setShadowLayer(dp(8), 0, dp(1), 0x80000000);
-        statusBlock.addView(greet, llp(-1, -2, 0, 0, 0, dp(HomeTheme.GREET_GAP)));
+        LinearLayout greetRow = new LinearLayout(this);
+        greetRow.setOrientation(LinearLayout.HORIZONTAL);
+        greetRow.setGravity(Gravity.CENTER_VERTICAL);
+        greetRow.setClipChildren(false);
+        greetRow.addView(greet, new LinearLayout.LayoutParams(0, -2, 1f));
+        // A quiet hint inside the block's own highlight: it says where OK goes without adding a
+        // line that would push the clock block into the Now row.
+        statusHint = text(14, "sans-serif-medium", HomeTheme.TEXT_60);
+        statusHint.setText("Details \u203A");
+        statusHint.setSingleLine(true);
+        statusHint.setIncludeFontPadding(false);
+        statusHint.setShadowLayer(dp(8), 0, dp(1), 0x80000000);
+        statusHint.setAlpha(0f);
+        LinearLayout.LayoutParams hintLp = new LinearLayout.LayoutParams(-2, -2);
+        hintLp.leftMargin = dp(12);
+        greetRow.addView(statusHint, hintLp);
+        statusBlock.addView(greetRow, llp(-1, -2, 0, 0, 0, dp(HomeTheme.GREET_GAP)));
 
         clock = text(56, "sans-serif-light", Color.WHITE);
         clock.setLetterSpacing(HomeTheme.CLOCK_TRACKING);

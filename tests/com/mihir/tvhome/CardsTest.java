@@ -80,6 +80,16 @@ public final class CardsTest {
         eq("no names, no guess", "1 person home", Cards.peopleLine("1", "  "));
 
         eq("a day's solar", "46.7 kWh today \u00B7 8 h 38 m left", Cards.solarLine("46.7", "8 h 38 m"));
+        eq("charging phrase keeps its words", "6.1 kWh today \u00B7 Full in 8 h 8 m",
+                Cards.solarLine("6.1", "Full in 8 h 8 m"));
+        eq("charging phrase alone", "Full in 8 h 8 m", Cards.solarLine("", "Full in 8 h 8 m"));
+        eq("draining phrase keeps its words", "6.1 kWh today \u00B7 Empty in 5 h",
+                Cards.solarLine("6.1", "Empty in 5 h"));
+        eq("lasts is normalised", "46.7 kWh today \u00B7 8 h 38 m left",
+                Cards.solarLine("46.7", "Lasts 8 h 38 m"));
+        eq("already has left", "46.7 kWh today \u00B7 8 h 38 m left",
+                Cards.solarLine("46.7", "8 h 38 m left"));
+        eq("an unknown span is dropped", "46.7 kWh today", Cards.solarLine("46.7", "unknown"));
         eq("runway, hours", "29 h", Cards.runway("29 h 15 m"));
         eq("runway, one unit", "8 h", Cards.runway("8 h"));
         eq("runway, no hours", "45 m", Cards.runway("0 h 45 m"));
