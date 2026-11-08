@@ -172,7 +172,33 @@ public class MainActivity extends Activity {
     private final Runnable idle = () -> {
         if (hasWindowFocus() && inputsPopup == null) startActivity(new Intent(this, ClockSaverActivity.class));
     };
-    private void kickIdle() { handler.removeCallbacks(idle); handler.postDelayed(idle, IDLE_MS); }
+    private void kickIdle() {
+        handler.removeCallbacks(idle);
+        handler.postDelayed(idle, IDLE_MS);
+        handler.removeCallbacks(ambientIdle);
+        handler.postDelayed(ambientIdle, AMBIENT_MS);
+    }
+    /**
+     * A minute untouched on the home screen, the card that is showing takes the whole screen, as
+     * tvOS's top shelf does; the screensaver still follows at {@link #IDLE_MS}.
+     */
+    private static final long AMBIENT_MS = 60 * 1000;
+    /** Up to a 1080p frame: the guide's 960x1440 posters arrive whole instead of halved. */
+    private static final long AMBIENT_PIXELS = 2_100_000;
+    private final Runnable ambientIdle = this::showAmbient;
+    private FrameLayout ambient;
+    private final ImageView[] ambientArt = new ImageView[2];
+    private int ambientFront;
+    private LinearLayout ambientWords;
+    private TextView ambientKicker, ambientTitle, ambientMeta;
+    private View ambientDot;
+    private Deck ambientSource;
+    private boolean ambientOn;
+    /** The key that woke the screen: its release must not then press whatever has focus. */
+    private int swallowUp = -1;
+    /** Focus ticks, from Settings; read once per resume. */
+    private boolean soundsOn = true;
+    private FrameLayout launchVeil;
     private String familyName, deviceName;
     private int pollN;
     private final Runnable haPoll = new Runnable() {
@@ -242,6 +268,9 @@ public class MainActivity extends Activity {
         visible = true;
         super.onResume();
         getSharedPreferences("tvhome", 0).edit().putBoolean("foreground", true).apply();   // read by BootReceiver
+        soundsOn = getSharedPreferences("launcher", MODE_PRIVATE).getBoolean("nav_sounds", true);
+        hideAmbient(false);
+        clearVeil(true);
         kickIdle();
         IntentFilter tf = new IntentFilter(Intent.ACTION_TIME_TICK);
         tf.addAction(Intent.ACTION_TIME_CHANGED);
@@ -276,6 +305,13 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onStop() {
+        super.onStop();
+        clearVeil(false);   // the app is on screen now; coming back must not find the veil
+        hideAmbient(false);
+    }
+
+    @Override
     protected void onPause() {
         visible = false;
         super.onPause();
@@ -284,6 +320,7 @@ public class MainActivity extends Activity {
         handler.removeCallbacks(haPoll);
         stopNowRotation();
         handler.removeCallbacks(idle);
+        handler.removeCallbacks(ambientIdle);
         if (haOpen) {   // never come back to a sheet that was already sliding out
             haOpen = false;
             if (haPanel != null) {
@@ -772,6 +809,13 @@ public class MainActivity extends Activity {
             return root.getVisibility() == View.VISIBLE && !items.isEmpty();
         }
 
+        /** The item's full-bleed still, or null when it only has a logo or a transparent mark. */
+        Bitmap still(int i) {
+            if (i < 0 || i >= items.size() || i >= images.size()) return null;
+            Bitmap img = images.get(i);
+            return img != null && !items.get(i).artfit && !img.hasAlpha() ? img : null;
+        }
+
         void advance() {
             handler.removeCallbacks(tick);
             if (items.size() < 2 || root.isFocused()) return;
@@ -897,6 +941,7 @@ public class MainActivity extends Activity {
             out.root.animate().alpha(0f).setDuration(HomeTheme.MS_FOCUS).withLayer().start();
             front = back;
             cur = i;
+            if (ambientOn && ambientSource == this) paintAmbient(this, true);
         }
     }
 
@@ -1347,11 +1392,12 @@ public class MainActivity extends Activity {
             pressDip(v, HomeTheme.DOCK_FOCUS_SCALE);
             getSharedPreferences("launches", MODE_PRIVATE).edit()
                     .putLong(app.pkg, System.currentTimeMillis()).apply();
+            zoomOpen(tile, app);
             boolean opened = launch(new Intent(Intent.ACTION_MAIN)
                     .addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
                     .setComponent(app.component)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED));
-            if (!opened) pressUndo(v, HomeTheme.DOCK_FOCUS_SCALE);
+            if (!opened) { pressUndo(v, HomeTheme.DOCK_FOCUS_SCALE); clearVeil(true); }
         });
         holder.setOnLongClickListener(v -> { showAppMenu(v, app); return true; });
         return holder;
@@ -1733,6 +1779,7 @@ public class MainActivity extends Activity {
             }));
         }
         rows.addView(batteryRow());
+        rows.addView(soundsRow());
         rows.addView(settingsRow("Amazon settings", "Display, apps, device",
                 v -> openFullSettings()));
         sheet.addView(rows, new LinearLayout.LayoutParams(-1, -2));
@@ -1782,6 +1829,19 @@ public class MainActivity extends Activity {
             batterySignValue.setText(!now ? "Positive = charging" : "Positive = discharging");
             // Re-read the snapshot so the line changes under the cursor, not on the next poll.
             if (lastHa != null) applyStatus(lastHa, lastHa.optJSONObject("ages"));
+        });
+        return row;
+    }
+
+    /** Focus ticks on or off; on by default, as on tvOS. */
+    private View soundsRow() {
+        LinearLayout row = (LinearLayout) settingsRow("Navigation sounds", soundsOn ? "On" : "Off", v -> { });
+        final TextView value = (TextView) row.getChildAt(1);
+        row.setOnClickListener(v -> {
+            soundsOn = !soundsOn;
+            getSharedPreferences("launcher", MODE_PRIVATE).edit().putBoolean("nav_sounds", soundsOn).apply();
+            value.setText(soundsOn ? "On" : "Off");
+            if (soundsOn) Clicks.select();
         });
         return row;
     }
@@ -2358,11 +2418,12 @@ public class MainActivity extends Activity {
         card.setOnClickListener(v -> {
             pressDip(v, HomeTheme.DOCK_FOCUS_SCALE);
             getSharedPreferences("launches", MODE_PRIVATE).edit().putLong(app.pkg, System.currentTimeMillis()).apply();
+            zoomOpen(v, app);
             boolean opened = launch(new Intent(Intent.ACTION_MAIN)
                     .addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
                     .setComponent(app.component)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED));
-            if (!opened) pressUndo(v, HomeTheme.DOCK_FOCUS_SCALE);
+            if (!opened) { pressUndo(v, HomeTheme.DOCK_FOCUS_SCALE); clearVeil(true); }
         });
         card.setOnFocusChangeListener((v, has) -> {
             lift(v, has, HomeTheme.DOCK_FOCUS_SCALE);
@@ -3207,6 +3268,35 @@ public class MainActivity extends Activity {
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent e) {
+        // Out of idle mode the first press only brings the home screen back, as on tvOS.
+        if (ambientOn) {
+            if (e.getAction() == KeyEvent.ACTION_DOWN) {
+                swallowUp = e.getKeyCode();
+                hideAmbient(true);
+            }
+            kickIdle();
+            return true;
+        }
+        if (e.getAction() == KeyEvent.ACTION_UP && e.getKeyCode() == swallowUp) {
+            swallowUp = -1;
+            return true;
+        }
+        View before = getCurrentFocus();
+        boolean handled = routeKey(e);
+        if (soundsOn && e.getAction() == KeyEvent.ACTION_DOWN) {
+            int k = e.getKeyCode();
+            if ((k == KeyEvent.KEYCODE_DPAD_CENTER || k == KeyEvent.KEYCODE_ENTER) && e.getRepeatCount() == 0) {
+                if (before != null && before.isClickable()) Clicks.select();
+            } else if ((k == KeyEvent.KEYCODE_DPAD_LEFT || k == KeyEvent.KEYCODE_DPAD_RIGHT
+                    || k == KeyEvent.KEYCODE_DPAD_UP || k == KeyEvent.KEYCODE_DPAD_DOWN)
+                    && getCurrentFocus() != before) {
+                Clicks.move(k == KeyEvent.KEYCODE_DPAD_LEFT || k == KeyEvent.KEYCODE_DPAD_UP ? -1 : 1);
+            }
+        }
+        return handled;
+    }
+
+    private boolean routeKey(KeyEvent e) {
         kickIdle();
         if (e.getAction() == KeyEvent.ACTION_DOWN) {
             int k = e.getKeyCode();
@@ -3246,6 +3336,190 @@ public class MainActivity extends Activity {
             return true;
         }
         return super.dispatchKeyEvent(e);
+    }
+
+    // ---------------------------------------------------------------- open and idle
+
+    /**
+     * OK on a tile: a copy of it grows toward the middle of the screen and dissolves into black,
+     * so the app arrives out of the tile instead of by a cut. The app starts at the same moment;
+     * the veil only covers the second or so Fire OS takes to draw it, and leaves on stop.
+     */
+    private void zoomOpen(View from, App app) {
+        clearVeil(false);
+        if (from.getWidth() == 0) return;
+        ViewGroup decor = (ViewGroup) getWindow().getDecorView();
+        float density = getResources().getDisplayMetrics().density;
+        float s = 1f;   // the tile's on-screen scale: its own and every parent's lift
+        for (View v = from; v != null && v != decor; v = v.getParent() instanceof View ? (View) v.getParent() : null)
+            s *= v.getScaleX();
+        int[] at = new int[2];
+        from.getLocationInWindow(at);
+        int w = from.getWidth(), h = from.getHeight();
+        FrameLayout veil = new FrameLayout(this);
+        View black = new View(this);
+        black.setBackgroundColor(Color.BLACK);
+        black.setAlpha(0f);
+        veil.addView(black, new FrameLayout.LayoutParams(-1, -1));
+        FrameLayout copy = AppTile.dock(this, app, density);
+        copy.setPivotX(0);
+        copy.setPivotY(0);
+        copy.setScaleX(s);
+        copy.setScaleY(s);
+        copy.setTranslationX(at[0]);
+        copy.setTranslationY(at[1]);
+        veil.addView(copy, new FrameLayout.LayoutParams(w, h));
+        decor.addView(veil, new FrameLayout.LayoutParams(-1, -1));
+        launchVeil = veil;
+
+        int sw = decor.getWidth(), sh = decor.getHeight();
+        float end = sw * 0.7f / w;
+        copy.animate().scaleX(end).scaleY(end)
+                .translationX((sw - w * end) / 2f).translationY((sh - h * end) / 2f)
+                .setInterpolator(HomeTheme.ease()).setDuration(340).withLayer().start();
+        ObjectAnimator fade = ObjectAnimator.ofFloat(copy, View.ALPHA, 1f, 0f);
+        fade.setStartDelay(140);
+        fade.setDuration(220);
+        fade.start();
+        black.animate().alpha(1f).setDuration(300).start();
+    }
+
+    /** Takes the launch veil away: at once when the app has the screen, gently on a return. */
+    private void clearVeil(boolean fade) {
+        final FrameLayout v = launchVeil;
+        if (v == null) return;
+        launchVeil = null;
+        final ViewGroup decor = (ViewGroup) getWindow().getDecorView();
+        if (!fade) { decor.removeView(v); return; }
+        v.animate().alpha(0f).setDuration(HomeTheme.MS_REVEAL).withEndAction(() -> decor.removeView(v)).start();
+    }
+
+    /** The deck whose current card has a still to fill the screen with: live first, then Plex. */
+    private Deck ambientDeck() {
+        for (Deck d : decks()) if (d.showing() && d.still(d.cur) != null) return d;
+        return null;
+    }
+
+    private void showAmbient() {
+        if (ambientOn || !visible || !hasWindowFocus() || haOpen || cwOpen || inputsPopup != null
+                || launchVeil != null || scroll.getScrollY() > 0
+                || (settingsPage != null && settingsPage.getVisibility() == View.VISIBLE)) return;
+        Deck d = ambientDeck();
+        if (d == null) return;
+        buildAmbient();
+        ambientSource = d;
+        ambientOn = true;
+        paintAmbient(d, false);
+        ambient.animate().cancel();
+        ambient.setVisibility(View.VISIBLE);
+        ambient.setAlpha(0f);
+        ambient.animate().alpha(1f).setDuration(900).setInterpolator(HomeTheme.ease()).withLayer().start();
+    }
+
+    private void hideAmbient(boolean fade) {
+        ambientOn = false;
+        ambientSource = null;
+        if (ambient == null) return;
+        ambient.animate().cancel();
+        if (!fade) {
+            ambient.setVisibility(View.GONE);
+            for (ImageView i : ambientArt) i.setImageDrawable(null);
+            return;
+        }
+        ambient.animate().alpha(0f).setDuration(HomeTheme.MS_REVEAL).withLayer().withEndAction(() -> {
+            if (ambientOn) return;
+            ambient.setVisibility(View.GONE);
+            for (ImageView i : ambientArt) i.setImageDrawable(null);
+        }).start();
+    }
+
+    /** The card as a full screen: its still, a floor of shade, and the card's own three lines. */
+    private void paintAmbient(Deck d, boolean fade) {
+        Bitmap img = d.still(d.cur);
+        if (img == null) return;   // a logo-only card keeps the picture already up
+        Feed.Item it = d.items.get(d.cur);
+        int back = 1 - ambientFront;
+        ImageView in = ambientArt[back], out = ambientArt[ambientFront];
+        in.setImageBitmap(img);
+        in.animate().cancel();
+        out.animate().cancel();
+        boolean live = it.live();
+        ambientKicker.setText(live ? "Live now" : "Now Showing on " + (it.app.isEmpty() ? "Plex" : it.app));
+        ((GradientDrawable) ambientDot.getBackground()).setColor(live ? 0xFFFF453A : 0xFFE5A00D);
+        ambientTitle.setText(it.title);
+        String meta = nowMeta(it);
+        ambientMeta.setText(meta);
+        ambientMeta.setVisibility(meta.isEmpty() ? View.GONE : View.VISIBLE);
+        // The card's copy is decoded small for the card; a full screen gets its own, fetched once
+        // and swapped in under the same picture if this item is still the one showing.
+        final String url = it.image;
+        final ImageView target = in;
+        if (url != null && !url.isEmpty()) new Thread(() -> {
+            final Bitmap big = Net.image(url, 4000, 4000, 1, AMBIENT_PIXELS);
+            if (big != null) runOnUiThread(() -> {
+                if (ambientOn && ambientArt[ambientFront] == target && d.items.size() > d.cur
+                        && url.equals(d.items.get(d.cur).image)) target.setImageBitmap(big);
+            });
+        }).start();
+        if (!fade) {
+            in.setAlpha(1f);
+            out.setAlpha(0f);
+        } else {
+            in.setAlpha(0f);
+            in.animate().alpha(1f).setDuration(1200).withLayer().start();
+            out.animate().alpha(0f).setDuration(1200).withLayer().start();
+            ambientWords.setAlpha(0f);
+            ambientWords.animate().alpha(1f).setStartDelay(300).setDuration(700).start();
+        }
+        ambientFront = back;
+    }
+
+    private void buildAmbient() {
+        if (ambient != null) return;
+        ambient = new FrameLayout(this);
+        ambient.setBackgroundColor(Color.BLACK);
+        ambient.setVisibility(View.GONE);
+        for (int i = 0; i < 2; i++) {
+            ImageView v = new ImageView(this);
+            v.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            v.setAlpha(0f);
+            ambientArt[i] = v;
+            ambient.addView(v, new FrameLayout.LayoutParams(-1, -1));
+        }
+        View floor = new View(this);
+        floor.setBackground(HomeTheme.vertical(new int[]{0x00000000, 0x66000000, 0xD9000000}));
+        ambient.addView(floor, new FrameLayout.LayoutParams(-1,
+                getResources().getDisplayMetrics().heightPixels * 3 / 5, Gravity.BOTTOM));
+        View side = new View(this);
+        side.setBackground(HomeTheme.leftWash());
+        ambient.addView(side, new FrameLayout.LayoutParams(-1, -1));
+
+        ambientWords = new LinearLayout(this);
+        ambientWords.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout kick = new LinearLayout(this);
+        kick.setOrientation(LinearLayout.HORIZONTAL);
+        kick.setGravity(Gravity.CENTER_VERTICAL);
+        ambientDot = new View(this);
+        GradientDrawable dot = new GradientDrawable();
+        dot.setShape(GradientDrawable.OVAL);
+        ambientDot.setBackground(dot);
+        kick.addView(ambientDot, llp(dp(10), dp(10), 0, 0, dp(10), 0));
+        ambientKicker = text(Typo.CAPTION, "sans-serif-medium", HomeTheme.TEXT_90);
+        kick.addView(ambientKicker);
+        ambientWords.addView(kick);
+        ambientTitle = text(48, "sans-serif-light", Color.WHITE);
+        ambientTitle.setLetterSpacing(HomeTheme.TITLE_TRACKING);
+        ambientTitle.setMaxLines(2);
+        ambientTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        ambientTitle.setShadowLayer(dp(10), 0, dp(1), 0x99000000);
+        ambientWords.addView(ambientTitle, llp(-1, -2, 0, dp(6), 0, 0));
+        ambientMeta = text(Typo.CAPTION, "sans-serif", HomeTheme.TEXT_70);
+        ambientMeta.setSingleLine(true);
+        ambientMeta.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        ambientWords.addView(ambientMeta, llp(-1, -2, 0, dp(6), 0, 0));
+        ambient.addView(ambientWords, lp(-1, -2, Gravity.BOTTOM | Gravity.START,
+                dp(HomeTheme.SAFE), 0, dp(HomeTheme.SAFE * 4), dp(HomeTheme.DOCK_BOTTOM)));
+        ((ViewGroup) getWindow().getDecorView()).addView(ambient, new FrameLayout.LayoutParams(-1, -1));
     }
 
     /** 16:9 container. */

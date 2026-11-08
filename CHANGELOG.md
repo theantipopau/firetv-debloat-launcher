@@ -3,6 +3,22 @@
 All notable changes to the Fire TV Debloat Launcher. Versions match `versionName` in
 [`launcher/AndroidManifest.xml`](launcher/AndroidManifest.xml).
 
+## 1.5.4 — 2026-11-08
+
+### Added
+- **Idle mode.** After a minute untouched on the home screen, the card that is showing fills the
+  screen, as Apple TV's top shelf does: its picture loaded at full size, a soft floor of shade, and
+  the card's own lines ("Live now", the title, the channel and end time). It follows the card as it
+  turns. The first press only brings the home screen back; the screensaver still starts at 3 minutes.
+- **Apps open out of their tile.** OK on a dock or All apps tile grows a copy of it toward the
+  middle of the screen and dissolves into black while the app starts, instead of a hard cut.
+- **Navigation sounds.** A quiet tick as focus moves (a touch lower going left or up) and a softer
+  one for OK, synthesised in the app and played at the TV's own volume. Settings → Navigation sounds
+  turns them off.
+
+### Changed
+- Plex stills in the Home Assistant feed are 1280x720 (were 720x405), so they stay sharp full screen.
+
 ## 1.5.3 — 2026-11-08
 
 ### Added
