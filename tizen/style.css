@@ -581,6 +581,36 @@ html, body {
 
 .pane .t, .pane .s { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* ---------- idle: the showing card, then the gallery ---------- */
+
+.ambient {
+  position: fixed; left: 0; top: 0; right: 0; bottom: 0; z-index: 60;
+  background: #000;
+  opacity: 0; visibility: hidden;
+  transition: opacity .6s var(--ease), visibility 0s linear .6s;
+}
+.ambient.on { opacity: 1; visibility: visible; transition: opacity .6s var(--ease), visibility 0s; }
+.amb-art {
+  position: absolute; left: 0; top: 0; right: 0; bottom: 0;
+  background-size: cover; background-position: center;
+  opacity: 0; transition: opacity 2s ease-in-out;
+}
+.amb-art.on { opacity: 1; }
+.amb-scrim {
+  position: absolute; left: 0; top: 0; right: 0; bottom: 0;
+  background: linear-gradient(to top, rgba(0,0,0,.78) 0%, rgba(0,0,0,0) 46%);
+}
+.amb-card { position: absolute; left: 96px; bottom: 110px; right: 96px; }
+.amb-kicker { font-size: 28px; font-weight: 600; color: rgba(255,255,255,.8); }
+.amb-title { margin-top: 8px; font-size: 76px; font-weight: 700; line-height: 1.08; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.amb-meta { margin-top: 10px; font-size: 32px; color: rgba(255,255,255,.75); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.amb-gallery { position: absolute; left: 96px; bottom: 96px; }
+.amb-clock { font-size: 190px; font-weight: 200; line-height: 1; color: #fff; }
+.amb-line { margin-top: 14px; font-size: 38px; color: rgba(255,255,255,.92); }
+.amb-line.dim { font-size: 32px; color: rgba(255,255,255,.7); }
+.amb-credit { position: fixed; right: 96px; bottom: 96px; font-size: 26px; color: rgba(255,255,255,.65); transition: opacity 1s ease; }
+.amb-card[hidden], .amb-gallery[hidden], .amb-credit[hidden] { display: none; }
+
 /* ---------- sheets ---------- */
 
 .sheet {
