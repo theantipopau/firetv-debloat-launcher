@@ -519,7 +519,29 @@
       r.appendChild(t);
       lines.appendChild(r);
     });
+    var week = forecastText(snap);
+    if (week) {
+      var fr = row("cal");
+      var ft = document.createElement("span");
+      ft.textContent = week;
+      fr.appendChild(ft);
+      lines.insertBefore(fr, lines.firstChild);
+    }
     panel.appendChild(lines);
+  }
+
+  /* Tomorrow and the next two days, "Tue 30\u00b0 \u00b7 Wed 32\u00b0 \u00b7 Thu 29\u00b0" (today is the big number).
+     A short list or a day with a gap hides the row. */
+  function forecastText(snap) {
+    var f = snap && snap.forecast;
+    if (!f || f.length < 4) { return ""; }
+    var out = [];
+    for (var i = 1; i <= 3; i++) {
+      var d = f[i] || {};
+      if (!words(d.day) || num(d.hi) === null || num(d.lo) === null) { return ""; }
+      out.push(words(d.day) + " " + Math.round(num(d.hi)) + "\u00b0");
+    }
+    return out.join(" \u00b7 ");
   }
 
   /* The card is the same idea as the Fire TV panel's Plex line: audio first
@@ -992,9 +1014,108 @@
     stage.style.transform = "translate(" + x + "px," + y + "px) scale(" + scale + ")";
   }
 
+  /* ---------- idle: the showing card, then the gallery ---------- */
+
+  var IDLE_CARD_MS = 60 * 1000, IDLE_GALLERY_MS = 6 * 60 * 1000, PAINT_EVERY = 60 * 1000;
+  var PAINTINGS = [
+    ["art/14.jpg", "Wheatfield with Crows \u00b7 Van Gogh"],
+    ["art/16.jpg", "Nocturne in Blue and Silver \u00b7 Whistler"],
+    ["art/18.jpg", "The Fighting Temeraire \u00b7 Turner"],
+    ["art/20.jpg", "The Hay Wain \u00b7 Constable"]
+  ];
+  var ambMode = 0, ambFlip = 0, ambPaint = 0, idleCardT = null, idleGalleryT = null, galleryT = null;
+
+  function ambArt(url) {
+    var a = $("ambArtA"), b = $("ambArtB");
+    var next = ambFlip ? a : b, prev = ambFlip ? b : a;
+    next.style.backgroundImage = url ? "url('" + url + "')" : "none";
+    next.className = "amb-art on";
+    prev.className = "amb-art";
+    ambFlip = ambFlip ? 0 : 1;
+  }
+
+  function showAmbientCard() {
+    var item = null, live = false;
+    for (var i = 0; i < decks.length && !item; i++) {
+      var d = decks[i];
+      if (d.items[d.cur] && d.items[d.cur].image) { item = d.items[d.cur]; live = d.live; }
+    }
+    if (!item) { return; }   // nothing to show: the gallery follows on its own timer
+    $("ambKicker").textContent = live ? "Live now on TV" : "Now Showing on Plex";
+    $("ambTitle").textContent = clean(item.title);
+    $("ambMeta").textContent = live
+      ? [clean(item.channel), item.until ? "ends " + clock12(item.until) : ""].filter(Boolean).join(" \u00b7 ")
+      : clean(item.sub);
+    $("ambCard").hidden = false;
+    $("ambGallery").hidden = true;
+    $("ambCredit").hidden = true;
+    ambArt(item.image);
+    ambMode = 1;
+    $("ambient").className = "ambient on";
+  }
+
+  function galleryTick() {
+    var snap = lastSnap || {};
+    $("ambClock").textContent = $("clock").textContent;
+    var temp = num(snap.temp), inside = num(snap.inside), cond = titleCase(words(snap.condition));
+    var w = [temp !== null ? temp + "\u00b0" + (cond ? " " + cond : "") : cond,
+             inside !== null ? inside + "\u00b0 inside" : ""].filter(Boolean).join("  \u00b7  ");
+    $("ambWeather").textContent = w;
+    $("ambEnergy").textContent = energyText(snap) || "";
+    $("ambWeather").hidden = !w;
+    $("ambEnergy").hidden = !$("ambEnergy").textContent;
+  }
+
+  function nextPainting() {
+    var p = PAINTINGS[ambPaint % PAINTINGS.length];
+    ambPaint++;
+    ambArt(p[0]);
+    $("ambCredit").textContent = p[1];
+  }
+
+  function showGallery() {
+    $("ambCard").hidden = true;
+    $("ambGallery").hidden = false;
+    $("ambCredit").hidden = false;
+    galleryTick();
+    nextPainting();
+    clearInterval(galleryT);
+    galleryT = setInterval(function () { galleryTick(); }, 10000);
+    var paintT = setInterval(function () {
+      if (ambMode !== 2) { clearInterval(paintT); return; }
+      nextPainting();
+    }, PAINT_EVERY);
+    ambMode = 2;
+    $("ambient").className = "ambient on";
+  }
+
+  function hideAmbient() {
+    ambMode = 0;
+    clearInterval(galleryT);
+    $("ambient").className = "ambient";
+  }
+
+  function kickIdle() {
+    clearTimeout(idleCardT);
+    clearTimeout(idleGalleryT);
+    idleCardT = setTimeout(showAmbientCard, IDLE_CARD_MS);
+    idleGalleryT = setTimeout(showGallery, IDLE_GALLERY_MS);
+  }
+
   /* ---------- start ---------- */
 
   function init() {
+    // First of every keydown: while the overlay is up the key only wakes the screen.
+    document.addEventListener("keydown", function (e) {
+      if (ambMode) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        hideAmbient();
+      }
+      kickIdle();
+    }, true);
+    kickIdle();
+
     var savedHour = stored("tvh.hour12");
     if (savedHour === "0") { hour12 = false; }
     if (savedHour === "1") { hour12 = true; }
@@ -1131,7 +1252,7 @@
 
   /* Console hook: feed it a snapshot to see how the screen lays it out.
      window.TVH_debug.render({ temp: 24, inside: 21.6 }) */
-  window.TVH_debug = { render: render, load: load, loadCards: loadCards };
+  window.TVH_debug = { render: render, load: load, loadCards: loadCards, ambientCard: showAmbientCard, gallery: showGallery, hideAmbient: hideAmbient };
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);

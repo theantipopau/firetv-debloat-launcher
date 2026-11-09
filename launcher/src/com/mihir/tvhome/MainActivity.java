@@ -150,8 +150,8 @@ public class MainActivity extends Activity {
     /** The snapshot on screen; the settings sheet re-applies it when a preference changes. */
     private JSONObject lastHa;
     private Frost haFrost;
-    private TextView haBig, haSub, haWeather, haSun, haSolar, haRain, haNext, haPeople;
-    private View haWeatherRow, haSunRow, haSolarRow, haRainRow, haNextRow, haPeopleRow;
+    private TextView haBig, haSub, haWeather, haForecast, haSun, haSolar, haRain, haNext, haPeople;
+    private View haWeatherRow, haForecastRow, haSunRow, haSolarRow, haRainRow, haNextRow, haPeopleRow;
     private ImageView haSolarIcon;
     // Six tiles in two rows of three: solar, battery, house load / inside, AC, bins.
     private static final String[] HA_KEYS = {"solar", "battery", "house", "inside", "ac", "bins"};
@@ -1921,6 +1921,10 @@ public class MainActivity extends Activity {
         haWeather = text(Typo.CAPTION, "sans-serif", 0xF2FFFFFF);
         haWeatherRow = haLine(R.drawable.ic_wind, haWeather, 1);
         haPanel.addView(haWeatherRow, llp(-1, -2, 0, dp(14), 0, 0));
+        haForecast = text(Typo.CAPTION, "sans-serif", 0xF2FFFFFF);
+        haForecast.setSingleLine(true);
+        haForecastRow = haLine(R.drawable.ic_calendar, haForecast, 1);
+        haPanel.addView(haForecastRow, llp(-1, -2, 0, dp(5), 0, 0));
         haSun = text(Typo.CAPTION, "sans-serif", 0xF2FFFFFF);
         haSunRow = haLine(R.drawable.ic_sun, haSun, 1);
         haPanel.addView(haSunRow, llp(-1, -2, 0, dp(5), 0, 0));
@@ -2252,6 +2256,15 @@ public class MainActivity extends Activity {
                 j.optString("humidity", ""));
         haWeatherRow.setVisibility(weather.isEmpty() ? View.GONE : View.VISIBLE);
         haWeather.setText(weather);
+        org.json.JSONArray fa = j.optJSONArray("forecast");
+        String[][] days = new String[fa == null ? 0 : fa.length()][];
+        for (int i = 0; i < days.length; i++) {
+            org.json.JSONObject d = fa.optJSONObject(i);
+            days[i] = d == null ? null : new String[] {d.optString("day", ""), d.optString("hi", ""), d.optString("lo", "")};
+        }
+        String week = Cards.forecastLine(days);
+        haForecastRow.setVisibility(week.isEmpty() ? View.GONE : View.VISIBLE);
+        haForecast.setText(week);
         long riseAt = j.optLong("sunrise_at", 0), setAt = j.optLong("sunset_at", 0);
         String sun = Cards.sunLine(riseAt, setAt, is24, java.time.ZoneId.systemDefault());
         haSunRow.setVisibility(sun.isEmpty() ? View.GONE : View.VISIBLE);

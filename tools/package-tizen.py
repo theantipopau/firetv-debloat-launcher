@@ -154,6 +154,8 @@ def stage(url, control=None, family=None):
         shutil.copy2(os.path.join(SRC, name), os.path.join(BUILD, name))
     for name in DIRS:
         shutil.copytree(os.path.join(SRC, name), os.path.join(BUILD, name))
+    # The gallery's paintings live in one place, the launcher's assets; the widget gets a copy.
+    shutil.copytree(os.path.join(ROOT, "launcher", "assets", "art"), os.path.join(BUILD, "art"))
 
     cfg_path = os.path.join(BUILD, "config.js")
     with open(cfg_path, encoding="utf-8") as f:

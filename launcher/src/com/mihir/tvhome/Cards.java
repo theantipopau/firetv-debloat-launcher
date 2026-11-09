@@ -111,6 +111,24 @@ final class Cards {
     }
 
     /**
+     * The days after today in one line: "Tue 30\u00B0 \u00B7 Wed 32\u00B0 \u00B7 Thu 29\u00B0" (the highs). Today is the
+     * hero above it. The sheet is 560dp wide, which fits three days with highs and no more. Each day is {name,
+     * high, low}; a missing day, a gap in one, or fewer than four entries gives an empty line.
+     */
+    static String forecastLine(String[][] days) {
+        if (days == null || days.length < 4) return "";
+        StringBuilder b = new StringBuilder();
+        for (int i = 1; i <= 3; i++) {
+            String[] d = days[i];
+            if (d == null || d.length < 3 || d[0].trim().isEmpty() || d[1].trim().isEmpty()
+                    || d[2].trim().isEmpty()) return "";
+            if (i > 1) b.append(" \u00B7 ");
+            b.append(d[0].trim()).append(' ').append(d[1].trim()).append('\u00B0');
+        }
+        return b.toString();
+    }
+
+    /**
      * "Sunrise 6:12 AM · Sunset 6:12 PM", from epoch seconds, in the TV's own 12/24-hour setting.
      * Empty when neither time is known.
      */

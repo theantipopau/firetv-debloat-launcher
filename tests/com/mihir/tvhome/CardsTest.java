@@ -11,8 +11,18 @@ public final class CardsTest {
         rainWording();
         peopleWording();
         rainShort();
+        forecastWording();
         glanceStaleness();
         System.out.println("CardsTest: " + checks + " checks passed");
+    }
+
+    private static void forecastWording() {
+        String[][] w = {{"Mon", "23", "17"}, {"Tue", "30", "17"}, {"Wed", "32", "20"}, {"Thu", "29", "19"}, {"Fri", "28", "18"}};
+        eq("tomorrow and two more", "Tue 30\u00B0 \u00B7 Wed 32\u00B0 \u00B7 Thu 29\u00B0", Cards.forecastLine(w));
+        eq("short list hides", "", Cards.forecastLine(new String[][] {{"Mon", "23", "17"}}));
+        eq("null hides", "", Cards.forecastLine(null));
+        w[2] = new String[] {"Wed", "", "20"};
+        eq("a gap hides the whole row", "", Cards.forecastLine(w));
     }
 
     private static void artworkOrder() {

@@ -3,6 +3,25 @@
 All notable changes to the Fire TV Debloat Launcher. Versions match `versionName` in
 [`launcher/AndroidManifest.xml`](launcher/AndroidManifest.xml).
 
+## 1.5.5 — 2026-11-09
+
+### Added
+- **Forecast line.** The Home Assistant detail sheet gains one line for the days ahead: "Tue 30° ·
+  Wed 32° · Thu 29°" (the highs; today is the big number above it). The sheet only has room for three.
+  A missing or short `forecast` in the snapshot hides it; there is never a half row. Home Assistant
+  fills `forecast` (five days) hourly from the daily weather forecast.
+- **Samsung idle mode and gallery.** The Tizen dashboard now does what the Fire TV learned in 1.5.3
+  and 1.5.4: after a minute the showing card fills the screen, and after six the four paintings
+  fade through under a big clock with the weather and energy lines. The first key press only wakes
+  the screen. The paintings are copied from the launcher's assets when the widget is packaged.
+- The Samsung's detail sheet shows the same forecast line.
+
+### Tried and left out
+- **Watch Next resume rows.** Fire OS has the Android TV provider, but Netflix and YouTube write
+  nothing to it, so there is nothing to read.
+- **A now-playing pill.** Fire OS apps deactivate their media session when they leave the screen, so
+  Android never lists them to a launcher. Only background audio would show.
+
 ## 1.5.4 — 2026-11-08
 
 ### Added
