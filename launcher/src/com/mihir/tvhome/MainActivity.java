@@ -35,6 +35,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.provider.Settings;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.KeyEvent;
@@ -506,53 +507,81 @@ public class MainActivity extends Activity {
     private static final String[] SETTINGS_PACKAGES =
             {"com.amazon.tv.settings.v2", "com.amazon.tv.settings"};
     /**
-     * Best first: a dedicated update page beats About, and About beats the settings grid. Names, not
-     * intents: Fire OS exposes no action for this screen, so the package has to be asked.
+     * Names that mean the software update screen, best first. Each has to say what it updates: a bare
+     * "update" or "ota" also matches Amazon's app and channel update pages, and a Check for updates
+     * row that opened one of those would be worse than one that opened nothing.
      */
-    private static final String[] UPDATE_PAGES =
-            {"systemupdate", "softwareupdate", "ota", "update", "about"};
+    private static final String[] UPDATE_PAGES = {
+            "systemupdate", "systemota", "softwareupdate", "softwareota",
+            "firmwareupdate", "firmwareota", "deviceupdate", "deviceota"};
+    /** Where the update check lives on a build that names no update page of its own. */
+    private static final String ABOUT_PAGE = "about";
+    /** Words that make an "update" page something else: apps, channels, the settings HUD. */
+    private static final String[] NOT_UPDATE = {"app", "channel", "hud", "launcher", "widget", "content"};
 
     /**
-     * Settings > My Fire TV > About > Check for updates, as close as Fire OS allows a third-party
-     * launcher to get. There is no public intent for that page and the activity names move between
-     * builds, so the settings package is asked what it actually declares and the first page that
-     * names an update or About screen is opened. When this build names none, My Fire TV opens - the
-     * page About sits on - and only then Amazon's settings grid.
+     * How good a candidate page is: 0-7 for the update screen's own names, 8 for About, -1 for a page
+     * that merely shares the word "update". Lower is better, so the best declared name wins rather
+     * than the first one found.
      */
-    private void openSystemUpdate() {
-        for (String needle : UPDATE_PAGES) {
-            if (launchSettingsPage(needle)) return;
-        }
-        if (launch(new Intent().setComponent(new ComponentName("com.amazon.tv.settings.v2",
-                "com.amazon.tv.settings.v2.tv.device.DeviceActivity")))) return;
-        openFullSettings();
+    private int updatePageRank(String simple) {
+        for (String no : NOT_UPDATE) if (simple.contains(no)) return -1;
+        for (int i = 0; i < UPDATE_PAGES.length; i++) if (simple.contains(UPDATE_PAGES[i])) return i;
+        return simple.contains(ABOUT_PAGE) ? UPDATE_PAGES.length : -1;
     }
 
     /**
-     * One activity of Amazon's settings whose class name contains {@code needle}, if the TV will let
-     * us start it. Non-exported pages resolve but refuse to start; that refusal is caught by
-     * {@link #launch} and the next candidate is tried, so a locked page costs a search step, not a
-     * crash on a screen the viewer cannot leave.
+     * Settings > My Fire TV > About > Check for updates, as close as Fire OS allows a third-party
+     * launcher to get. No public intent reaches that page and its activity names move between builds,
+     * so the settings package is asked what it declares and the best name is opened. Every page that
+     * mentions update, ota or about is logged under "TvHome" - and so is the winner - so whichever
+     * page a given TV has can be pinned from logcat without another build.
+     *
+     * When this build names none, My Fire TV opens (the page About sits on), and only then Amazon's
+     * settings grid. A page the TV refuses to start costs nothing: the refusal is caught by
+     * {@link #launch} and the fallbacks take over.
      */
-    private boolean launchSettingsPage(String needle) {
+    private void openSystemUpdate() {
         PackageManager pm = getPackageManager();
+        ActivityInfo best = null;
+        int bestRank = Integer.MAX_VALUE;
         for (String pkg : SETTINGS_PACKAGES) {
             ActivityInfo[] activities;
             try {
                 activities = pm.getPackageInfo(pkg, PackageManager.GET_ACTIVITIES).activities;
             } catch (Exception e) {
+                Log.i("TvHome", "update: no activities from " + pkg + " (" + e.getClass().getSimpleName() + ")");
                 continue;
             }
             if (activities == null) continue;
             for (ActivityInfo ai : activities) {
-                String name = ai.name == null ? "" : ai.name.toLowerCase(Locale.US);
-                if (!name.contains(needle)) continue;
-                Intent i = new Intent().setComponent(new ComponentName(ai.packageName, ai.name));
-                if (pm.resolveActivity(i, 0) == null) continue;
-                if (launch(i)) return true;
+                if (ai.name == null) continue;
+                String full = ai.name.toLowerCase(Locale.US);
+                if (!full.contains("update") && !full.contains("ota") && !full.contains("about")) continue;
+                String simple = full.substring(full.lastIndexOf('.') + 1);
+                int rank = updatePageRank(simple);
+                Log.i("TvHome", "update: saw " + ai.name + " rank " + rank
+                        + (ai.exported ? " exported" : " private"));
+                if (rank >= 0 && rank < bestRank) {
+                    bestRank = rank;
+                    best = ai;
+                }
             }
         }
-        return false;
+        if (best != null) {
+            Log.i("TvHome", "update: opening " + best.packageName + "/" + best.name);
+            if (launch(new Intent().setComponent(new ComponentName(best.packageName, best.name)))) return;
+            Log.i("TvHome", "update: the TV refused it, falling back");
+        } else {
+            Log.i("TvHome", "update: Amazon's settings names no update or About page");
+        }
+        if (launch(new Intent().setComponent(new ComponentName("com.amazon.tv.settings.v2",
+                "com.amazon.tv.settings.v2.tv.device.DeviceActivity")))) {
+            Log.i("TvHome", "update: opened My Fire TV");
+            return;
+        }
+        Log.i("TvHome", "update: opened the settings grid");
+        openFullSettings();
     }
 
     /** Amazon's own full-screen Settings grid; falls back to the generic settings intent on other Fire OS builds. */
