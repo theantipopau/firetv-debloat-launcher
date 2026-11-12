@@ -22,11 +22,14 @@ before its camera does.
   dock is one lean, not eight. The drift starts at 1.03 now, which is what leaves the photo room to move.
 - **A vignette on the screensaver**, drawn once as a cached ellipse: the paintings are brighter than the
   photographs were, and the corners are where the credit used to fight them.
-- **Check for updates** in Settings, which opens Amazon's own software update screen. Fire OS offers no
-  intent for that page and its activity names move between builds, so the row asks the settings package
-  what it actually declares and opens the first page named for an update or an About screen - a dedicated
-  update activity where the build has one, About where it does not - and falls back to My Fire TV, then
-  the settings grid. Pages the TV will not let a third-party app start are skipped, not crashed on.
+- **Check for updates** in Settings. Fire OS offers no intent for that page and its activity names move
+  between builds, so the row asks the settings package what it declares and ranks the candidates by what
+  they name: system, software, firmware and device update pages first, then About, while anything calling
+  itself an app, channel or HUD update is rejected rather than opened. On the two Fire OS 7.7 builds here no
+  such page exists at all, so it opens My Fire TV - which lands on About with Check for Updates already
+  highlighted on the Stick, and on the About row on the Cube - with the settings grid as the last resort.
+  Every candidate it sees is logged under `TvHome` with its rank and whether it is exported, so a build
+  that does have an update page can be pinned from logcat without another release.
 
 ### Changed
 - **Artwork fades in when it arrives**, on the resume tiles, instead of being assigned between two frames.
@@ -53,6 +56,10 @@ before its camera does.
 - **`python launcher/build_win.py` writes where it says it does.** Its last copy was relative to the shell,
   so running it from the repo root - as the README says - left a second APK beside the repo and left
   `launcher/out/tvhome.apk` at whatever was there before, while still printing "copied to launcher/out/".
+- **Profile builds work from the repo root.** `build_win.py <profile>` copied the profile's res and assets
+  to shell-relative paths, so the copy landed in `E:\tv-home\build` while aapt2 looked for
+  `launcher\build\res_<profile>`; the build only worked from inside `launcher/`. Every path it assembles is
+  absolute now, and the per-TV APKs carry their own profile (device name, dock order, Home Assistant URL).
 
 ## 1.5.5 — 2026-11-09
 

@@ -33,7 +33,9 @@ Other Fire OS 7 devices will probably work. Not tested on Fire OS 8 / Vega OS de
 - Settings and the network pill open Amazon's own full-screen pages. The pill is an icon at rest and shows the
   network's name and link rate on focus (Wi-Fi 720 Mbps, Ethernet 1 Gbps on a gigabit adapter). **Inputs** sits in
   Settings on devices that report an HDMI passthrough input, and **Check for updates** opens Amazon's update
-  screen (or About, where the build names no such page) instead of the settings grid.
+  page: on Fire OS 7 that is My Fire TV, on About, with Check for Updates already selected. The row ranks
+  what the settings app declares (system/software/firmware/device update pages, then About) and logs every
+  candidate it sees under the `TvHome` log tag, so an update page can be pinned per device.
 - Screensaver (big clock over a drifting painting; its title and artist fade in briefly, and the house's battery,
   solar and load sit at a glance) instead of Amazon's ad-supported one.
 - Alert cards over whatever is playing: doorbell, bins, timers (`am broadcast`, or from Home Assistant). Only shell/ADB

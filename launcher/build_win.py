@@ -23,15 +23,18 @@ shutil.rmtree(B, ignore_errors=True)
 for d in ("gen", "classes", "dex"):
     os.makedirs(os.path.join(B, d))
 PROFILE = sys.argv[1] if len(sys.argv) > 1 else ""
-RES = "res"
+# Absolute, like every other path here: a relative res_<profile> resolves against the shell, so
+# building from the repo root (as the README says) copied it to <repo>\build and aapt2 failed on
+# the missing launcher\build\res_<profile>.
+RES = os.path.join(HERE, "res")
 if PROFILE:
-    RES = os.path.join("build", "res_" + PROFILE)
+    RES = os.path.join(B, "res_" + PROFILE)
     shutil.copytree(os.path.join(HERE, "res"), RES)
     shutil.copy(os.path.join(HERE, "profiles", PROFILE, "config.xml"),
                 os.path.join(RES, "values", "config.xml"))
-ASSETS = "assets"
-if PROFILE and os.path.isdir(os.path.join("profiles", PROFILE, "assets")):   # profile-only files, e.g. brand logos
-    ASSETS = os.path.join("build", "assets_" + PROFILE)
+ASSETS = os.path.join(HERE, "assets")
+if PROFILE and os.path.isdir(os.path.join(HERE, "profiles", PROFILE, "assets")):   # profile-only files, e.g. brand logos
+    ASSETS = os.path.join(B, "assets_" + PROFILE)
     shutil.copytree(os.path.join(HERE, "assets"), ASSETS)
     shutil.copytree(os.path.join(HERE, "profiles", PROFILE, "assets"), ASSETS, dirs_exist_ok=True)
 run(os.path.join(BT, "aapt2.exe"), "compile", "--dir", RES, "-o", os.path.join(B, "res.zip"))
