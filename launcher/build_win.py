@@ -26,13 +26,14 @@ PROFILE = sys.argv[1] if len(sys.argv) > 1 else ""
 RES = "res"
 if PROFILE:
     RES = os.path.join("build", "res_" + PROFILE)
-    shutil.copytree("res", RES)
-    shutil.copy(os.path.join("profiles", PROFILE, "config.xml"), os.path.join(RES, "values", "config.xml"))
+    shutil.copytree(os.path.join(HERE, "res"), RES)
+    shutil.copy(os.path.join(HERE, "profiles", PROFILE, "config.xml"),
+                os.path.join(RES, "values", "config.xml"))
 ASSETS = "assets"
 if PROFILE and os.path.isdir(os.path.join("profiles", PROFILE, "assets")):   # profile-only files, e.g. brand logos
     ASSETS = os.path.join("build", "assets_" + PROFILE)
-    shutil.copytree("assets", ASSETS)
-    shutil.copytree(os.path.join("profiles", PROFILE, "assets"), ASSETS, dirs_exist_ok=True)
+    shutil.copytree(os.path.join(HERE, "assets"), ASSETS)
+    shutil.copytree(os.path.join(HERE, "profiles", PROFILE, "assets"), ASSETS, dirs_exist_ok=True)
 run(os.path.join(BT, "aapt2.exe"), "compile", "--dir", RES, "-o", os.path.join(B, "res.zip"))
 run(os.path.join(BT, "aapt2.exe"), "link", "-o", os.path.join(B, "base.apk"), "-I", JAR, "--manifest", "AndroidManifest.xml",
     "--java", os.path.join(B, "gen"), "-A", ASSETS, "--min-sdk-version", "28", "--target-sdk-version", "28", os.path.join(B, "res.zip"))
@@ -50,6 +51,9 @@ if not os.path.exists(ks):
         "-keyalg", "RSA", "-keysize", "2048", "-validity", "10000", "-dname", "CN=tvhome")
 run(os.path.join(BT, "apksigner.bat"), "sign", "--ks", ks, "--ks-pass", "pass:android", "--out", os.path.join(B, "tvhome.apk"), os.path.join(B, "aligned.apk"))
 print("built", os.path.join(B, "tvhome.apk"), os.path.getsize(os.path.join(B, "tvhome.apk")), "bytes")
-os.makedirs("out", exist_ok=True)
-shutil.copy(os.path.join(B, "tvhome.apk"), os.path.join("out", "tvhome-" + PROFILE + ".apk" if PROFILE else "tvhome.apk"))
+# The output path is absolute: run from the repo root (as the README says) and a relative "out"
+# lands a second copy beside it while this line still claims it went to launcher/out/.
+OUT = os.path.join(HERE, "out")
+os.makedirs(OUT, exist_ok=True)
+shutil.copy(os.path.join(B, "tvhome.apk"), os.path.join(OUT, "tvhome-" + PROFILE + ".apk" if PROFILE else "tvhome.apk"))
 print("copied to launcher/out/")

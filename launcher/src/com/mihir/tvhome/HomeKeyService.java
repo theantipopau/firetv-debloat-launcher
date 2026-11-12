@@ -70,6 +70,13 @@ public class HomeKeyService extends AccessibilityService {
     private String[] wallNames;
     private static Bitmap coverWall;
     private static int coverWallIndex = -1;
+    /**
+     * The photo the cover is holding, and which asset it is. The launcher starts from this same
+     * bitmap instead of decoding the file a second time, so a Home press never shows black between
+     * the two screens. Same process, same main thread: no synchronisation needed.
+     */
+    static Bitmap coverBitmap() { return coverWall; }
+    static int coverBitmapIndex() { return coverWallIndex; }
     private static boolean coverDecoding;
     /** The dock the cover draws when the launcher's own list is not in memory yet. */
     private List<MainActivity.App> coverDock;
@@ -376,9 +383,11 @@ public class HomeKeyService extends AccessibilityService {
         pill.setClipToPadding(false);
         pill.setPadding(px(d, HomeTheme.DOCK_PAD), px(d, HomeTheme.DOCK_PAD_TOP),
                 px(d, HomeTheme.DOCK_PAD), px(d, HomeTheme.DOCK_PAD_BOTTOM));
-        // The launcher saves the glass it tinted from the wallpaper, so this dock wears it too.
+        // The launcher saves the glass it tinted from the wallpaper, so this dock wears it too -
+        // the same lit top edge, not a flat approximation of it.
         GradientDrawable glass = HomeTheme.glassPill(HomeTheme.DOCK_PILL_RADIUS, d);
-        glass.setColor(getSharedPreferences("launcher", MODE_PRIVATE).getInt("glass", HomeTheme.GLASS));
+        HomeTheme.fillGlass(glass, getSharedPreferences("launcher", MODE_PRIVATE)
+                .getInt("glass", HomeTheme.GLASS));
         pill.setBackground(glass);
 
         List<MainActivity.App> apps = MainActivity.dockSnapshot != null

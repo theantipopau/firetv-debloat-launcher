@@ -39,11 +39,16 @@ import java.io.InputStream;
  * remove that attribute from the manifest (and accept that any app can then spoof cards).
  * Payloads are also rate-limited, and snapshot downloads and decoded image sizes are capped, so a rogue or a
  * broken integration cannot exhaust memory or flood the screen with cards.
+ *
+ * The words go up the moment the broadcast lands and the snapshot joins them when it decodes, so a doorbell
+ * card is never held back by a slow camera.
  */
 public class AlertReceiver extends BroadcastReceiver {
     private static final Handler UI = new Handler(Looper.getMainLooper());
     private static View current;
     private static WindowManager currentWm;
+    /** Identifies the card on screen, so a snapshot that arrives late cannot attach to a newer one. */
+    private static Object currentToken;
 
     /** Snapshots decode at the old fixed inSampleSize=2 and are only sampled further above this many pixels;
      *  the download itself is capped in Net. */
@@ -67,20 +72,37 @@ public class AlertReceiver extends BroadcastReceiver {
         final String brand = safeBrand(nz(in.getStringExtra("brand"), ""));
         final String image = cap(nz(in.getStringExtra("image"), ""), MAX_URL);
         final int secs = Math.max(3, Math.min(30, in.getIntExtra("seconds", 8)));
+        final Object token = new Object();
         final PendingResult pr = goAsync();
         new Thread(() -> {
-            Bitmap snap = null, logo = null;
+            Bitmap logo = null;
             try {
-                snap = image.isEmpty() ? null : fetch(image);
                 logo = brand.isEmpty() ? null : asset(app, "brands/" + brand + ".png");
             } catch (Throwable t) {
-                Log.w("TvHome", "alert payload dropped: " + t);   // never let a bad image kill the launcher process
+                Log.w("TvHome", "alert badge dropped: " + t);   // a brand file must never cost the card
             }
-            final Bitmap fSnap = snap, fLogo = logo;
+            final Bitmap fLogo = logo;
+            // The words go up first: a doorbell card that waits on the camera arrives after the
+            // caller has gone. The snapshot joins it if and when it decodes.
             try {
                 UI.post(() -> {
-                    try { show(app, title, text, kind, brand, fLogo, fSnap, secs); }
+                    try { show(app, token, title, text, kind, brand, fLogo, secs); }
                     catch (Throwable t) { Log.w("TvHome", "alert show failed: " + t); }
+                });
+            } catch (Throwable t) {
+                Log.w("TvHome", "alert: no main thread");
+            }
+            Bitmap snap = null;
+            try {
+                snap = image.isEmpty() ? null : fetch(image);
+            } catch (Throwable t) {
+                Log.w("TvHome", "alert snapshot dropped: " + t);   // never let a bad image kill the process
+            }
+            final Bitmap fSnap = snap;
+            try {
+                UI.post(() -> {
+                    try { if (fSnap != null) addSnapshot(token, fSnap); }
+                    catch (Throwable t) { Log.w("TvHome", "alert snapshot failed: " + t); }
                     finally { pr.finish(); }
                 });
             } catch (Throwable t) { pr.finish(); }
@@ -137,8 +159,10 @@ public class AlertReceiver extends BroadcastReceiver {
         }
     }
 
-    static void show(Context c, String title, String text, String kind, String brand, Bitmap logo, Bitmap snap, int secs) {
+    static void show(Context c, Object token, String title, String text, String kind, String brand,
+                     Bitmap logo, int secs) {
         dismiss();
+        currentToken = token;
         final float d = c.getResources().getDisplayMetrics().density;
         final int acc = accent(kind);
 
@@ -202,13 +226,6 @@ public class AlertReceiver extends BroadcastReceiver {
         row.addView(col, cp);
         card.addView(row, new LinearLayout.LayoutParams(-1, -2));
 
-        if (snap != null) {
-            ImageView sv = new ImageView(c);
-            sv.setImageBitmap(snap);
-            sv.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            card.addView(sv, new LinearLayout.LayoutParams(-1, (int) (150 * d)));
-        }
-
         View bar = new View(c);
         bar.setBackgroundColor(acc);
         bar.setPivotX(0f);
@@ -245,5 +262,25 @@ public class AlertReceiver extends BroadcastReceiver {
             try { currentWm.removeView(current); } catch (Exception ignored) { }
         }
         current = null;
+        currentToken = null;
+    }
+
+    /**
+     * The picture, added to the card that is already up. It goes above the countdown bar (always the
+     * last child) and fades in, so a camera that answers late grows the card instead of delaying it.
+     */
+    private static void addSnapshot(Object token, Bitmap snap) {
+        View card = current;
+        // The card has gone, or another alert replaced it: this picture belongs to neither.
+        if (card == null || token != currentToken || !(card instanceof LinearLayout)) return;
+        LinearLayout l = (LinearLayout) card;
+        float d = card.getResources().getDisplayMetrics().density;
+        ImageView iv = new ImageView(card.getContext());
+        iv.setImageBitmap(snap);
+        iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        iv.setAlpha(0f);
+        l.addView(iv, Math.max(0, l.getChildCount() - 1),
+                new LinearLayout.LayoutParams(-1, (int) (150 * d)));
+        iv.animate().alpha(1f).setDuration(220).start();
     }
 }

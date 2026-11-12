@@ -3,6 +3,52 @@
 All notable changes to the Fire TV Debloat Launcher. Versions match `versionName` in
 [`launcher/AndroidManifest.xml`](launcher/AndroidManifest.xml).
 
+## 1.7 — 2026-11-12
+
+The light pass: what the glass, the shadows and the transitions do, plus a doorbell card that shows up
+before its camera does.
+
+### Added
+- **Glass with a lit edge.** The dock pill, the Now cards and the Home-key cover's pill draw a gradient
+  now - a lighter top edge, the wallpaper-tinted body, a darker foot - instead of one flat 35% black. The
+  tint still eases with each new photo; only the light on it has a shape. The 44dp round chips stay flat,
+  where a gradient is invisible.
+- **Motion: Full / Reduced** in Settings, beside Navigation sounds. Reduced keeps the fades and the focus
+  cue and drops the lean, the sheen, the parallax and the launch zoom; the launcher also follows Android's
+  own "remove animations" switch, which it ignored until now.
+- **The photo leans with the cursor.** It moves up to 8dp against the focus, and 5dp when the cursor drops
+  below the fold, so the glass and the type sit in front of it rather than on it. It leans once per
+  arrival - on a row change, or on the first move after half a second's pause - so holding right along the
+  dock is one lean, not eight. The drift starts at 1.03 now, which is what leaves the photo room to move.
+- **A vignette on the screensaver**, drawn once as a cached ellipse: the paintings are brighter than the
+  photographs were, and the corners are where the credit used to fight them.
+
+### Changed
+- **Artwork fades in when it arrives**, on the resume tiles, instead of being assigned between two frames.
+  It was the most visible jolt left on the screen.
+- **Continue Watching springs.** Its tiles used to snap to 1.06 because a property animator on the holder
+  never rendered inside the scroll view; a ValueAnimator driving the scale does, so the row moves at
+  `MS_FOCUS` the way the dock does instead of cutting.
+- **Numbers fade where they stand** (90ms out, 160ms in) when a Home Assistant poll replaces them, and a
+  status line fades itself in the first time it has something to say.
+- **The dock's focus shadow takes the tile's colour** - 18% of it, filtered on the view so the shadow
+  bitmap stays one per size. A grey or near-black banner keeps the neutral shadow.
+- **One sheen per arrival,** gated at 450ms, instead of one on every tile in a held pass, which read as
+  shimmer rather than as light crossing glass.
+- **The Home handoff has no seam.** The launcher starts on the photo the cover had already decoded, in the
+  same process, instead of decoding the same file again behind a black root.
+
+### Fixed
+- **A doorbell card no longer waits for its camera.** The receiver fetched the snapshot before it drew the
+  card, with 2.5s and 3.5s timeouts in front of it; the words now go up immediately and the picture joins
+  the same card when it decodes, matched by a token so a late picture cannot land on a newer alert.
+- **`script.tv_alert` can send a snapshot at all.** It never passed `--es image`, though the receiver has
+  accepted one since 1.3, so a doorbell card from Home Assistant could not carry a picture. `image` is a
+  field now, and the docs and the example automation show how to point it at a still.
+- **`python launcher/build_win.py` writes where it says it does.** Its last copy was relative to the shell,
+  so running it from the repo root - as the README says - left a second APK beside the repo and left
+  `launcher/out/tvhome.apk` at whatever was there before, while still printing "copied to launcher/out/".
+
 ## 1.5.5 — 2026-11-09
 
 ### Added

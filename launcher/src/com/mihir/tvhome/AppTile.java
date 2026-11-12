@@ -4,8 +4,10 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BlurMaskFilter;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Outline;
 import android.graphics.Paint;
+import android.graphics.PorterDuff;
 import android.graphics.RectF;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
@@ -191,6 +193,30 @@ final class AppTile {
         return v;
     }
 
+    /**
+     * The same shadow with a hint of the tile's own colour in it: the light landing on the plate
+     * and bouncing onto the photo. Only a saturated tile is worth tinting - a grey or near-black
+     * banner keeps the neutral shadow, which is what stops a white plate casting a dirty one. The
+     * filter goes on the view, never on the cached bitmap, so there is still one bitmap per size.
+     */
+    static ImageView shadow(Context c, float d, int wDp, int hDp, int radiusDp, int appColor) {
+        ImageView v = shadow(c, d, wDp, hDp, radiusDp);
+        int hint = shadowHint(appColor);
+        if (hint != 0) v.setColorFilter(hint, PorterDuff.Mode.SRC_IN);
+        return v;
+    }
+
+    /** 18% of the tile's colour, or nothing when there is no colour in it to bounce. */
+    private static int shadowHint(int c) {
+        if (c == 0) return 0;
+        float[] hsv = new float[3];
+        Color.colorToHSV(c, hsv);
+        if (hsv[1] < 0.22f || hsv[2] < 0.12f) return 0;
+        float f = 0.18f;
+        return Color.rgb(Math.round(Color.red(c) * f), Math.round(Color.green(c) * f),
+                Math.round(Color.blue(c) * f));
+    }
+
     /** Lays a {@link #shadow} out around a tile that fills its parent, dropped below it. */
     static FrameLayout.LayoutParams shadowParams(float d) {
         FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(-1, -1);
@@ -208,7 +234,19 @@ final class AppTile {
         return v;
     }
 
+    /** When the last sweep started: one piece of light per arrival, not one per keypress. */
+    private static long lastSweepAt;
+
     static void sweep(View sheen, int width) {
+        long now = android.os.SystemClock.uptimeMillis();
+        if (now - lastSweepAt < HomeTheme.SHEEN_QUIET_MS) {
+            // Holding right used to fire a sweep on every tile, which reads as shimmer. The tile
+            // still lifts and takes its rim; only the light crossing it is held back.
+            sheen.animate().cancel();
+            sheen.setAlpha(0f);
+            return;
+        }
+        lastSweepAt = now;
         sheen.animate().cancel();
         sheen.setTranslationX(-width);
         sheen.setAlpha(0.9f);
