@@ -22,6 +22,11 @@ before its camera does.
   dock is one lean, not eight. The drift starts at 1.03 now, which is what leaves the photo room to move.
 - **A vignette on the screensaver**, drawn once as a cached ellipse: the paintings are brighter than the
   photographs were, and the corners are where the credit used to fight them.
+- **Check for updates** in Settings, which opens Amazon's own software update screen. Fire OS offers no
+  intent for that page and its activity names move between builds, so the row asks the settings package
+  what it actually declares and opens the first page named for an update or an About screen - a dedicated
+  update activity where the build has one, About where it does not - and falls back to My Fire TV, then
+  the settings grid. Pages the TV will not let a third-party app start are skipped, not crashed on.
 
 ### Changed
 - **Artwork fades in when it arrives**, on the resume tiles, instead of being assigned between two frames.

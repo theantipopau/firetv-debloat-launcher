@@ -500,6 +500,61 @@ public class MainActivity extends Activity {
         if (!launch(i) && !launch(new Intent(Settings.ACTION_WIFI_SETTINGS))) openFullSettings();
     }
 
+    /**
+     * The settings packages Fire OS has shipped, newest first. `com.amazon.tv.settings` is Fire OS 6.
+     */
+    private static final String[] SETTINGS_PACKAGES =
+            {"com.amazon.tv.settings.v2", "com.amazon.tv.settings"};
+    /**
+     * Best first: a dedicated update page beats About, and About beats the settings grid. Names, not
+     * intents: Fire OS exposes no action for this screen, so the package has to be asked.
+     */
+    private static final String[] UPDATE_PAGES =
+            {"systemupdate", "softwareupdate", "ota", "update", "about"};
+
+    /**
+     * Settings > My Fire TV > About > Check for updates, as close as Fire OS allows a third-party
+     * launcher to get. There is no public intent for that page and the activity names move between
+     * builds, so the settings package is asked what it actually declares and the first page that
+     * names an update or About screen is opened. When this build names none, My Fire TV opens - the
+     * page About sits on - and only then Amazon's settings grid.
+     */
+    private void openSystemUpdate() {
+        for (String needle : UPDATE_PAGES) {
+            if (launchSettingsPage(needle)) return;
+        }
+        if (launch(new Intent().setComponent(new ComponentName("com.amazon.tv.settings.v2",
+                "com.amazon.tv.settings.v2.tv.device.DeviceActivity")))) return;
+        openFullSettings();
+    }
+
+    /**
+     * One activity of Amazon's settings whose class name contains {@code needle}, if the TV will let
+     * us start it. Non-exported pages resolve but refuse to start; that refusal is caught by
+     * {@link #launch} and the next candidate is tried, so a locked page costs a search step, not a
+     * crash on a screen the viewer cannot leave.
+     */
+    private boolean launchSettingsPage(String needle) {
+        PackageManager pm = getPackageManager();
+        for (String pkg : SETTINGS_PACKAGES) {
+            ActivityInfo[] activities;
+            try {
+                activities = pm.getPackageInfo(pkg, PackageManager.GET_ACTIVITIES).activities;
+            } catch (Exception e) {
+                continue;
+            }
+            if (activities == null) continue;
+            for (ActivityInfo ai : activities) {
+                String name = ai.name == null ? "" : ai.name.toLowerCase(Locale.US);
+                if (!name.contains(needle)) continue;
+                Intent i = new Intent().setComponent(new ComponentName(ai.packageName, ai.name));
+                if (pm.resolveActivity(i, 0) == null) continue;
+                if (launch(i)) return true;
+            }
+        }
+        return false;
+    }
+
     /** Amazon's own full-screen Settings grid; falls back to the generic settings intent on other Fire OS builds. */
     private void openFullSettings() {
         Intent i = new Intent().setComponent(new ComponentName("com.amazon.tv.launcher", "com.amazon.tv.launcher.ui.MainSettingsActivity"));
@@ -1843,6 +1898,8 @@ public class MainActivity extends Activity {
         rows.addView(batteryRow());
         rows.addView(soundsRow());
         rows.addView(motionRow());
+        rows.addView(settingsRow("Check for updates", "Amazon's software update screen",
+                v -> openSystemUpdate()));
         rows.addView(settingsRow("Amazon settings", "Display, apps, device",
                 v -> openFullSettings()));
         sheet.addView(rows, new LinearLayout.LayoutParams(-1, -2));
