@@ -45,6 +45,11 @@ before its camera does.
   shimmer rather than as light crossing glass.
 - **The Home handoff has no seam.** The launcher starts on the photo the cover had already decoded, in the
   same process, instead of decoding the same file again behind a black root.
+- **Idle goes straight to the screensaver.** Since 1.5.4 a minute untouched filled the screen with whichever
+  card was showing - and on this home that is the Live now card, so an idle TV showed a channel and its
+  programme rather than the paintings. That step is gone: nothing takes the screen before the art saver,
+  which still starts after three minutes. The full-screen card face and the key that only dismissed it went
+  with it.
 
 ### Fixed
 - **A doorbell card no longer waits for its camera.** The receiver fetched the snapshot before it drew the
