@@ -1927,7 +1927,7 @@ public class MainActivity extends Activity {
         rows.addView(batteryRow());
         rows.addView(soundsRow());
         rows.addView(motionRow());
-        rows.addView(settingsRow("Check for updates", "Amazon's software update screen",
+        rows.addView(settingsRow("Check for updates", "Amazon's update page",
                 v -> openSystemUpdate()));
         rows.addView(settingsRow("Amazon settings", "Display, apps, device",
                 v -> openFullSettings()));
