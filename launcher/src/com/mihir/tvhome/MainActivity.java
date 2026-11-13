@@ -19,6 +19,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Matrix;
 import android.graphics.Outline;
 import android.graphics.Paint;
 import android.graphics.Typeface;
@@ -101,6 +102,14 @@ public class MainActivity extends Activity {
     private LinearLayout grid;
     private View leftWash, bottomWash, cwWash, gridShade;
     private ImageView wallBack, wallFront;
+    /** The depth clock's land, and the photo layer it was cut from; see {@link #syncDepth}. */
+    private ImageView depth, depthPhoto;
+    /** The photo pixels make-depth.py's masks cover: its REGION's top-left corner. */
+    private static final int DEPTH_X = 80, DEPTH_Y = 60;
+    private final Matrix depthM = new Matrix(), depthLast = new Matrix();
+    private final int[] depthAt = new int[2], depthRoot = new int[2];
+    private final android.graphics.Rect depthClip = new android.graphics.Rect();
+    private int depthTint;
     /** The sun-following wash and the rain over the wallpaper; see {@link TimeOfDay}. */
     private View todVeil;
     private RainView rain;
@@ -347,6 +356,12 @@ public class MainActivity extends Activity {
         super.onNewIntent(intent);
         // Preview the mood without waiting for the weather: --es preview rain|pour|night|dawn|golden|dusk|clear
         String pv = intent == null ? null : intent.getStringExtra("preview");
+        // Jump to a photo by its place in assets/wallpapers (0-based): --ei wall 8
+        int wall = intent == null ? -1 : intent.getIntExtra("wall", -1);
+        if (wall >= 0 && wall < wallpapers.length) {
+            wallIndex = wall - 1;
+            nextWallpaper();
+        }
         if (pv != null) {
             fxPreview = "clear".equals(pv) ? "" : pv;
             applyWeatherFx();
@@ -417,6 +432,14 @@ public class MainActivity extends Activity {
             wallpapers = getAssets().list("wallpapers");
         } catch (java.io.IOException ignored) { }
 
+        // The depth clock: on a photo with land in the clock's corner, that land is drawn again over
+        // the page, clipped to the clock, so a treeline stands in front of the time. Out here, not in
+        // the clock's block, so moving it never re-renders the block's cached layer.
+        depth = new ImageView(this);
+        depth.setScaleType(ImageView.ScaleType.MATRIX);
+        depth.setVisibility(View.GONE);
+        depth.getViewTreeObserver().addOnPreDrawListener(() -> { syncDepth(); return true; });
+
         scroll = new HomeScrollView(this);
         scroll.setVerticalScrollBarEnabled(false);
         scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
@@ -425,6 +448,7 @@ public class MainActivity extends Activity {
         scroll.setFocusable(false);
         scroll.setFocusableInTouchMode(false);
         root.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
+        root.addView(depth, new FrameLayout.LayoutParams(-1, -1));
 
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
@@ -3271,7 +3295,7 @@ public class MainActivity extends Activity {
         wallChangedAt = SystemClock.elapsedRealtime();
         String name = "wallpapers/" + wallpapers[wallIndex];
         new Thread(() -> {
-            Bitmap bm = null, tint = null, frost = null;
+            Bitmap bm = null, tint = null, frost = null, land = null;
             try (java.io.InputStream in = getAssets().open(name)) {
                 BitmapFactory.Options o = new BitmapFactory.Options();
                 o.inPreferredConfig = Bitmap.Config.RGB_565;
@@ -3283,9 +3307,10 @@ public class MainActivity extends Activity {
                 tint = Bitmap.createScaledBitmap(bm, 16, 9, true);
                 frost = Blur.frost(bm, 160, 90);
                 bakeWashes(bm);
+                land = depthFor(name, bm);
             }
-            Bitmap result = bm, t = tint, f = frost;
-            runOnUiThread(() -> showWallpaper(result, t, f));
+            Bitmap result = bm, t = tint, f = frost, l = land;
+            runOnUiThread(() -> showWallpaper(result, t, f, l));
         }).start();
         scheduleWallpaper(WALLPAPER_INTERVAL_MS);
     }
@@ -3355,13 +3380,88 @@ public class MainActivity extends Activity {
         bottom.draw(c);
     }
 
+    /**
+     * The land in front of the clock, for photos make-depth.py found a skyline in: that corner of
+     * the washed photo, cut to the mask. Null for the rest. Off the UI thread.
+     */
+    private Bitmap depthFor(String photo, Bitmap washed) {
+        String base = photo.substring(photo.lastIndexOf('/') + 1).replace(".jpg", "");
+        try (java.io.InputStream in = getAssets().open("depth/" + base + ".png")) {
+            Bitmap mask = BitmapFactory.decodeStream(in);
+            if (mask == null) return null;
+            Bitmap fg = Bitmap.createBitmap(mask.getWidth(), mask.getHeight(), Bitmap.Config.ARGB_8888);
+            Canvas c = new Canvas(fg);
+            c.drawBitmap(washed, -DEPTH_X, -DEPTH_Y, null);
+            Paint p = new Paint();
+            p.setXfermode(new android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_IN));
+            c.drawBitmap(mask, 0, 0, p);
+            mask.recycle();
+            return fg;
+        } catch (java.io.IOException e) {
+            return null;   // no land behind the clock in this photo
+        }
+    }
+
+    private void setDepth(ImageView photo, Bitmap fg) {
+        if (depth == null) return;
+        depthPhoto = fg == null ? null : photo;
+        depth.setImageBitmap(fg);
+        depthLast.reset();
+    }
+
+    /**
+     * Every frame: lays the land exactly over its own photo (the photo's centre-crop, slow zoom,
+     * parallax and crossfade) and gives it the time-of-day veil the photo has under it. Hidden
+     * while the page is scrolled or the block is focused, when the photo under the clock changes.
+     */
+    private void syncDepth() {
+        ImageView photo = depthPhoto;
+        boolean show = photo != null && scroll.getScrollY() == 0 && !statusBlock.isFocused()
+                && gridShade.getAlpha() == 0f;
+        int vis = show ? View.VISIBLE : View.GONE;
+        if (depth.getVisibility() != vis) depth.setVisibility(vis);
+        if (!show) return;
+        ((View) depth.getParent()).getLocationInWindow(depthRoot);
+        clock.getLocationInWindow(depthAt);
+        // Down to the digits' baseline (they have no descenders): the box below it reaches the date.
+        int cx = depthAt[0] - depthRoot[0], cy = depthAt[1] - depthRoot[1];
+        int ch = clock.getBaseline() + dp(1);
+        if (depthClip.left != cx || depthClip.top != cy || depthClip.width() != clock.getWidth()
+                || depthClip.height() != ch) {
+            depthClip.set(cx, cy, cx + clock.getWidth(), cy + ch);
+            depth.setClipBounds(depthClip);
+        }
+        depthM.set(photo.getImageMatrix());
+        // Drawable units, not bitmap pixels: at the 0.8 UI density a drawable is 0.8 of its bitmap.
+        Drawable pd = photo.getDrawable();
+        float k = pd instanceof BitmapDrawable
+                ? pd.getIntrinsicWidth() / (float) ((BitmapDrawable) pd).getBitmap().getWidth() : 1f;
+        depthM.preTranslate(DEPTH_X * k, DEPTH_Y * k);
+        depthM.postScale(photo.getScaleX(), photo.getScaleY(), photo.getPivotX(), photo.getPivotY());
+        depthM.postTranslate(photo.getLeft() + photo.getTranslationX(), photo.getTop() + photo.getTranslationY());
+        if (!depthM.equals(depthLast)) {
+            depthLast.set(depthM);
+            depth.setImageMatrix(depthM);
+        }
+        // The photo's fade, and the block's: dimmed for Continue Watching, the land dims with it.
+        float a = photo.getAlpha() * statusBlock.getAlpha();
+        if (depth.getAlpha() != a) depth.setAlpha(a);
+        int tint = todVeil.getBackground() instanceof android.graphics.drawable.ColorDrawable
+                ? ((android.graphics.drawable.ColorDrawable) todVeil.getBackground()).getColor() : 0;
+        if (tint != depthTint) {
+            depthTint = tint;
+            if ((tint >>> 24) == 0) depth.clearColorFilter();
+            else depth.setColorFilter(tint, android.graphics.PorterDuff.Mode.SRC_ATOP);
+        }
+    }
+
     /** The wash views are only for a photo that has not had its washes painted in yet. */
     private void washViews(boolean on) {
         leftWash.setVisibility(on ? View.VISIBLE : View.GONE);
         bottomWash.setVisibility(on ? View.VISIBLE : View.GONE);
     }
 
-    private void showWallpaper(Bitmap bm, Bitmap tint, Bitmap frost) {
+    private void showWallpaper(Bitmap bm, Bitmap tint, Bitmap frost, Bitmap land) {
         if (bm == null || isDestroyed()) return;
         // Swap roles: the old front becomes the back, the new photo fades in on top.
         ImageView old = wallFront;
@@ -3372,6 +3472,7 @@ public class MainActivity extends Activity {
         root.addView(wallFront, 1, new FrameLayout.LayoutParams(-1, -1));
         wallFront.setImageBitmap(bm);
         currentWall = bm;
+        setDepth(wallFront, land);
         tintGlass(tint);
         if (haFrost != null) haFrost.setBlur(frost);
         wallFront.setAlpha(0f);
@@ -3438,12 +3539,14 @@ public class MainActivity extends Activity {
             Bitmap copy = photo.copy(Bitmap.Config.RGB_565, true);
             if (copy == null) return;
             bakeWashes(copy);
+            Bitmap land = depthFor(wallpapers[idx], copy);
             runOnUiThread(() -> {
                 if (front != wallFront || !(front.getDrawable() instanceof BitmapDrawable)
                         || ((BitmapDrawable) front.getDrawable()).getBitmap() != photo) return;
                 front.setImageBitmap(copy);
                 currentWall = copy;
                 washViews(false);
+                setDepth(front, land);
             });
         }).start();
     }

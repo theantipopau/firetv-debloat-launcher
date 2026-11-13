@@ -14,6 +14,11 @@ All notable changes to the Fire TV Debloat Launcher. Versions match `versionName
   screensaver and the dark screen, stops when you open an app, and stops by itself after three hours.
 - **Screen dark.** Settings → Screen dark turns the picture black while the soundscape plays. Any
   button brings Home back.
+- **Depth clock.** On a photo whose land reaches the clock (the clifftop golf course, the misty
+  forest), the treeline stands in front of the bottom of the digits, and follows the photo's slow
+  zoom, parallax, fade and time-of-day tint. `tools/make-depth.py` finds the skyline and writes a
+  small mask per photo, only where land covers 4-40% of the digits. Jump to a photo with
+  `--ei wall N` (0-based).
 
 ### Changed
 - The Settings list scrolls under its title: with ten rows it was taller than the screen.
