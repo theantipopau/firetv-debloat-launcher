@@ -17,6 +17,8 @@ All notable changes to the Fire TV Debloat Launcher. Versions match `versionName
 
 ### Changed
 - The Settings list scrolls under its title: with ten rows it was taller than the screen.
+- Settings rises into place as it opens and sinks as it closes, instead of switching on and off.
+- A focused app tile with a coloured plate casts light in its own colour onto the photo below it.
 
 ### Fixed
 - **Moving along the dock is smooth on the Stick.** Three in four frames missed their deadline; now

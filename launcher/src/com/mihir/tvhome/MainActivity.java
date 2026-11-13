@@ -2099,16 +2099,30 @@ public class MainActivity extends Activity {
     private void showSettings() {
         if (settingsPage == null) return;
         hideContinue();
+        settingsShown = true;
         settingsPage.setVisibility(View.VISIBLE);
         settingsPage.setAlpha(0f);
         settingsPage.animate().alpha(1f).setDuration(HomeTheme.MS_REVEAL).withLayer().start();
+        // The sheet rises into place a beat behind the dark, like a tvOS sheet, not a light switch.
+        View sheet = settingsPage.getChildAt(0);
+        sheet.setTranslationY(dp(36));
+        sheet.animate().translationY(0).setInterpolator(HomeTheme.settle())
+                .setDuration(HomeTheme.MS_REVEAL + 80).start();
         scroll.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
         if (!settingsRows.isEmpty()) settingsRows.get(0).requestFocus();
     }
 
+    /** False from the moment Settings starts closing, so a quick reopen survives the fade. */
+    private boolean settingsShown;
+
     private void hideSettings() {
-        if (settingsPage == null) return;
-        settingsPage.setVisibility(View.GONE);
+        if (settingsPage == null || settingsPage.getVisibility() != View.VISIBLE) return;
+        // Sinks and fades; GONE only at the end, but focus comes home at once.
+        settingsShown = false;
+        settingsPage.getChildAt(0).animate().translationY(dp(24)).setInterpolator(HomeTheme.ease())
+                .setDuration(HomeTheme.MS_FOCUS).start();
+        settingsPage.animate().alpha(0f).setDuration(HomeTheme.MS_FOCUS).withLayer()
+                .withEndAction(() -> { if (!settingsShown) settingsPage.setVisibility(View.GONE); }).start();
         scroll.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
         if (statusBlock != null) statusBlock.requestFocus();
     }

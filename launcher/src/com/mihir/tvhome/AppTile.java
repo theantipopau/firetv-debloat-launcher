@@ -206,15 +206,17 @@ final class AppTile {
         return v;
     }
 
-    /** 18% of the tile's colour, or nothing when there is no colour in it to bounce. */
+    /**
+     * The logo's own colour at 55%, so the shadow reads as light from the plate pooling on the
+     * photo; a darkened tint (18%, then 45%) vanished against a busy wallpaper. Nothing for a
+     * grey, white or near-black plate, which keeps the neutral shadow.
+     */
     private static int shadowHint(int c) {
         if (c == 0) return 0;
         float[] hsv = new float[3];
         Color.colorToHSV(c, hsv);
         if (hsv[1] < 0.22f || hsv[2] < 0.12f) return 0;
-        float f = 0.18f;
-        return Color.rgb(Math.round(Color.red(c) * f), Math.round(Color.green(c) * f),
-                Math.round(Color.blue(c) * f));
+        return (0x8C << 24) | (c & 0xFFFFFF);
     }
 
     /** Lays a {@link #shadow} out around a tile that fills its parent, dropped below it. */
