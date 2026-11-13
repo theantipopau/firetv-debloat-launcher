@@ -490,6 +490,14 @@ public class SaverView extends FrameLayout {
             case "16.jpg": return "Nocturne in Blue and Silver \u00B7 Whistler";
             case "18.jpg": return "The Fighting Temeraire \u00B7 Turner";
             case "20.jpg": return "The Hay Wain \u00B7 Constable";
+            case "25.jpg": return "Starry Night over the Rh\u00F4ne \u00B7 Van Gogh";
+            case "26.jpg": return "Impression, Sunrise \u00B7 Monet";
+            case "27.jpg": return "The Great Wave off Kanagawa \u00B7 Hokusai";
+            case "28.jpg": return "Rain, Steam and Speed \u00B7 Turner";
+            case "29.jpg": return "The Oxbow \u00B7 Thomas Cole";
+            case "30.jpg": return "Among the Sierra Nevada \u00B7 Bierstadt";
+            case "31.jpg": return "Moonrise by the Sea \u00B7 Friedrich";
+            case "32.jpg": return "Water Lily Pond \u00B7 Monet";
             default: return "";
         }
     }

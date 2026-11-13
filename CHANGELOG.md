@@ -9,6 +9,10 @@ All notable changes to the Fire TV Debloat Launcher. Versions match `versionName
 - **Storms.** In thunder or lightning weather the rain gets the odd flash: two flickers a beat apart,
   then 8 to 25 seconds of dark. Fire TV and Samsung. Preview with `--es preview storm`.
 - **Rain on the screensaver.** The paintings get the same rain (and lightning) while it rains.
+- **Eight more paintings on the screensaver**, all public domain, from Wikimedia Commons: Van Gogh's
+  Starry Night over the Rhône, Monet's Impression, Sunrise and Water Lily Pond, Hokusai's Great Wave,
+  Turner's Rain, Steam and Speed, Cole's The Oxbow, Bierstadt's Among the Sierra Nevada and
+  Friedrich's Moonrise by the Sea. Twelve in all, each credited as it comes up.
 - **Soundscape.** Settings → Soundscape steps through Rain, Fireplace and Brown noise, made on the
   TV from random numbers (no recordings), at the TV's media volume. It keeps playing over Home, the
   screensaver and the dark screen, stops when you open an app, and stops by itself after three hours.
