@@ -264,13 +264,16 @@ public class HomeKeyService extends AccessibilityService {
                 f.addView(iv, new FrameLayout.LayoutParams(-1, -1));
             }
 
-            // The launcher's two washes, from the same source, so the swap is invisible.
-            View left = new View(this);
-            left.setBackground(HomeTheme.leftWash());
-            f.addView(left, new FrameLayout.LayoutParams(-1, -1));
-            View bottom = new View(this);
-            bottom.setBackground(HomeTheme.bottomWash());
-            f.addView(bottom, new FrameLayout.LayoutParams(-1, px(d, 340), Gravity.BOTTOM));
+            // The launcher's two washes, from the same source, so the swap is invisible. The
+            // launcher's own photo already has them painted in.
+            if (photo == null || photo != MainActivity.currentWall) {
+                View left = new View(this);
+                left.setBackground(HomeTheme.leftWash());
+                f.addView(left, new FrameLayout.LayoutParams(-1, -1));
+                View bottom = new View(this);
+                bottom.setBackground(HomeTheme.bottomWash());
+                f.addView(bottom, new FrameLayout.LayoutParams(-1, px(d, 340), Gravity.BOTTOM));
+            }
 
             addStatus(f, d);
             addDock(f, d);

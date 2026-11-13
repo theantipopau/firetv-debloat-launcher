@@ -18,6 +18,14 @@ All notable changes to the Fire TV Debloat Launcher. Versions match `versionName
 ### Changed
 - The Settings list scrolls under its title: with ten rows it was taller than the screen.
 
+### Fixed
+- **Moving along the dock is smooth on the Stick.** Three in four frames missed their deadline; now
+  about one in seven does (median frame 33 ms to 13 ms). The left and bottom washes are painted into
+  each photo once, off screen, instead of being drawn as two full-screen gradients on every frame,
+  and the clock block's shadowed text is kept in a layer instead of being re-blurred every frame.
+- Rain on the Fire TV draws in three batches instead of 90 separate smoothed lines (it took the
+  worst frames to 150 ms), and on the Samsung as CSS streaks instead of a canvas (8 fps to 45).
+
 ## 1.7.1 — 2026-11-13
 
 ### Added

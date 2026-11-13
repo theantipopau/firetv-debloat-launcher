@@ -22,6 +22,7 @@ import android.graphics.Color;
 import android.graphics.Outline;
 import android.graphics.Paint;
 import android.graphics.Typeface;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.media.tv.TvContract;
@@ -98,7 +99,7 @@ public class MainActivity extends Activity {
     /** The one screen of home: clock block, Now Showing, the dock pill and the hidden row. */
     private FrameLayout page;
     private LinearLayout grid;
-    private View bottomWash, cwWash, gridShade;
+    private View leftWash, bottomWash, cwWash, gridShade;
     private ImageView wallBack, wallFront;
     /** The sun-following wash and the rain over the wallpaper; see {@link TimeOfDay}. */
     private View todVeil;
@@ -233,6 +234,8 @@ public class MainActivity extends Activity {
                 View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                         | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
         setContentView(buildUi());
+        // The root is already black; a window background under it is one more full-screen fill a frame.
+        getWindow().setBackgroundDrawable(null);
         seedWallFromCover();
         buildApps();
         // The Home-key cover has done its job the moment this window paints; wait for the frame
@@ -392,7 +395,8 @@ public class MainActivity extends Activity {
         root.addView(wallFront, new FrameLayout.LayoutParams(-1, -1));
 
         // Two gradients and nothing else: a soft left wash under the text, a floor under the dock.
-        View leftWash = new View(this);
+        // Shown only until a photo with the washes painted in is up: see bakeWashes.
+        leftWash = new View(this);
         leftWash.setBackground(HomeTheme.leftWash());
         root.addView(leftWash, new FrameLayout.LayoutParams(-1, -1));
         bottomWash = new View(this);
@@ -614,6 +618,9 @@ public class MainActivity extends Activity {
         // The highlight is the block's own box, padding included: an inset edge used to cross the
         // last line whenever a line was hidden, so the glass ended through "Air con off".
         statusBlock.setBackground(bg);
+        // A layer: its eight shadowed lines were re-blurred on every frame of every dock move. Now
+        // they are drawn once, and again only when a line changes.
+        statusBlock.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         // OK on the block opens the detail sheet; the block is the only way in.
         statusBlock.setOnClickListener(v -> openHa());
         statusBlock.setOnFocusChangeListener((v, has) -> {
@@ -3250,14 +3257,21 @@ public class MainActivity extends Activity {
         wallChangedAt = SystemClock.elapsedRealtime();
         String name = "wallpapers/" + wallpapers[wallIndex];
         new Thread(() -> {
-            Bitmap bm = null;
+            Bitmap bm = null, tint = null, frost = null;
             try (java.io.InputStream in = getAssets().open(name)) {
                 BitmapFactory.Options o = new BitmapFactory.Options();
                 o.inPreferredConfig = Bitmap.Config.RGB_565;
+                o.inMutable = true;
                 bm = BitmapFactory.decodeStream(in, null, o);
             } catch (java.io.IOException ignored) { }
-            Bitmap result = bm;
-            runOnUiThread(() -> showWallpaper(result));
+            if (bm != null) {
+                // The glass tint and the frosted panel sample the photo as it is, before its washes.
+                tint = Bitmap.createScaledBitmap(bm, 16, 9, true);
+                frost = Blur.frost(bm, 160, 90);
+                bakeWashes(bm);
+            }
+            Bitmap result = bm, t = tint, f = frost;
+            runOnUiThread(() -> showWallpaper(result, t, f));
         }).start();
         scheduleWallpaper(WALLPAPER_INTERVAL_MS);
     }
@@ -3304,7 +3318,36 @@ public class MainActivity extends Activity {
         a.start();
     }
 
-    private void showWallpaper(Bitmap bm) {
+    /**
+     * Paints the left and bottom washes into the photo itself, so a frame draws one full-screen
+     * image instead of an image and two full-screen gradients: the gradients alone took the
+     * Stick's dock moves from 18% to 76% janky frames. Drawn through the inverse of CENTER_CROP,
+     * so they land where the wash views did. Off the UI thread, on a mutable bitmap.
+     */
+    private void bakeWashes(Bitmap bm) {
+        android.util.DisplayMetrics m = getResources().getDisplayMetrics();
+        int vw = m.widthPixels, vh = m.heightPixels;
+        float s = Math.max(vw / (float) bm.getWidth(), vh / (float) bm.getHeight());
+        Canvas c = new Canvas(bm);
+        c.translate(bm.getWidth() / 2f, bm.getHeight() / 2f);
+        c.scale(1 / s, 1 / s);
+        c.translate(-vw / 2f, -vh / 2f);
+        GradientDrawable left = HomeTheme.leftWash(), bottom = HomeTheme.bottomWash();
+        left.setDither(true);     // the photo is RGB_565: dither or the dark end bands
+        bottom.setDither(true);
+        left.setBounds(0, 0, vw, vh);
+        left.draw(c);
+        bottom.setBounds(0, vh - dp(340), vw, vh);
+        bottom.draw(c);
+    }
+
+    /** The wash views are only for a photo that has not had its washes painted in yet. */
+    private void washViews(boolean on) {
+        leftWash.setVisibility(on ? View.VISIBLE : View.GONE);
+        bottomWash.setVisibility(on ? View.VISIBLE : View.GONE);
+    }
+
+    private void showWallpaper(Bitmap bm, Bitmap tint, Bitmap frost) {
         if (bm == null || isDestroyed()) return;
         // Swap roles: the old front becomes the back, the new photo fades in on top.
         ImageView old = wallFront;
@@ -3315,12 +3358,8 @@ public class MainActivity extends Activity {
         root.addView(wallFront, 1, new FrameLayout.LayoutParams(-1, -1));
         wallFront.setImageBitmap(bm);
         currentWall = bm;
-        tintGlass(bm);
-        // One small blurred copy per photo, for the frosted panel to sample.
-        new Thread(() -> {
-            final Bitmap f = Blur.frost(bm, 160, 90);
-            runOnUiThread(() -> { if (haFrost != null) haFrost.setBlur(f); });
-        }).start();
+        tintGlass(tint);
+        if (haFrost != null) haFrost.setBlur(frost);
         wallFront.setAlpha(0f);
         // 1.03, not 1: the parallax needs a few dp of slack to lean into, and the drift still ends
         // at 1.09, so the photo moves as slowly as it always did.
@@ -3345,6 +3384,8 @@ public class MainActivity extends Activity {
         });
         wallFront.animate().alpha(1f).setDuration(firstWallpaper ? 600 : 2000).withEndAction(() -> {
             wallBack.setImageDrawable(null); // release the previous photo
+            root.setBackground(null);        // the opaque photo covers it: black would be a wasted fill
+            washViews(false);                // this photo has its washes painted in
         }).start();
         firstWallpaper = false;
         // A new photo starts centred, and may lean to wherever the cursor is on its first frame.
@@ -3375,7 +3416,22 @@ public class MainActivity extends Activity {
         // becomes the layer the new one fades in over - instead of being replaced behind an empty
         // view, which is how the first fade would otherwise cross a black frame.
         wallFront.setImageBitmap(photo);
-        currentWall = photo;
+        ((View) wallFront.getParent()).setBackground(null);   // the photo covers the black
+        // The cover's photo is shared and bare, so the wash views show over it until a copy with
+        // the washes painted in is ready; that swap changes no pixel.
+        final ImageView front = wallFront;
+        new Thread(() -> {
+            Bitmap copy = photo.copy(Bitmap.Config.RGB_565, true);
+            if (copy == null) return;
+            bakeWashes(copy);
+            runOnUiThread(() -> {
+                if (front != wallFront || !(front.getDrawable() instanceof BitmapDrawable)
+                        || ((BitmapDrawable) front.getDrawable()).getBitmap() != photo) return;
+                front.setImageBitmap(copy);
+                currentWall = copy;
+                washViews(false);
+            });
+        }).start();
     }
 
     /**
@@ -3516,9 +3572,10 @@ public class MainActivity extends Activity {
         a.setStartDelay(Math.round(beat * HomeTheme.STAGGER));
         a.setDuration(HomeTheme.MS_FADE);
         a.setInterpolator(HomeTheme.ease());
+        final int layer = v.getLayerType();   // the status block keeps its layer for good
         a.addListener(new AnimatorListenerAdapter() {
             @Override public void onAnimationStart(Animator an) { v.setLayerType(View.LAYER_TYPE_HARDWARE, null); }
-            @Override public void onAnimationEnd(Animator an) { v.setLayerType(View.LAYER_TYPE_NONE, null); }
+            @Override public void onAnimationEnd(Animator an) { v.setLayerType(layer, null); }
         });
         a.start();
     }
