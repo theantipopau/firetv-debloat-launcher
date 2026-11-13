@@ -20,13 +20,16 @@ rm -rf "$OUT" && mkdir -p "$OUT"
   launcher/src/com/mihir/tvhome/Cards.java \
   launcher/src/com/mihir/tvhome/TitleFit.java \
   launcher/src/com/mihir/tvhome/TimeOfDay.java \
+  launcher/src/com/mihir/tvhome/Noise.java \
   tests/com/mihir/tvhome/TimesTest.java \
   tests/com/mihir/tvhome/FeedTest.java \
   tests/com/mihir/tvhome/CardsTest.java \
   tests/com/mihir/tvhome/TitleFitTest.java \
-  tests/com/mihir/tvhome/TimeOfDayTest.java
+  tests/com/mihir/tvhome/TimeOfDayTest.java \
+  tests/com/mihir/tvhome/NoiseTest.java
 "$JAVA" -cp "$OUT" com.mihir.tvhome.TimesTest
 "$JAVA" -cp "$OUT" com.mihir.tvhome.FeedTest
 "$JAVA" -cp "$OUT" com.mihir.tvhome.CardsTest
 "$JAVA" -cp "$OUT" com.mihir.tvhome.TitleFitTest
 "$JAVA" -cp "$OUT" com.mihir.tvhome.TimeOfDayTest
+"$JAVA" -cp "$OUT" com.mihir.tvhome.NoiseTest

@@ -3,6 +3,21 @@
 All notable changes to the Fire TV Debloat Launcher. Versions match `versionName` in
 [`launcher/AndroidManifest.xml`](launcher/AndroidManifest.xml).
 
+## 1.7.2 — 2026-11-13
+
+### Added
+- **Storms.** In thunder or lightning weather the rain gets the odd flash: two flickers a beat apart,
+  then 8 to 25 seconds of dark. Fire TV and Samsung. Preview with `--es preview storm`.
+- **Rain on the screensaver.** The paintings get the same rain (and lightning) while it rains.
+- **Soundscape.** Settings → Soundscape steps through Rain, Fireplace and Brown noise, made on the
+  TV from random numbers (no recordings), at the TV's media volume. It keeps playing over Home, the
+  screensaver and the dark screen, stops when you open an app, and stops by itself after three hours.
+- **Screen dark.** Settings → Screen dark turns the picture black while the soundscape plays. Any
+  button brings Home back.
+
+### Changed
+- The Settings list scrolls under its title: with ten rows it was taller than the screen.
+
 ## 1.7.1 — 2026-11-13
 
 ### Added

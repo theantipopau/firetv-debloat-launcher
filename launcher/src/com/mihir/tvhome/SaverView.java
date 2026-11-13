@@ -48,6 +48,7 @@ public class SaverView extends FrameLayout {
     private final ImageView batteryMark, solarMark, houseMark;
     private final LinearLayout block, clockRow, energyRow, batteryItem, solarItem, houseItem;
     private final ImageView wall;
+    private final RainView rain;
     private String[] walls = new String[0];
     private String wallDir = ART_DIR;
     private int wallIndex = -1;
@@ -64,6 +65,8 @@ public class SaverView extends FrameLayout {
         wall.setAlpha(WALL_ALPHA);
         addView(wall, new LayoutParams(-1, -1));
         addView(vignette(c), new LayoutParams(-1, -1));
+        rain = new RainView(c);   // over the painting, under the words
+        addView(rain, new LayoutParams(-1, -1));
 
         // The paintings are brighter than the photographs were. A soft floor under the type keeps
         // white legible on a wheatfield or a sunset without hiding the canvas above it.
@@ -258,6 +261,7 @@ public class SaverView extends FrameLayout {
 
     public void stop() {
         running = false;
+        rain.setRain(false, 0);
         h.removeCallbacksAndMessages(null);
     }
 
@@ -377,10 +381,16 @@ public class SaverView extends FrameLayout {
                 final JSONObject ages = j.optJSONObject("ages");
                 final String line = weatherLine(j);
                 final String nextEvent = clean(j.optString("next", ""));
+                final String cond = j.optString("condition", "");
+                final boolean fx = getContext().getSharedPreferences("launcher", Context.MODE_PRIVATE)
+                        .getBoolean("weather_fx", true);
 
                 h.post(() -> {
                     if (!running) return;
                     weather.setText(line);
+                    boolean wet = fx && TimeOfDay.raining(cond);
+                    rain.setRain(wet, TimeOfDay.drops(cond));
+                    rain.setStorm(wet && TimeOfDay.stormy(cond));
                     weather.setVisibility(line.isEmpty() ? GONE : VISIBLE);
                     weather.setAlpha(Times.staleWeather(age(ages, "temp")) ? HomeTheme.STALE : 1f);
                     applyEnergy(j, ages);

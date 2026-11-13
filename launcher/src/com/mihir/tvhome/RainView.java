@@ -16,7 +16,10 @@ final class RainView extends View {
     private final java.util.Random rng = new java.util.Random();
     private float[] x = new float[0], y = new float[0], speed = new float[0], len = new float[0];
     private int[] alpha = new int[0];
-    private boolean on;
+    private boolean on, storm;
+    /** Lightning: the flash's brightness (0-1) and when the next one comes. */
+    private float flash;
+    private long nextFlash;
     private long last;
 
     RainView(Context c) {
@@ -31,6 +34,11 @@ final class RainView extends View {
     }
 
     /** Turns rain on with this many streaks, or off. */
+    void setStorm(boolean s) {
+        if (s && !storm) nextFlash = SystemClock.uptimeMillis() + 4000 + rng.nextInt(8000);
+        storm = s;
+    }
+
     void setRain(boolean wet, int count) {
         if (wet == on && (!wet || count == x.length)) return;
         on = wet;
@@ -74,6 +82,15 @@ final class RainView extends View {
             float py = y[i] * h;
             paint.setAlpha(alpha[i]);
             canvas.drawLine(px, py, px + len[i] * slant, py - len[i], paint);
+        }
+        if (storm && now >= nextFlash) {
+            // A strike is two flickers a beat apart, then 8-25 seconds of dark.
+            flash = flash > 0.05f ? 0.75f : 1f;
+            nextFlash = flash == 0.75f ? now + 8000 + rng.nextInt(17000) : now + 140;
+        }
+        if (flash > 0.01f) {
+            canvas.drawColor(((int) (flash * 70) << 24) | 0xE8EEFF);
+            flash *= (float) Math.pow(0.02, dt / 0.6);   // gone in about 0.6 s
         }
         postInvalidateDelayed(33);   // about 30 fps
     }

@@ -1022,6 +1022,7 @@
   var FX_NIGHT = [10, 18, 40, 82], FX_DAWN = [255, 140, 70, 56], FX_SUNUP = [255, 210, 140, 16];
   var FX_CLEAR = [255, 180, 90, 0], FX_GOLD = [255, 180, 90, 26], FX_DUSK = [90, 45, 100, 60];
   var fxOn = true, fxPreview = "", fxCss = "", rainT = null, drops = [];
+  var fxStorm = false, flash = 0, nextFlash = 0;
 
   function fxMix(a, b, f) {
     f = Math.max(0, Math.min(1, f));
@@ -1072,6 +1073,17 @@
         ctx.lineTo(px + d.l * slant, py - d.l);
         ctx.stroke();
       }
+      // Lightning: two flickers a beat apart, then 8-25 seconds of dark (as RainView.java).
+      var now = Date.now();
+      if (fxStorm && now >= nextFlash) {
+        flash = flash > 0.05 ? 0.75 : 1;
+        nextFlash = flash === 0.75 ? now + 8000 + Math.random() * 17000 : now + 140;
+      }
+      if (flash > 0.01) {
+        ctx.fillStyle = "rgba(232,238,255," + (flash * 70 / 255).toFixed(3) + ")";
+        ctx.fillRect(0, 0, W, H);
+        flash *= Math.pow(0.02, 0.033 / 0.6);
+      }
     }, 33);
   }
 
@@ -1092,9 +1104,13 @@
     else if (fxPreview === "dusk") { rise = now + 50400; set = now + 60; }
     else if (fxPreview === "rain") { cond = "rainy"; }
     else if (fxPreview === "pour") { cond = "pouring"; }
+    else if (fxPreview === "storm") { cond = "lightning rainy"; }
     var c = fxOn ? todTint(now, rise, set) : null;
     var css = c ? "rgba(" + c[0] + "," + c[1] + "," + c[2] + "," + (c[3] / 255).toFixed(3) + ")" : "rgba(10,18,40,0)";
     if (css !== fxCss) { fxCss = css; $("tod").style.backgroundColor = css; }
+    var stormy = /thunder|lightning/i.test(cond);
+    if (stormy && !fxStorm) { nextFlash = Date.now() + 4000 + Math.random() * 8000; }
+    fxStorm = fxOn && stormy;
     if (fxOn && isRaining(cond)) {
       startRain(/pour|thunder|lightning/i.test(cond) ? 90 : 45);
     } else {

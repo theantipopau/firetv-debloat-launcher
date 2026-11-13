@@ -1926,13 +1926,24 @@ public class MainActivity extends Activity {
         rows.addView(soundsRow());
         rows.addView(motionRow());
         rows.addView(weatherFxRow());
+        rows.addView(soundscapeRow());
+        rows.addView(settingsRow("Screen dark", "Sound keeps playing", v -> {
+            hideSettings();
+            startActivity(new Intent(this, DarkActivity.class));
+        }));
         rows.addView(settingsRow("Check for updates", "Amazon's update page",
                 v -> openSystemUpdate()));
         rows.addView(settingsRow("Amazon settings", "Display, apps, device",
                 v -> openFullSettings()));
-        sheet.addView(rows, new LinearLayout.LayoutParams(-1, -2));
+        // Ten rows are taller than a 1080p screen: the list scrolls under a fixed title, and the
+        // ScrollView brings the focused row into view by itself.
+        android.widget.ScrollView rowsScroll = new android.widget.ScrollView(this);
+        rowsScroll.setVerticalScrollBarEnabled(false);
+        rowsScroll.setFocusable(false);
+        rowsScroll.addView(rows, new FrameLayout.LayoutParams(-1, -2));
+        sheet.addView(rowsScroll, new LinearLayout.LayoutParams(-1, 0, 1f));
 
-        page.addView(sheet, lp(560, -2, Gravity.CENTER, 0, 0, 0, 0));
+        page.addView(sheet, lp(560, -1, Gravity.CENTER, 0, dp(40), 0, dp(40)));
         return page;
     }
 
@@ -1982,6 +1993,18 @@ public class MainActivity extends Activity {
     }
 
     /** Focus ticks on or off; on by default, as on tvOS. */
+    /** Off, Rain, Fireplace, Brown noise: OK steps through them and the sound starts at once. */
+    private View soundscapeRow() {
+        LinearLayout row = (LinearLayout) settingsRow("Soundscape", Noise.KINDS[Soundscape.current()], v -> { });
+        final TextView value = (TextView) row.getChildAt(1);
+        row.setOnClickListener(v -> {
+            int next = (Soundscape.current() + 1) % Noise.KINDS.length;
+            Soundscape.play(next);
+            value.setText(Noise.KINDS[next]);
+        });
+        return row;
+    }
+
     private View weatherFxRow() {
         LinearLayout row = (LinearLayout) settingsRow("Weather and time of day", fxOn ? "On" : "Off", v -> { });
         final TextView value = (TextView) row.getChildAt(1);
@@ -2010,6 +2033,7 @@ public class MainActivity extends Activity {
             case "dusk":   rise = now + 14 * 3600; set = now + 60;       break;
             case "rain":   cond = "rainy"; break;
             case "pour":   cond = "pouring"; break;
+            case "storm":  cond = "lightning rainy"; break;
             default: break;
         }
         int target = fxOn ? TimeOfDay.tint(now, rise, set) : 0;
@@ -2028,6 +2052,7 @@ public class MainActivity extends Activity {
         }
         boolean wet = fxOn && visible && TimeOfDay.raining(cond);
         rain.setRain(wet, TimeOfDay.drops(cond));
+        rain.setStorm(wet && TimeOfDay.stormy(cond));
     }
 
     private View soundsRow() {
@@ -3543,6 +3568,7 @@ public class MainActivity extends Activity {
     // ---------------------------------------------------------------- helpers
 
     private boolean launch(Intent i) {
+        Soundscape.stop();   // an app has its own sound
         try {
             if (!i.hasCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)) i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(i);

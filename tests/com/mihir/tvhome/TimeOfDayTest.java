@@ -24,6 +24,9 @@ public final class TimeOfDayTest {
         yes("partly cloudy is dry", !TimeOfDay.raining("partly cloudy"));
         yes("empty is dry", !TimeOfDay.raining(""));
         yes("null is dry", !TimeOfDay.raining(null));
+        yes("a storm flashes", TimeOfDay.stormy("lightning rainy"));
+        yes("thunderstorms flash", TimeOfDay.stormy("thunderstorms"));
+        yes("plain rain does not", !TimeOfDay.stormy("rainy"));
         eq("a shower", 45, TimeOfDay.drops("rainy"));
         eq("a downpour", 90, TimeOfDay.drops("pouring"));
         eq("a storm", 90, TimeOfDay.drops("thunderstorms"));
