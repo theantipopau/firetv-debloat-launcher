@@ -1021,7 +1021,7 @@
      sunrise comes first the sun is down. Colours are [r, g, b, alpha 0-255]. */
   var FX_NIGHT = [10, 18, 40, 82], FX_DAWN = [255, 140, 70, 56], FX_SUNUP = [255, 210, 140, 16];
   var FX_CLEAR = [255, 180, 90, 0], FX_GOLD = [255, 180, 90, 26], FX_DUSK = [90, 45, 100, 60];
-  var fxOn = true, fxPreview = "", fxCss = "", rainT = null, drops = [];
+  var fxOn = true, fxPreview = "", fxCss = "", rainT = null, fxStorm = false, flash = null;
 
   function fxMix(a, b, f) {
     f = Math.max(0, Math.min(1, f));
@@ -1046,39 +1046,49 @@
     return /rain|pour|thunder|lightning/i.test(cond || "");
   }
 
-  function startRain(count) {
-    var cv = $("rain");
-    if (rainT) { if (drops.length === count) { return; } clearInterval(rainT); }
-    drops = [];
+  /* A shower is 30 streaks and a downpour 50: fewer than the Fire TV's, each a CSS layer the TV's
+     compositor moves on its own. Lightning is one class on a full-screen layer, every 8-25 s. */
+  function startRain(count, storm) {
+    var box = $("rain");
+    if (rainT === count && fxStorm === storm) { return; }
+    stopRain();
+    rainT = count;
+    fxStorm = storm;
     for (var i = 0; i < count; i++) {
-      drops.push({ x: Math.random(), y: Math.random(), v: 0.9 + Math.random() * 0.9,
-                   l: 14 + Math.random() * 22, a: (40 + Math.random() * 70) / 255 });
+      var d = document.createElement("div");
+      d.className = "drop";
+      var dur = 0.55 + Math.random() * 0.5;
+      d.style.left = Math.round(Math.random() * 2150) + "px";
+      d.style.height = Math.round(28 + Math.random() * 44) + "px";
+      d.style.opacity = (0.35 + Math.random() * 0.55).toFixed(2);
+      d.style.webkitAnimationDuration = d.style.animationDuration = dur.toFixed(2) + "s";
+      d.style.webkitAnimationDelay = d.style.animationDelay = (-Math.random() * dur).toFixed(2) + "s";
+      box.appendChild(d);
     }
-    cv.style.display = "block";
-    var ctx = cv.getContext("2d");
-    var W = cv.width, H = cv.height, slant = 0.18;
-    ctx.lineCap = "round";
-    ctx.lineWidth = 1.2;
-    rainT = setInterval(function () {
-      ctx.clearRect(0, 0, W, H);
-      for (var i = 0; i < drops.length; i++) {
-        var d = drops[i];
-        d.y += d.v * 0.033;
-        if (d.y > 1) { d.y -= 1.1; d.x = Math.random(); }
-        var px = d.x * (W + H * slant) - H * slant * d.y, py = d.y * H;
-        ctx.strokeStyle = "rgba(220,232,255," + d.a + ")";
-        ctx.beginPath();
-        ctx.moveTo(px, py);
-        ctx.lineTo(px + d.l * slant, py - d.l);
-        ctx.stroke();
-      }
-    }, 33);
+    box.style.display = "block";
+    if (storm) { strikeLater(); }
+  }
+
+  function strikeLater() {
+    clearTimeout(flash);
+    flash = setTimeout(function () {
+      if (!fxStorm || !rainT) { return; }
+      var f = $("flash");
+      f.className = "flash";
+      void f.offsetWidth;   // restart the animation
+      f.className = "flash strike";
+      strikeLater();
+    }, 8000 + Math.random() * 17000);
   }
 
   function stopRain() {
-    if (rainT) { clearInterval(rainT); rainT = null; }
-    drops = [];
-    $("rain").style.display = "none";
+    var box = $("rain");
+    var drops = box.querySelectorAll(".drop");
+    for (var i = 0; i < drops.length; i++) { box.removeChild(drops[i]); }
+    box.style.display = "none";
+    clearTimeout(flash);
+    rainT = null;
+    fxStorm = false;
   }
 
   function applyFx() {
@@ -1092,11 +1102,13 @@
     else if (fxPreview === "dusk") { rise = now + 50400; set = now + 60; }
     else if (fxPreview === "rain") { cond = "rainy"; }
     else if (fxPreview === "pour") { cond = "pouring"; }
+    else if (fxPreview === "storm") { cond = "lightning rainy"; }
     var c = fxOn ? todTint(now, rise, set) : null;
     var css = c ? "rgba(" + c[0] + "," + c[1] + "," + c[2] + "," + (c[3] / 255).toFixed(3) + ")" : "rgba(10,18,40,0)";
     if (css !== fxCss) { fxCss = css; $("tod").style.backgroundColor = css; }
+    var stormy = /thunder|lightning/i.test(cond);
     if (fxOn && isRaining(cond)) {
-      startRain(/pour|thunder|lightning/i.test(cond) ? 90 : 45);
+      startRain(/pour|thunder|lightning/i.test(cond) ? 50 : 30, stormy);
     } else {
       stopRain();
     }

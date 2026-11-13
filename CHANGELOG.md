@@ -3,6 +3,40 @@
 All notable changes to the Fire TV Debloat Launcher. Versions match `versionName` in
 [`launcher/AndroidManifest.xml`](launcher/AndroidManifest.xml).
 
+## 1.7.2 — 2026-11-13
+
+### Added
+- **Storms.** In thunder or lightning weather the rain gets the odd flash: two flickers a beat apart,
+  then 8 to 25 seconds of dark. Fire TV and Samsung. Preview with `--es preview storm`.
+- **Rain on the screensaver.** The paintings get the same rain (and lightning) while it rains.
+- **Eight more paintings on the screensaver**, all public domain, from Wikimedia Commons: Van Gogh's
+  Starry Night over the Rhône, Monet's Impression, Sunrise and Water Lily Pond, Hokusai's Great Wave,
+  Turner's Rain, Steam and Speed, Cole's The Oxbow, Bierstadt's Among the Sierra Nevada and
+  Friedrich's Moonrise by the Sea. Twelve in all, each credited as it comes up.
+- **Soundscape.** Settings → Soundscape steps through Rain, Fireplace and Brown noise, made on the
+  TV from random numbers (no recordings), at the TV's media volume. It keeps playing over Home, the
+  screensaver and the dark screen, stops when you open an app, and stops by itself after three hours.
+- **Screen dark.** Settings → Screen dark turns the picture black while the soundscape plays. Any
+  button brings Home back.
+- **Depth clock.** On a photo whose land reaches the clock (the clifftop golf course, the misty
+  forest), the treeline stands in front of the bottom of the digits, and follows the photo's slow
+  zoom, parallax, fade and time-of-day tint. `tools/make-depth.py` finds the skyline and writes a
+  small mask per photo, only where land covers 4-40% of the digits. Jump to a photo with
+  `--ei wall N` (0-based).
+
+### Changed
+- The Settings list scrolls under its title: with ten rows it was taller than the screen.
+- Settings rises into place as it opens and sinks as it closes, instead of switching on and off.
+- A focused app tile with a coloured plate casts light in its own colour onto the photo below it.
+
+### Fixed
+- **Moving along the dock is smooth on the Stick.** Three in four frames missed their deadline; now
+  about one in seven does (median frame 33 ms to 13 ms). The left and bottom washes are painted into
+  each photo once, off screen, instead of being drawn as two full-screen gradients on every frame,
+  and the clock block's shadowed text is kept in a layer instead of being re-blurred every frame.
+- Rain on the Fire TV draws in three batches instead of 90 separate smoothed lines (it took the
+  worst frames to 150 ms), and on the Samsung as CSS streaks instead of a canvas (8 fps to 45).
+
 ## 1.7.1 — 2026-11-13
 
 ### Added

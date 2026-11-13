@@ -12,11 +12,16 @@ import android.view.View;
  * day costs nothing.
  */
 final class RainView extends View {
-    private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    /** Streak brightness: each streak gets one of these, so a frame is three draw calls. */
+    private static final int[] BANDS = {50, 78, 105};
+    private final Paint paint = new Paint();
     private final java.util.Random rng = new java.util.Random();
     private float[] x = new float[0], y = new float[0], speed = new float[0], len = new float[0];
-    private int[] alpha = new int[0];
-    private boolean on;
+    private float[][] pts = new float[BANDS.length][0];
+    private boolean on, storm;
+    /** Lightning: the flash's brightness (0-1) and when the next one comes. */
+    private float flash;
+    private long nextFlash;
     private long last;
 
     RainView(Context c) {
@@ -24,13 +29,17 @@ final class RainView extends View {
         setClickable(false);
         setFocusable(false);
         setWillNotDraw(false);
-        paint.setStrokeCap(Paint.Cap.ROUND);
         paint.setStrokeWidth(2f * c.getResources().getDisplayMetrics().density);
         paint.setColor(0xFFDCE8FF);
         setVisibility(GONE);
     }
 
     /** Turns rain on with this many streaks, or off. */
+    void setStorm(boolean s) {
+        if (s && !storm) nextFlash = SystemClock.uptimeMillis() + 4000 + rng.nextInt(8000);
+        storm = s;
+    }
+
     void setRain(boolean wet, int count) {
         if (wet == on && (!wet || count == x.length)) return;
         on = wet;
@@ -42,14 +51,13 @@ final class RainView extends View {
         y = new float[count];
         speed = new float[count];
         len = new float[count];
-        alpha = new int[count];
+        pts = new float[BANDS.length][(count / BANDS.length + 1) * 4];
         float d = getResources().getDisplayMetrics().density;
         for (int i = 0; i < count; i++) {
             x[i] = rng.nextFloat();
             y[i] = rng.nextFloat();
             speed[i] = (0.9f + rng.nextFloat() * 0.9f);            // screens per second
             len[i] = (14f + rng.nextFloat() * 22f) * d;
-            alpha[i] = 40 + rng.nextInt(70);
         }
         last = SystemClock.uptimeMillis();
         setVisibility(VISIBLE);
@@ -64,6 +72,9 @@ final class RainView extends View {
         last = now;
         int w = getWidth(), h = getHeight();
         float slant = 0.18f;   // a light wind: horizontal travel per unit of fall
+        // Three bands of brightness, one drawLines call each: 90 separate anti-aliased lines
+        // cost the Stick 150 ms frames while the dock moved.
+        int[] n = new int[BANDS.length];
         for (int i = 0; i < x.length; i++) {
             y[i] += speed[i] * dt;
             if (y[i] > 1f) {
@@ -72,8 +83,26 @@ final class RainView extends View {
             }
             float px = x[i] * (w + h * slant) - h * slant * y[i];
             float py = y[i] * h;
-            paint.setAlpha(alpha[i]);
-            canvas.drawLine(px, py, px + len[i] * slant, py - len[i], paint);
+            float[] p = pts[i % BANDS.length];
+            int k = n[i % BANDS.length];
+            p[k] = px;
+            p[k + 1] = py;
+            p[k + 2] = px + len[i] * slant;
+            p[k + 3] = py - len[i];
+            n[i % BANDS.length] = k + 4;
+        }
+        for (int b = 0; b < BANDS.length; b++) {
+            paint.setAlpha(BANDS[b]);
+            canvas.drawLines(pts[b], 0, n[b], paint);
+        }
+        if (storm && now >= nextFlash) {
+            // A strike is two flickers a beat apart, then 8-25 seconds of dark.
+            flash = flash > 0.05f ? 0.75f : 1f;
+            nextFlash = flash == 0.75f ? now + 8000 + rng.nextInt(17000) : now + 140;
+        }
+        if (flash > 0.01f) {
+            canvas.drawColor(((int) (flash * 70) << 24) | 0xE8EEFF);
+            flash *= (float) Math.pow(0.02, dt / 0.6);   // gone in about 0.6 s
         }
         postInvalidateDelayed(33);   // about 30 fps
     }

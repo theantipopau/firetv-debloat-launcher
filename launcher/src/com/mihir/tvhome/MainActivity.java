@@ -19,9 +19,11 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Matrix;
 import android.graphics.Outline;
 import android.graphics.Paint;
 import android.graphics.Typeface;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.media.tv.TvContract;
@@ -98,8 +100,16 @@ public class MainActivity extends Activity {
     /** The one screen of home: clock block, Now Showing, the dock pill and the hidden row. */
     private FrameLayout page;
     private LinearLayout grid;
-    private View bottomWash, cwWash, gridShade;
+    private View leftWash, bottomWash, cwWash, gridShade;
     private ImageView wallBack, wallFront;
+    /** The depth clock's land, and the photo layer it was cut from; see {@link #syncDepth}. */
+    private ImageView depth, depthPhoto;
+    /** The photo pixels make-depth.py's masks cover: its REGION's top-left corner. */
+    private static final int DEPTH_X = 80, DEPTH_Y = 60;
+    private final Matrix depthM = new Matrix(), depthLast = new Matrix();
+    private final int[] depthAt = new int[2], depthRoot = new int[2];
+    private final android.graphics.Rect depthClip = new android.graphics.Rect();
+    private int depthTint;
     /** The sun-following wash and the rain over the wallpaper; see {@link TimeOfDay}. */
     private View todVeil;
     private RainView rain;
@@ -233,6 +243,8 @@ public class MainActivity extends Activity {
                 View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                         | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
         setContentView(buildUi());
+        // The root is already black; a window background under it is one more full-screen fill a frame.
+        getWindow().setBackgroundDrawable(null);
         seedWallFromCover();
         buildApps();
         // The Home-key cover has done its job the moment this window paints; wait for the frame
@@ -344,6 +356,12 @@ public class MainActivity extends Activity {
         super.onNewIntent(intent);
         // Preview the mood without waiting for the weather: --es preview rain|pour|night|dawn|golden|dusk|clear
         String pv = intent == null ? null : intent.getStringExtra("preview");
+        // Jump to a photo by its place in assets/wallpapers (0-based): --ei wall 8
+        int wall = intent == null ? -1 : intent.getIntExtra("wall", -1);
+        if (wall >= 0 && wall < wallpapers.length) {
+            wallIndex = wall - 1;
+            nextWallpaper();
+        }
         if (pv != null) {
             fxPreview = "clear".equals(pv) ? "" : pv;
             applyWeatherFx();
@@ -392,7 +410,8 @@ public class MainActivity extends Activity {
         root.addView(wallFront, new FrameLayout.LayoutParams(-1, -1));
 
         // Two gradients and nothing else: a soft left wash under the text, a floor under the dock.
-        View leftWash = new View(this);
+        // Shown only until a photo with the washes painted in is up: see bakeWashes.
+        leftWash = new View(this);
         leftWash.setBackground(HomeTheme.leftWash());
         root.addView(leftWash, new FrameLayout.LayoutParams(-1, -1));
         bottomWash = new View(this);
@@ -413,6 +432,14 @@ public class MainActivity extends Activity {
             wallpapers = getAssets().list("wallpapers");
         } catch (java.io.IOException ignored) { }
 
+        // The depth clock: on a photo with land in the clock's corner, that land is drawn again over
+        // the page, clipped to the clock, so a treeline stands in front of the time. Out here, not in
+        // the clock's block, so moving it never re-renders the block's cached layer.
+        depth = new ImageView(this);
+        depth.setScaleType(ImageView.ScaleType.MATRIX);
+        depth.setVisibility(View.GONE);
+        depth.getViewTreeObserver().addOnPreDrawListener(() -> { syncDepth(); return true; });
+
         scroll = new HomeScrollView(this);
         scroll.setVerticalScrollBarEnabled(false);
         scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
@@ -421,6 +448,7 @@ public class MainActivity extends Activity {
         scroll.setFocusable(false);
         scroll.setFocusableInTouchMode(false);
         root.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
+        root.addView(depth, new FrameLayout.LayoutParams(-1, -1));
 
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
@@ -614,6 +642,9 @@ public class MainActivity extends Activity {
         // The highlight is the block's own box, padding included: an inset edge used to cross the
         // last line whenever a line was hidden, so the glass ended through "Air con off".
         statusBlock.setBackground(bg);
+        // A layer: its eight shadowed lines were re-blurred on every frame of every dock move. Now
+        // they are drawn once, and again only when a line changes.
+        statusBlock.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         // OK on the block opens the detail sheet; the block is the only way in.
         statusBlock.setOnClickListener(v -> openHa());
         statusBlock.setOnFocusChangeListener((v, has) -> {
@@ -1926,13 +1957,24 @@ public class MainActivity extends Activity {
         rows.addView(soundsRow());
         rows.addView(motionRow());
         rows.addView(weatherFxRow());
+        rows.addView(soundscapeRow());
+        rows.addView(settingsRow("Screen dark", "Sound keeps playing", v -> {
+            hideSettings();
+            startActivity(new Intent(this, DarkActivity.class));
+        }));
         rows.addView(settingsRow("Check for updates", "Amazon's update page",
                 v -> openSystemUpdate()));
         rows.addView(settingsRow("Amazon settings", "Display, apps, device",
                 v -> openFullSettings()));
-        sheet.addView(rows, new LinearLayout.LayoutParams(-1, -2));
+        // Ten rows are taller than a 1080p screen: the list scrolls under a fixed title, and the
+        // ScrollView brings the focused row into view by itself.
+        android.widget.ScrollView rowsScroll = new android.widget.ScrollView(this);
+        rowsScroll.setVerticalScrollBarEnabled(false);
+        rowsScroll.setFocusable(false);
+        rowsScroll.addView(rows, new FrameLayout.LayoutParams(-1, -2));
+        sheet.addView(rowsScroll, new LinearLayout.LayoutParams(-1, 0, 1f));
 
-        page.addView(sheet, lp(560, -2, Gravity.CENTER, 0, 0, 0, 0));
+        page.addView(sheet, lp(560, -1, Gravity.CENTER, 0, dp(40), 0, dp(40)));
         return page;
     }
 
@@ -1982,6 +2024,18 @@ public class MainActivity extends Activity {
     }
 
     /** Focus ticks on or off; on by default, as on tvOS. */
+    /** Off, Rain, Fireplace, Brown noise: OK steps through them and the sound starts at once. */
+    private View soundscapeRow() {
+        LinearLayout row = (LinearLayout) settingsRow("Soundscape", Noise.KINDS[Soundscape.current()], v -> { });
+        final TextView value = (TextView) row.getChildAt(1);
+        row.setOnClickListener(v -> {
+            int next = (Soundscape.current() + 1) % Noise.KINDS.length;
+            Soundscape.play(next);
+            value.setText(Noise.KINDS[next]);
+        });
+        return row;
+    }
+
     private View weatherFxRow() {
         LinearLayout row = (LinearLayout) settingsRow("Weather and time of day", fxOn ? "On" : "Off", v -> { });
         final TextView value = (TextView) row.getChildAt(1);
@@ -2010,6 +2064,7 @@ public class MainActivity extends Activity {
             case "dusk":   rise = now + 14 * 3600; set = now + 60;       break;
             case "rain":   cond = "rainy"; break;
             case "pour":   cond = "pouring"; break;
+            case "storm":  cond = "lightning rainy"; break;
             default: break;
         }
         int target = fxOn ? TimeOfDay.tint(now, rise, set) : 0;
@@ -2028,6 +2083,7 @@ public class MainActivity extends Activity {
         }
         boolean wet = fxOn && visible && TimeOfDay.raining(cond);
         rain.setRain(wet, TimeOfDay.drops(cond));
+        rain.setStorm(wet && TimeOfDay.stormy(cond));
     }
 
     private View soundsRow() {
@@ -2067,16 +2123,30 @@ public class MainActivity extends Activity {
     private void showSettings() {
         if (settingsPage == null) return;
         hideContinue();
+        settingsShown = true;
         settingsPage.setVisibility(View.VISIBLE);
         settingsPage.setAlpha(0f);
         settingsPage.animate().alpha(1f).setDuration(HomeTheme.MS_REVEAL).withLayer().start();
+        // The sheet rises into place a beat behind the dark, like a tvOS sheet, not a light switch.
+        View sheet = settingsPage.getChildAt(0);
+        sheet.setTranslationY(dp(36));
+        sheet.animate().translationY(0).setInterpolator(HomeTheme.settle())
+                .setDuration(HomeTheme.MS_REVEAL + 80).start();
         scroll.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
         if (!settingsRows.isEmpty()) settingsRows.get(0).requestFocus();
     }
 
+    /** False from the moment Settings starts closing, so a quick reopen survives the fade. */
+    private boolean settingsShown;
+
     private void hideSettings() {
-        if (settingsPage == null) return;
-        settingsPage.setVisibility(View.GONE);
+        if (settingsPage == null || settingsPage.getVisibility() != View.VISIBLE) return;
+        // Sinks and fades; GONE only at the end, but focus comes home at once.
+        settingsShown = false;
+        settingsPage.getChildAt(0).animate().translationY(dp(24)).setInterpolator(HomeTheme.ease())
+                .setDuration(HomeTheme.MS_FOCUS).start();
+        settingsPage.animate().alpha(0f).setDuration(HomeTheme.MS_FOCUS).withLayer()
+                .withEndAction(() -> { if (!settingsShown) settingsPage.setVisibility(View.GONE); }).start();
         scroll.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
         if (statusBlock != null) statusBlock.requestFocus();
     }
@@ -3225,14 +3295,22 @@ public class MainActivity extends Activity {
         wallChangedAt = SystemClock.elapsedRealtime();
         String name = "wallpapers/" + wallpapers[wallIndex];
         new Thread(() -> {
-            Bitmap bm = null;
+            Bitmap bm = null, tint = null, frost = null, land = null;
             try (java.io.InputStream in = getAssets().open(name)) {
                 BitmapFactory.Options o = new BitmapFactory.Options();
                 o.inPreferredConfig = Bitmap.Config.RGB_565;
+                o.inMutable = true;
                 bm = BitmapFactory.decodeStream(in, null, o);
             } catch (java.io.IOException ignored) { }
-            Bitmap result = bm;
-            runOnUiThread(() -> showWallpaper(result));
+            if (bm != null) {
+                // The glass tint and the frosted panel sample the photo as it is, before its washes.
+                tint = Bitmap.createScaledBitmap(bm, 16, 9, true);
+                frost = Blur.frost(bm, 160, 90);
+                bakeWashes(bm);
+                land = depthFor(name, bm);
+            }
+            Bitmap result = bm, t = tint, f = frost, l = land;
+            runOnUiThread(() -> showWallpaper(result, t, f, l));
         }).start();
         scheduleWallpaper(WALLPAPER_INTERVAL_MS);
     }
@@ -3279,7 +3357,111 @@ public class MainActivity extends Activity {
         a.start();
     }
 
-    private void showWallpaper(Bitmap bm) {
+    /**
+     * Paints the left and bottom washes into the photo itself, so a frame draws one full-screen
+     * image instead of an image and two full-screen gradients: the gradients alone took the
+     * Stick's dock moves from 18% to 76% janky frames. Drawn through the inverse of CENTER_CROP,
+     * so they land where the wash views did. Off the UI thread, on a mutable bitmap.
+     */
+    private void bakeWashes(Bitmap bm) {
+        android.util.DisplayMetrics m = getResources().getDisplayMetrics();
+        int vw = m.widthPixels, vh = m.heightPixels;
+        float s = Math.max(vw / (float) bm.getWidth(), vh / (float) bm.getHeight());
+        Canvas c = new Canvas(bm);
+        c.translate(bm.getWidth() / 2f, bm.getHeight() / 2f);
+        c.scale(1 / s, 1 / s);
+        c.translate(-vw / 2f, -vh / 2f);
+        GradientDrawable left = HomeTheme.leftWash(), bottom = HomeTheme.bottomWash();
+        left.setDither(true);     // the photo is RGB_565: dither or the dark end bands
+        bottom.setDither(true);
+        left.setBounds(0, 0, vw, vh);
+        left.draw(c);
+        bottom.setBounds(0, vh - dp(340), vw, vh);
+        bottom.draw(c);
+    }
+
+    /**
+     * The land in front of the clock, for photos make-depth.py found a skyline in: that corner of
+     * the washed photo, cut to the mask. Null for the rest. Off the UI thread.
+     */
+    private Bitmap depthFor(String photo, Bitmap washed) {
+        String base = photo.substring(photo.lastIndexOf('/') + 1).replace(".jpg", "");
+        try (java.io.InputStream in = getAssets().open("depth/" + base + ".png")) {
+            Bitmap mask = BitmapFactory.decodeStream(in);
+            if (mask == null) return null;
+            Bitmap fg = Bitmap.createBitmap(mask.getWidth(), mask.getHeight(), Bitmap.Config.ARGB_8888);
+            Canvas c = new Canvas(fg);
+            c.drawBitmap(washed, -DEPTH_X, -DEPTH_Y, null);
+            Paint p = new Paint();
+            p.setXfermode(new android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_IN));
+            c.drawBitmap(mask, 0, 0, p);
+            mask.recycle();
+            return fg;
+        } catch (java.io.IOException e) {
+            return null;   // no land behind the clock in this photo
+        }
+    }
+
+    private void setDepth(ImageView photo, Bitmap fg) {
+        if (depth == null) return;
+        depthPhoto = fg == null ? null : photo;
+        depth.setImageBitmap(fg);
+        depthLast.reset();
+    }
+
+    /**
+     * Every frame: lays the land exactly over its own photo (the photo's centre-crop, slow zoom,
+     * parallax and crossfade) and gives it the time-of-day veil the photo has under it. Hidden
+     * while the page is scrolled or the block is focused, when the photo under the clock changes.
+     */
+    private void syncDepth() {
+        ImageView photo = depthPhoto;
+        boolean show = photo != null && scroll.getScrollY() == 0 && !statusBlock.isFocused()
+                && gridShade.getAlpha() == 0f;
+        int vis = show ? View.VISIBLE : View.GONE;
+        if (depth.getVisibility() != vis) depth.setVisibility(vis);
+        if (!show) return;
+        ((View) depth.getParent()).getLocationInWindow(depthRoot);
+        clock.getLocationInWindow(depthAt);
+        // Down to the digits' baseline (they have no descenders): the box below it reaches the date.
+        int cx = depthAt[0] - depthRoot[0], cy = depthAt[1] - depthRoot[1];
+        int ch = clock.getBaseline() + dp(1);
+        if (depthClip.left != cx || depthClip.top != cy || depthClip.width() != clock.getWidth()
+                || depthClip.height() != ch) {
+            depthClip.set(cx, cy, cx + clock.getWidth(), cy + ch);
+            depth.setClipBounds(depthClip);
+        }
+        depthM.set(photo.getImageMatrix());
+        // Drawable units, not bitmap pixels: at the 0.8 UI density a drawable is 0.8 of its bitmap.
+        Drawable pd = photo.getDrawable();
+        float k = pd instanceof BitmapDrawable
+                ? pd.getIntrinsicWidth() / (float) ((BitmapDrawable) pd).getBitmap().getWidth() : 1f;
+        depthM.preTranslate(DEPTH_X * k, DEPTH_Y * k);
+        depthM.postScale(photo.getScaleX(), photo.getScaleY(), photo.getPivotX(), photo.getPivotY());
+        depthM.postTranslate(photo.getLeft() + photo.getTranslationX(), photo.getTop() + photo.getTranslationY());
+        if (!depthM.equals(depthLast)) {
+            depthLast.set(depthM);
+            depth.setImageMatrix(depthM);
+        }
+        // The photo's fade, and the block's: dimmed for Continue Watching, the land dims with it.
+        float a = photo.getAlpha() * statusBlock.getAlpha();
+        if (depth.getAlpha() != a) depth.setAlpha(a);
+        int tint = todVeil.getBackground() instanceof android.graphics.drawable.ColorDrawable
+                ? ((android.graphics.drawable.ColorDrawable) todVeil.getBackground()).getColor() : 0;
+        if (tint != depthTint) {
+            depthTint = tint;
+            if ((tint >>> 24) == 0) depth.clearColorFilter();
+            else depth.setColorFilter(tint, android.graphics.PorterDuff.Mode.SRC_ATOP);
+        }
+    }
+
+    /** The wash views are only for a photo that has not had its washes painted in yet. */
+    private void washViews(boolean on) {
+        leftWash.setVisibility(on ? View.VISIBLE : View.GONE);
+        bottomWash.setVisibility(on ? View.VISIBLE : View.GONE);
+    }
+
+    private void showWallpaper(Bitmap bm, Bitmap tint, Bitmap frost, Bitmap land) {
         if (bm == null || isDestroyed()) return;
         // Swap roles: the old front becomes the back, the new photo fades in on top.
         ImageView old = wallFront;
@@ -3290,12 +3472,9 @@ public class MainActivity extends Activity {
         root.addView(wallFront, 1, new FrameLayout.LayoutParams(-1, -1));
         wallFront.setImageBitmap(bm);
         currentWall = bm;
-        tintGlass(bm);
-        // One small blurred copy per photo, for the frosted panel to sample.
-        new Thread(() -> {
-            final Bitmap f = Blur.frost(bm, 160, 90);
-            runOnUiThread(() -> { if (haFrost != null) haFrost.setBlur(f); });
-        }).start();
+        setDepth(wallFront, land);
+        tintGlass(tint);
+        if (haFrost != null) haFrost.setBlur(frost);
         wallFront.setAlpha(0f);
         // 1.03, not 1: the parallax needs a few dp of slack to lean into, and the drift still ends
         // at 1.09, so the photo moves as slowly as it always did.
@@ -3320,6 +3499,8 @@ public class MainActivity extends Activity {
         });
         wallFront.animate().alpha(1f).setDuration(firstWallpaper ? 600 : 2000).withEndAction(() -> {
             wallBack.setImageDrawable(null); // release the previous photo
+            root.setBackground(null);        // the opaque photo covers it: black would be a wasted fill
+            washViews(false);                // this photo has its washes painted in
         }).start();
         firstWallpaper = false;
         // A new photo starts centred, and may lean to wherever the cursor is on its first frame.
@@ -3350,7 +3531,24 @@ public class MainActivity extends Activity {
         // becomes the layer the new one fades in over - instead of being replaced behind an empty
         // view, which is how the first fade would otherwise cross a black frame.
         wallFront.setImageBitmap(photo);
-        currentWall = photo;
+        ((View) wallFront.getParent()).setBackground(null);   // the photo covers the black
+        // The cover's photo is shared and bare, so the wash views show over it until a copy with
+        // the washes painted in is ready; that swap changes no pixel.
+        final ImageView front = wallFront;
+        new Thread(() -> {
+            Bitmap copy = photo.copy(Bitmap.Config.RGB_565, true);
+            if (copy == null) return;
+            bakeWashes(copy);
+            Bitmap land = depthFor(wallpapers[idx], copy);
+            runOnUiThread(() -> {
+                if (front != wallFront || !(front.getDrawable() instanceof BitmapDrawable)
+                        || ((BitmapDrawable) front.getDrawable()).getBitmap() != photo) return;
+                front.setImageBitmap(copy);
+                currentWall = copy;
+                washViews(false);
+                setDepth(front, land);
+            });
+        }).start();
     }
 
     /**
@@ -3491,9 +3689,10 @@ public class MainActivity extends Activity {
         a.setStartDelay(Math.round(beat * HomeTheme.STAGGER));
         a.setDuration(HomeTheme.MS_FADE);
         a.setInterpolator(HomeTheme.ease());
+        final int layer = v.getLayerType();   // the status block keeps its layer for good
         a.addListener(new AnimatorListenerAdapter() {
             @Override public void onAnimationStart(Animator an) { v.setLayerType(View.LAYER_TYPE_HARDWARE, null); }
-            @Override public void onAnimationEnd(Animator an) { v.setLayerType(View.LAYER_TYPE_NONE, null); }
+            @Override public void onAnimationEnd(Animator an) { v.setLayerType(layer, null); }
         });
         a.start();
     }
@@ -3543,6 +3742,7 @@ public class MainActivity extends Activity {
     // ---------------------------------------------------------------- helpers
 
     private boolean launch(Intent i) {
+        Soundscape.stop();   // an app has its own sound
         try {
             if (!i.hasCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)) i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(i);

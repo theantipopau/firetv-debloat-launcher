@@ -69,7 +69,21 @@ html, body {
   transition: background-color 4s linear;
   pointer-events: none;
 }
-.rain { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; pointer-events: none; display: none; }
+/* Rain is CSS, not a canvas: a canvas is drawn in software on the 2020 Samsung and took the whole
+   page to 8 fps. Each streak is its own small layer moved by the compositor, so nothing repaints. */
+.rain { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; pointer-events: none; display: none; overflow: hidden; }
+.rain .drop {
+  position: absolute; top: -80px; width: 2px;
+  background: linear-gradient(to bottom, rgba(220,232,255,0), rgba(220,232,255,.55));
+  -webkit-animation: fall 1s linear infinite; animation: fall 1s linear infinite;
+  will-change: transform;
+}
+@-webkit-keyframes fall { from { -webkit-transform: translate3d(0,0,0) rotate(10deg); } to { -webkit-transform: translate3d(-230px,1240px,0) rotate(10deg); } }
+@keyframes fall { from { transform: translate3d(0,0,0) rotate(10deg); } to { transform: translate3d(-230px,1240px,0) rotate(10deg); } }
+.rain .flash { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: #e8eeff; opacity: 0; will-change: opacity; }
+.rain .flash.strike { -webkit-animation: strike .9s ease-out 1 both; animation: strike .9s ease-out 1 both; }
+@-webkit-keyframes strike { 0% { opacity: .27; } 12% { opacity: .05; } 20% { opacity: .2; } 100% { opacity: 0; } }
+@keyframes strike { 0% { opacity: .27; } 12% { opacity: .05; } 20% { opacity: .2; } 100% { opacity: 0; } }
 
 .hud {
   position: absolute;

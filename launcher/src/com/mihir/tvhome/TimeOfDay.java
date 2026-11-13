@@ -39,6 +39,12 @@ final class TimeOfDay {
         return c.contains("rain") || c.contains("pour") || c.contains("thunder") || c.contains("lightning");
     }
 
+    /** Thunder or lightning: the rain gets the odd flash of light. */
+    static boolean stormy(String condition) {
+        String c = condition == null ? "" : condition.toLowerCase(java.util.Locale.ROOT);
+        return c.contains("thunder") || c.contains("lightning");
+    }
+
     /** Streaks on screen: a shower is sparse, a downpour or storm is twice as busy. */
     static int drops(String condition) {
         String c = condition == null ? "" : condition.toLowerCase(java.util.Locale.ROOT);
