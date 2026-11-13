@@ -100,6 +100,14 @@ public class MainActivity extends Activity {
     private LinearLayout grid;
     private View bottomWash, cwWash, gridShade;
     private ImageView wallBack, wallFront;
+    /** The sun-following wash and the rain over the wallpaper; see {@link TimeOfDay}. */
+    private View todVeil;
+    private RainView rain;
+    private ValueAnimator todAnim;
+    private int todColor;
+    private boolean fxOn = true;
+    private long fxRise, fxSet;
+    private String fxCond = "", fxPreview = "";
     private String[] wallpapers = new String[0];
     private int wallIndex = -1;
     private long wallChangedAt;
@@ -256,6 +264,8 @@ public class MainActivity extends Activity {
         getSharedPreferences("tvhome", 0).edit().putBoolean("foreground", true).apply();   // read by BootReceiver
         soundsOn = getSharedPreferences("launcher", MODE_PRIVATE).getBoolean("nav_sounds", true);
         motionFull = getSharedPreferences("launcher", MODE_PRIVATE).getBoolean("motion_full", true);
+        fxOn = getSharedPreferences("launcher", MODE_PRIVATE).getBoolean("weather_fx", true);
+        applyWeatherFx();
         clearVeil(true);
         kickIdle();
         IntentFilter tf = new IntentFilter(Intent.ACTION_TIME_TICK);
@@ -305,6 +315,7 @@ public class MainActivity extends Activity {
         handler.removeCallbacks(haPoll);
         stopNowRotation();
         handler.removeCallbacks(idle);
+        if (rain != null) rain.setRain(false, 0);   // nothing draws while another app is in front
         if (haOpen) {   // never come back to a sheet that was already sliding out
             haOpen = false;
             if (haPanel != null) {
@@ -331,6 +342,12 @@ public class MainActivity extends Activity {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        // Preview the mood without waiting for the weather: --es preview rain|pour|night|dawn|golden|dusk|clear
+        String pv = intent == null ? null : intent.getStringExtra("preview");
+        if (pv != null) {
+            fxPreview = "clear".equals(pv) ? "" : pv;
+            applyWeatherFx();
+        }
         // Home pressed while already home: jump back to the first dock app.
         if (inputsPopup != null) inputsPopup.dismiss();
         if (haOpen) closeHa();   // Home must never leave the sheet standing open
@@ -381,6 +398,11 @@ public class MainActivity extends Activity {
         bottomWash = new View(this);
         bottomWash.setBackground(HomeTheme.bottomWash());
         root.addView(bottomWash, lp(-1, dp(340), Gravity.BOTTOM, 0, 0, 0, 0));
+        // Over the wallpaper, under everything else: the time of day, then the weather.
+        todVeil = new View(this);
+        root.addView(todVeil, new FrameLayout.LayoutParams(-1, -1));
+        rain = new RainView(this);
+        root.addView(rain, new FrameLayout.LayoutParams(-1, -1));
 
         // Only ever visible while the apps grid is in view; at rest it is fully transparent.
         gridShade = new View(this);
@@ -1903,6 +1925,7 @@ public class MainActivity extends Activity {
         rows.addView(batteryRow());
         rows.addView(soundsRow());
         rows.addView(motionRow());
+        rows.addView(weatherFxRow());
         rows.addView(settingsRow("Check for updates", "Amazon's update page",
                 v -> openSystemUpdate()));
         rows.addView(settingsRow("Amazon settings", "Display, apps, device",
@@ -1959,6 +1982,54 @@ public class MainActivity extends Activity {
     }
 
     /** Focus ticks on or off; on by default, as on tvOS. */
+    private View weatherFxRow() {
+        LinearLayout row = (LinearLayout) settingsRow("Weather and time of day", fxOn ? "On" : "Off", v -> { });
+        final TextView value = (TextView) row.getChildAt(1);
+        row.setOnClickListener(v -> {
+            fxOn = !fxOn;
+            getSharedPreferences("launcher", MODE_PRIVATE).edit().putBoolean("weather_fx", fxOn).apply();
+            value.setText(fxOn ? "On" : "Off");
+            applyWeatherFx();
+        });
+        return row;
+    }
+
+    /**
+     * The mood of the home screen: a wash over the wallpaper that follows the sun, and rain while it
+     * is raining. A colour change takes four seconds, so dusk arrives rather than switches on.
+     */
+    private void applyWeatherFx() {
+        if (todVeil == null) return;
+        long now = System.currentTimeMillis() / 1000L;
+        long rise = fxRise, set = fxSet;
+        String cond = fxCond;
+        switch (fxPreview) {
+            case "night":  rise = now + 6 * 3600; set = now + 18 * 3600; break;
+            case "dawn":   rise = now + 900;      set = now + 14 * 3600; break;
+            case "golden": rise = now + 14 * 3600; set = now + 1500;     break;
+            case "dusk":   rise = now + 14 * 3600; set = now + 60;       break;
+            case "rain":   cond = "rainy"; break;
+            case "pour":   cond = "pouring"; break;
+            default: break;
+        }
+        int target = fxOn ? TimeOfDay.tint(now, rise, set) : 0;
+        if (target != todColor) {
+            if (todAnim != null) todAnim.cancel();
+            final int from = todColor;
+            todColor = target;
+            if (!visible) {
+                todVeil.setBackgroundColor(target);
+            } else {
+                todAnim = ValueAnimator.ofObject(new ArgbEvaluator(), from, target);
+                todAnim.setDuration(4000);
+                todAnim.addUpdateListener(a -> todVeil.setBackgroundColor((Integer) a.getAnimatedValue()));
+                todAnim.start();
+            }
+        }
+        boolean wet = fxOn && visible && TimeOfDay.raining(cond);
+        rain.setRain(wet, TimeOfDay.drops(cond));
+    }
+
     private View soundsRow() {
         LinearLayout row = (LinearLayout) settingsRow("Navigation sounds", soundsOn ? "On" : "Off", v -> { });
         final TextView value = (TextView) row.getChildAt(1);
@@ -2275,6 +2346,10 @@ public class MainActivity extends Activity {
      * value that has not updated in 15 minutes is dimmed exactly as the sheet dims its own tile.
      */
     private void applyStatus(JSONObject j, JSONObject ages) {
+        fxRise = j.optLong("sunrise_at", 0);
+        fxSet = j.optLong("sunset_at", 0);
+        fxCond = j.optString("condition", "");
+        applyWeatherFx();
         String temp = j.optString("temp", "");
         String cond = j.optString("condition", "");
         String inside = j.optString("inside", "");
@@ -2990,6 +3065,7 @@ public class MainActivity extends Activity {
         rollClock(Times.clockDigits(now, android.text.format.DateFormat.is24HourFormat(this), zone));
         if (greet != null) greet.setText(Typo.hello(Times.greeting(now, zone), familyName));
         if (dateLine != null) dateLine.setText(Times.dateLine(now, zone));
+        applyWeatherFx();   // the sun moves a little every minute
     }
 
     /**

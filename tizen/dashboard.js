@@ -628,6 +628,7 @@
       .then(function (snap) {
         loading = false;
         lastSnap = snap;
+        applyFx();
         $("info").className = "info";
         render(snap);
         if (chip) {
@@ -1014,6 +1015,93 @@
     stage.style.transform = "translate(" + x + "px," + y + "px) scale(" + scale + ")";
   }
 
+  /* ---------- time of day and rain ---------- */
+
+  /* The same rules as TimeOfDay.java. Home Assistant sends only the NEXT sunrise and sunset: if the
+     sunrise comes first the sun is down. Colours are [r, g, b, alpha 0-255]. */
+  var FX_NIGHT = [10, 18, 40, 82], FX_DAWN = [255, 140, 70, 56], FX_SUNUP = [255, 210, 140, 16];
+  var FX_CLEAR = [255, 180, 90, 0], FX_GOLD = [255, 180, 90, 26], FX_DUSK = [90, 45, 100, 60];
+  var fxOn = true, fxPreview = "", fxCss = "", rainT = null, drops = [];
+
+  function fxMix(a, b, f) {
+    f = Math.max(0, Math.min(1, f));
+    return [0, 1, 2, 3].map(function (i) { return Math.round(a[i] + (b[i] - a[i]) * f); });
+  }
+
+  function todTint(now, rise, set) {
+    if (!(rise > 0) || !(set > 0)) { return null; }
+    if (rise < set) {
+      var t = rise - now;
+      if (t > 2700) { return FX_NIGHT; }
+      if (t > 900) { return fxMix(FX_NIGHT, FX_DAWN, (2700 - t) / 1800); }
+      return fxMix(FX_DAWN, FX_SUNUP, (900 - Math.max(t, 0)) / 900);
+    }
+    var s = set - now;
+    if (s > 3600) { return null; }
+    if (s > 1200) { return fxMix(FX_CLEAR, FX_GOLD, (3600 - s) / 2400); }
+    return fxMix(FX_GOLD, FX_DUSK, (1200 - Math.max(s, 0)) / 1200);
+  }
+
+  function isRaining(cond) {
+    return /rain|pour|thunder|lightning/i.test(cond || "");
+  }
+
+  function startRain(count) {
+    var cv = $("rain");
+    if (rainT) { if (drops.length === count) { return; } clearInterval(rainT); }
+    drops = [];
+    for (var i = 0; i < count; i++) {
+      drops.push({ x: Math.random(), y: Math.random(), v: 0.9 + Math.random() * 0.9,
+                   l: 14 + Math.random() * 22, a: (40 + Math.random() * 70) / 255 });
+    }
+    cv.style.display = "block";
+    var ctx = cv.getContext("2d");
+    var W = cv.width, H = cv.height, slant = 0.18;
+    ctx.lineCap = "round";
+    ctx.lineWidth = 1.2;
+    rainT = setInterval(function () {
+      ctx.clearRect(0, 0, W, H);
+      for (var i = 0; i < drops.length; i++) {
+        var d = drops[i];
+        d.y += d.v * 0.033;
+        if (d.y > 1) { d.y -= 1.1; d.x = Math.random(); }
+        var px = d.x * (W + H * slant) - H * slant * d.y, py = d.y * H;
+        ctx.strokeStyle = "rgba(220,232,255," + d.a + ")";
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.lineTo(px + d.l * slant, py - d.l);
+        ctx.stroke();
+      }
+    }, 33);
+  }
+
+  function stopRain() {
+    if (rainT) { clearInterval(rainT); rainT = null; }
+    drops = [];
+    $("rain").style.display = "none";
+  }
+
+  function applyFx() {
+    var snap = lastSnap || {};
+    var now = Date.now() / 1000;
+    var rise = Number(snap.sunrise_at) || 0, set = Number(snap.sunset_at) || 0;
+    var cond = snap.condition || "";
+    if (fxPreview === "night") { rise = now + 21600; set = now + 64800; }
+    else if (fxPreview === "dawn") { rise = now + 900; set = now + 50400; }
+    else if (fxPreview === "golden") { rise = now + 50400; set = now + 1500; }
+    else if (fxPreview === "dusk") { rise = now + 50400; set = now + 60; }
+    else if (fxPreview === "rain") { cond = "rainy"; }
+    else if (fxPreview === "pour") { cond = "pouring"; }
+    var c = fxOn ? todTint(now, rise, set) : null;
+    var css = c ? "rgba(" + c[0] + "," + c[1] + "," + c[2] + "," + (c[3] / 255).toFixed(3) + ")" : "rgba(10,18,40,0)";
+    if (css !== fxCss) { fxCss = css; $("tod").style.backgroundColor = css; }
+    if (fxOn && isRaining(cond)) {
+      startRain(/pour|thunder|lightning/i.test(cond) ? 90 : 45);
+    } else {
+      stopRain();
+    }
+  }
+
   /* ---------- idle: the showing card, then the gallery ---------- */
 
   var IDLE_CARD_MS = 60 * 1000, IDLE_GALLERY_MS = 6 * 60 * 1000, PAINT_EVERY = 60 * 1000;
@@ -1134,6 +1222,7 @@
     // The panel (and some TV firmware) can change the viewport without firing resize,
     // so re-fit alongside the clock rather than trusting the event alone.
     setInterval(function () { tick(); fit(); }, 1000);
+    setInterval(applyFx, 30000);   // the sun moves a little every half minute
 
     // Ask the TV which apps it has before drawing the dock. In a browser this
     // falls straight through and the tiles simply cannot launch.
@@ -1153,6 +1242,15 @@
     }, DECK_EVERY / 2);
 
     setSwitch($("toggle24"), !hour12);
+
+    fxOn = stored("tvh.fx") !== "0";
+    setSwitch($("toggleFx"), fxOn);
+    $("toggleFx").addEventListener("click", function () {
+      fxOn = !fxOn;
+      setSwitch($("toggleFx"), fxOn);
+      store("tvh.fx", fxOn ? "1" : "0");
+      applyFx();
+    });
 
     $("toggle24").addEventListener("click", function () {
       hour12 = !hour12;
@@ -1252,7 +1350,7 @@
 
   /* Console hook: feed it a snapshot to see how the screen lays it out.
      window.TVH_debug.render({ temp: 24, inside: 21.6 }) */
-  window.TVH_debug = { render: render, load: load, loadCards: loadCards, ambientCard: showAmbientCard, gallery: showGallery, hideAmbient: hideAmbient };
+  window.TVH_debug = { render: render, load: load, loadCards: loadCards, preview: function (p) { fxPreview = p === "clear" ? "" : p; applyFx(); }, ambientCard: showAmbientCard, gallery: showGallery, hideAmbient: hideAmbient };
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);

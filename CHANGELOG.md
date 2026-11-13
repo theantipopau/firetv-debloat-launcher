@@ -3,6 +3,21 @@
 All notable changes to the Fire TV Debloat Launcher. Versions match `versionName` in
 [`launcher/AndroidManifest.xml`](launcher/AndroidManifest.xml).
 
+## 1.7.1 — 2026-11-13
+
+### Added
+- **Time of day.** A soft wash over the wallpaper follows the sun: deep blue at night, warm orange
+  as dawn comes, a hint of gold in the last hour of daylight and pink-violet at sunset. It uses the
+  sunrise and sunset Home Assistant already sends (the next of each: if the sunrise comes first the
+  sun is down), so it needs no location. Colour changes take four seconds, so dusk arrives rather
+  than switches on. The Samsung dashboard does the same.
+- **Rain on screen.** While the weather is rainy, pouring or stormy, slanted streaks fall over the
+  wallpaper (a shower is 45, a downpour or storm 90). They draw only while the home screen is
+  showing. Rain on the Samsung is a small canvas scaled up.
+- Settings → Weather and time of day turns both off (Settings sheet on the Samsung).
+- Preview without waiting for the weather: `am start -n com.mihir.tvhome/.MainActivity --es preview
+  rain|pour|night|dawn|golden|dusk|clear`.
+
 ## 1.7 — 2026-11-12
 
 The light pass: what the glass, the shadows and the transitions do, plus a doorbell card that shows up

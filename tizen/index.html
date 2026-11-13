@@ -12,6 +12,8 @@
   <div class="wall" id="wallA"></div>
   <div class="wall" id="wallB"></div>
   <div class="scrim"></div>
+  <div class="tod" id="tod"></div>
+  <canvas class="rain" id="rain" width="960" height="540"></canvas>
 
   <header class="hud">
     <div class="left" id="block" tabindex="0">
@@ -69,6 +71,13 @@
           <div class="setting-s">Slow crossfade through the wallpaper set.</div>
         </div>
         <button class="switch" id="toggleWall" role="switch" aria-checked="false"><span></span></button>
+      </div>
+      <div class="setting">
+        <div>
+          <div class="setting-t">Weather and time of day</div>
+          <div class="setting-s">Rain on screen while it rains, and a wash that follows the sun.</div>
+        </div>
+        <button class="switch" id="toggleFx" role="switch" aria-checked="true"><span></span></button>
       </div>
       <div class="setting">
         <div>
