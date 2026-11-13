@@ -35,6 +35,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.provider.Settings;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.KeyEvent;
@@ -99,6 +100,14 @@ public class MainActivity extends Activity {
     private LinearLayout grid;
     private View bottomWash, cwWash, gridShade;
     private ImageView wallBack, wallFront;
+    /** The sun-following wash and the rain over the wallpaper; see {@link TimeOfDay}. */
+    private View todVeil;
+    private RainView rain;
+    private ValueAnimator todAnim;
+    private int todColor;
+    private boolean fxOn = true;
+    private long fxRise, fxSet;
+    private String fxCond = "", fxPreview = "";
     private String[] wallpapers = new String[0];
     private int wallIndex = -1;
     private long wallChangedAt;
@@ -175,29 +184,11 @@ public class MainActivity extends Activity {
     private void kickIdle() {
         handler.removeCallbacks(idle);
         handler.postDelayed(idle, IDLE_MS);
-        handler.removeCallbacks(ambientIdle);
-        handler.postDelayed(ambientIdle, AMBIENT_MS);
     }
-    /**
-     * A minute untouched on the home screen, the card that is showing takes the whole screen, as
-     * tvOS's top shelf does; the screensaver still follows at {@link #IDLE_MS}.
-     */
-    private static final long AMBIENT_MS = 60 * 1000;
-    /** Up to a 1080p frame: the guide's 960x1440 posters arrive whole instead of halved. */
-    private static final long AMBIENT_PIXELS = 2_100_000;
-    private final Runnable ambientIdle = this::showAmbient;
-    private FrameLayout ambient;
-    private final ImageView[] ambientArt = new ImageView[2];
-    private int ambientFront;
-    private LinearLayout ambientWords;
-    private TextView ambientKicker, ambientTitle, ambientMeta;
-    private View ambientDot;
-    private Deck ambientSource;
-    private boolean ambientOn;
-    /** The key that woke the screen: its release must not then press whatever has focus. */
-    private int swallowUp = -1;
     /** Focus ticks, from Settings; read once per resume. */
     private boolean soundsOn = true;
+    /** Decorative motion (lean, sheen, parallax, launch zoom) from Settings; read once per resume. */
+    private boolean motionFull = true;
     private FrameLayout launchVeil;
     private String familyName, deviceName;
     private int pollN;
@@ -242,6 +233,7 @@ public class MainActivity extends Activity {
                 View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                         | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
         setContentView(buildUi());
+        seedWallFromCover();
         buildApps();
         // The Home-key cover has done its job the moment this window paints; wait for the frame
         // rather than onResume, which can run before the cover window is even added.
@@ -253,6 +245,8 @@ public class MainActivity extends Activity {
                 return true;
             }
         });
+        // One place hears every focus move on the screen; the parallax is its only listener.
+        rootView.getViewTreeObserver().addOnGlobalFocusChangeListener((was, now) -> leanWallpaper(now));
 
         IntentFilter pf = new IntentFilter();
         pf.addAction(Intent.ACTION_PACKAGE_ADDED);
@@ -269,7 +263,9 @@ public class MainActivity extends Activity {
         super.onResume();
         getSharedPreferences("tvhome", 0).edit().putBoolean("foreground", true).apply();   // read by BootReceiver
         soundsOn = getSharedPreferences("launcher", MODE_PRIVATE).getBoolean("nav_sounds", true);
-        hideAmbient(false);
+        motionFull = getSharedPreferences("launcher", MODE_PRIVATE).getBoolean("motion_full", true);
+        fxOn = getSharedPreferences("launcher", MODE_PRIVATE).getBoolean("weather_fx", true);
+        applyWeatherFx();
         clearVeil(true);
         kickIdle();
         IntentFilter tf = new IntentFilter(Intent.ACTION_TIME_TICK);
@@ -308,7 +304,6 @@ public class MainActivity extends Activity {
     protected void onStop() {
         super.onStop();
         clearVeil(false);   // the app is on screen now; coming back must not find the veil
-        hideAmbient(false);
     }
 
     @Override
@@ -320,7 +315,7 @@ public class MainActivity extends Activity {
         handler.removeCallbacks(haPoll);
         stopNowRotation();
         handler.removeCallbacks(idle);
-        handler.removeCallbacks(ambientIdle);
+        if (rain != null) rain.setRain(false, 0);   // nothing draws while another app is in front
         if (haOpen) {   // never come back to a sheet that was already sliding out
             haOpen = false;
             if (haPanel != null) {
@@ -347,6 +342,12 @@ public class MainActivity extends Activity {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        // Preview the mood without waiting for the weather: --es preview rain|pour|night|dawn|golden|dusk|clear
+        String pv = intent == null ? null : intent.getStringExtra("preview");
+        if (pv != null) {
+            fxPreview = "clear".equals(pv) ? "" : pv;
+            applyWeatherFx();
+        }
         // Home pressed while already home: jump back to the first dock app.
         if (inputsPopup != null) inputsPopup.dismiss();
         if (haOpen) closeHa();   // Home must never leave the sheet standing open
@@ -397,6 +398,11 @@ public class MainActivity extends Activity {
         bottomWash = new View(this);
         bottomWash.setBackground(HomeTheme.bottomWash());
         root.addView(bottomWash, lp(-1, dp(340), Gravity.BOTTOM, 0, 0, 0, 0));
+        // Over the wallpaper, under everything else: the time of day, then the weather.
+        todVeil = new View(this);
+        root.addView(todVeil, new FrameLayout.LayoutParams(-1, -1));
+        rain = new RainView(this);
+        root.addView(rain, new FrameLayout.LayoutParams(-1, -1));
 
         // Only ever visible while the apps grid is in view; at rest it is fully transparent.
         gridShade = new View(this);
@@ -492,6 +498,89 @@ public class MainActivity extends Activity {
     private void openWifiSettings() {
         Intent i = new Intent().setComponent(new ComponentName("com.amazon.tv.settings.v2", "com.amazon.tv.settings.v2.tv.network.NetworkActivity"));
         if (!launch(i) && !launch(new Intent(Settings.ACTION_WIFI_SETTINGS))) openFullSettings();
+    }
+
+    /**
+     * The settings packages Fire OS has shipped, newest first. `com.amazon.tv.settings` is Fire OS 6.
+     */
+    private static final String[] SETTINGS_PACKAGES =
+            {"com.amazon.tv.settings.v2", "com.amazon.tv.settings"};
+    /**
+     * Names that mean the software update screen, best first. Each has to say what it updates: a bare
+     * "update" or "ota" also matches Amazon's app and channel update pages, and a Check for updates
+     * row that opened one of those would be worse than one that opened nothing.
+     */
+    private static final String[] UPDATE_PAGES = {
+            "systemupdate", "systemota", "softwareupdate", "softwareota",
+            "firmwareupdate", "firmwareota", "deviceupdate", "deviceota"};
+    /** Where the update check lives on a build that names no update page of its own. */
+    private static final String ABOUT_PAGE = "about";
+    /** Words that make an "update" page something else: apps, channels, the settings HUD. */
+    private static final String[] NOT_UPDATE = {"app", "channel", "hud", "launcher", "widget", "content"};
+
+    /**
+     * How good a candidate page is: 0-7 for the update screen's own names, 8 for About, -1 for a page
+     * that merely shares the word "update". Lower is better, so the best declared name wins rather
+     * than the first one found.
+     */
+    private int updatePageRank(String simple) {
+        for (String no : NOT_UPDATE) if (simple.contains(no)) return -1;
+        for (int i = 0; i < UPDATE_PAGES.length; i++) if (simple.contains(UPDATE_PAGES[i])) return i;
+        return simple.contains(ABOUT_PAGE) ? UPDATE_PAGES.length : -1;
+    }
+
+    /**
+     * Settings > My Fire TV > About > Check for updates, as close as Fire OS allows a third-party
+     * launcher to get. No public intent reaches that page and its activity names move between builds,
+     * so the settings package is asked what it declares and the best name is opened. Every page that
+     * mentions update, ota or about is logged under "TvHome" - and so is the winner - so whichever
+     * page a given TV has can be pinned from logcat without another build.
+     *
+     * When this build names none, My Fire TV opens (the page About sits on), and only then Amazon's
+     * settings grid. A page the TV refuses to start costs nothing: the refusal is caught by
+     * {@link #launch} and the fallbacks take over.
+     */
+    private void openSystemUpdate() {
+        PackageManager pm = getPackageManager();
+        ActivityInfo best = null;
+        int bestRank = Integer.MAX_VALUE;
+        for (String pkg : SETTINGS_PACKAGES) {
+            ActivityInfo[] activities;
+            try {
+                activities = pm.getPackageInfo(pkg, PackageManager.GET_ACTIVITIES).activities;
+            } catch (Exception e) {
+                Log.i("TvHome", "update: no activities from " + pkg + " (" + e.getClass().getSimpleName() + ")");
+                continue;
+            }
+            if (activities == null) continue;
+            for (ActivityInfo ai : activities) {
+                if (ai.name == null) continue;
+                String full = ai.name.toLowerCase(Locale.US);
+                if (!full.contains("update") && !full.contains("ota") && !full.contains("about")) continue;
+                String simple = full.substring(full.lastIndexOf('.') + 1);
+                int rank = updatePageRank(simple);
+                Log.i("TvHome", "update: saw " + ai.name + " rank " + rank
+                        + (ai.exported ? " exported" : " private"));
+                if (rank >= 0 && rank < bestRank) {
+                    bestRank = rank;
+                    best = ai;
+                }
+            }
+        }
+        if (best != null) {
+            Log.i("TvHome", "update: opening " + best.packageName + "/" + best.name);
+            if (launch(new Intent().setComponent(new ComponentName(best.packageName, best.name)))) return;
+            Log.i("TvHome", "update: the TV refused it, falling back");
+        } else {
+            Log.i("TvHome", "update: Amazon's settings names no update or About page");
+        }
+        if (launch(new Intent().setComponent(new ComponentName("com.amazon.tv.settings.v2",
+                "com.amazon.tv.settings.v2.tv.device.DeviceActivity")))) {
+            Log.i("TvHome", "update: opened My Fire TV");
+            return;
+        }
+        Log.i("TvHome", "update: opened the settings grid");
+        openFullSettings();
     }
 
     /** Amazon's own full-screen Settings grid; falls back to the generic settings intent on other Fire OS builds. */
@@ -651,14 +740,51 @@ public class MainActivity extends Activity {
         return t;
     }
 
-    /** Sets one line's words, its colour and its visibility in one place. */
+    /**
+     * Sets one line's words, its colour and its visibility in one place. A line that is already up
+     * fades its new value in where it stands; a line that is arriving fades itself in, so the block
+     * fills in quietly on the first snapshot instead of appearing all at once.
+     */
     private void setStatusLine(View row, TextView value, String text, int color, float alpha) {
         boolean show = text != null && !text.isEmpty();
-        row.setVisibility(show ? View.VISIBLE : View.GONE);
-        if (!show) return;
-        value.setText(text);
+        boolean was = row.getVisibility() == View.VISIBLE;
+        if (!show) {
+            row.setVisibility(View.GONE);
+            row.setAlpha(1f);
+            return;
+        }
         value.setTextColor(color);
-        row.setAlpha(alpha);
+        row.setVisibility(View.VISIBLE);
+        if (was) {
+            softText(value, text, alpha);
+            return;
+        }
+        value.setText(text);
+        value.setAlpha(alpha);
+        if (motion()) {
+            row.setAlpha(0f);
+            row.animate().alpha(1f).setDuration(HomeTheme.MS_REVEAL).start();
+        }
+    }
+
+    /**
+     * A changed value fades where it stands instead of swapping its characters between two frames.
+     * Used for everything a Home Assistant poll can replace; the clock has its own roll, and the
+     * sheet's hero is big enough that a fade there would read as a flicker.
+     */
+    private void softText(TextView t, String s, float alpha) {
+        if (s == null) s = "";
+        if (s.contentEquals(t.getText())) {
+            t.setAlpha(alpha);
+            return;
+        }
+        final String next = s;
+        final float to = alpha;
+        t.animate().cancel();
+        t.animate().alpha(0f).setDuration(90).withEndAction(() -> {
+            t.setText(next);
+            t.animate().alpha(to).setDuration(160).start();
+        }).start();
     }
 
     private void tintBatteryIcon(int color) {
@@ -941,7 +1067,6 @@ public class MainActivity extends Activity {
             out.root.animate().alpha(0f).setDuration(HomeTheme.MS_FOCUS).withLayer().start();
             front = back;
             cur = i;
-            if (ambientOn && ambientSource == this) paintAmbient(this, true);
         }
     }
 
@@ -1351,7 +1476,7 @@ public class MainActivity extends Activity {
         final float density = getResources().getDisplayMetrics().density;
         // The tile carries the elevation: its rounded outline is what casts the focus shadow.
         final ImageView shadow = AppTile.shadow(this, density, HomeTheme.DOCK_W, HomeTheme.DOCK_H,
-                HomeTheme.DOCK_ICON_RADIUS);
+                HomeTheme.DOCK_ICON_RADIUS, app.color);
         frame.addView(shadow, AppTile.shadowParams(density));
         final FrameLayout tile = AppTile.dock(this, app, density);
         final View sheen = AppTile.sheen(this);
@@ -1382,7 +1507,8 @@ public class MainActivity extends Activity {
             shadow.animate().alpha(has ? 1f : 0f).setDuration(HomeTheme.MS_FOCUS).start();
             rim.animate().alpha(has ? 1f : 0f).setDuration(HomeTheme.MS_FOCUS).start();
             name.animate().alpha(has ? 1f : 0f).setDuration(HomeTheme.MS_FOCUS).start();
-            if (has) AppTile.sweep(sheen, tile.getWidth() > 0 ? tile.getWidth() : dp(HomeTheme.DOCK_W));
+            if (has && motion())
+                AppTile.sweep(sheen, tile.getWidth() > 0 ? tile.getWidth() : dp(HomeTheme.DOCK_W));
             else { sheen.animate().cancel(); sheen.setAlpha(0f); }
             if (!has) return;
             lastFocusedId = v.getId();
@@ -1709,13 +1835,19 @@ public class MainActivity extends Activity {
         card.addView(sheen, new FrameLayout.LayoutParams(-1, -1));
         holder.setOnFocusChangeListener((v, has) -> {
             rim.setStroke(dp(1), has ? HomeTheme.FOCUS_RIM : HomeTheme.RIM);
-            // setScale, not animate(): inside the scroll view the property animator never produced a
-            // visible scale change (the rim moved, the tile did not). Setting it is what renders.
+            // A property animator on the holder never showed inside the scroll view (the rim moved,
+            // the tile did not), so the scale is stepped by hand - but stepped at MS_FOCUS, not cut:
+            // this row used to snap where the dock springs, and beside it that reads as another app.
             float s = has ? HomeTheme.CW_FOCUS_SCALE : 1f;
-            v.setScaleX(s);
-            v.setScaleY(s);
+            if (motion()) {
+                springScale(v, s);
+            } else {
+                v.setScaleX(s);
+                v.setScaleY(s);
+            }
             shadow.animate().alpha(has ? 1f : 0f).setDuration(HomeTheme.MS_FOCUS).start();
-            if (has) AppTile.sweep(sheen, card.getWidth() > 0 ? card.getWidth() : dp(HomeTheme.CW_W));
+            if (has && motion())
+                AppTile.sweep(sheen, card.getWidth() > 0 ? card.getWidth() : dp(HomeTheme.CW_W));
             else { sheen.animate().cancel(); sheen.setAlpha(0f); }
             if (has) {
                 lastFocusedId = v.getId();
@@ -1731,8 +1863,20 @@ public class MainActivity extends Activity {
         if (url.isEmpty()) return;
         new Thread(() -> {
             final Bitmap bm = Net.image(url, 4000, 4000, 1, Net.MAX_PANEL_PIXELS);
-            if (bm != null) runOnUiThread(() -> into.setImageBitmap(bm));
+            if (bm != null) runOnUiThread(() -> fadeInto(into, bm));
         }).start();
+    }
+
+    /**
+     * A picture that arrives after its view does fades in. It used to be assigned between two
+     * frames, which on a Plex still is the most visible jolt left on the screen.
+     */
+    private void fadeInto(ImageView into, Bitmap bm) {
+        float target = into.getAlpha() > 0f ? into.getAlpha() : 1f;   // a logo may carry its own
+        into.animate().cancel();
+        into.setAlpha(0f);
+        into.setImageBitmap(bm);
+        into.animate().alpha(target).setDuration(HomeTheme.MS_REVEAL).withLayer().start();
     }
 
     // ---------------------------------------------------------------- full-screen settings
@@ -1780,6 +1924,10 @@ public class MainActivity extends Activity {
         }
         rows.addView(batteryRow());
         rows.addView(soundsRow());
+        rows.addView(motionRow());
+        rows.addView(weatherFxRow());
+        rows.addView(settingsRow("Check for updates", "Amazon's update page",
+                v -> openSystemUpdate()));
         rows.addView(settingsRow("Amazon settings", "Display, apps, device",
                 v -> openFullSettings()));
         sheet.addView(rows, new LinearLayout.LayoutParams(-1, -2));
@@ -1834,6 +1982,54 @@ public class MainActivity extends Activity {
     }
 
     /** Focus ticks on or off; on by default, as on tvOS. */
+    private View weatherFxRow() {
+        LinearLayout row = (LinearLayout) settingsRow("Weather and time of day", fxOn ? "On" : "Off", v -> { });
+        final TextView value = (TextView) row.getChildAt(1);
+        row.setOnClickListener(v -> {
+            fxOn = !fxOn;
+            getSharedPreferences("launcher", MODE_PRIVATE).edit().putBoolean("weather_fx", fxOn).apply();
+            value.setText(fxOn ? "On" : "Off");
+            applyWeatherFx();
+        });
+        return row;
+    }
+
+    /**
+     * The mood of the home screen: a wash over the wallpaper that follows the sun, and rain while it
+     * is raining. A colour change takes four seconds, so dusk arrives rather than switches on.
+     */
+    private void applyWeatherFx() {
+        if (todVeil == null) return;
+        long now = System.currentTimeMillis() / 1000L;
+        long rise = fxRise, set = fxSet;
+        String cond = fxCond;
+        switch (fxPreview) {
+            case "night":  rise = now + 6 * 3600; set = now + 18 * 3600; break;
+            case "dawn":   rise = now + 900;      set = now + 14 * 3600; break;
+            case "golden": rise = now + 14 * 3600; set = now + 1500;     break;
+            case "dusk":   rise = now + 14 * 3600; set = now + 60;       break;
+            case "rain":   cond = "rainy"; break;
+            case "pour":   cond = "pouring"; break;
+            default: break;
+        }
+        int target = fxOn ? TimeOfDay.tint(now, rise, set) : 0;
+        if (target != todColor) {
+            if (todAnim != null) todAnim.cancel();
+            final int from = todColor;
+            todColor = target;
+            if (!visible) {
+                todVeil.setBackgroundColor(target);
+            } else {
+                todAnim = ValueAnimator.ofObject(new ArgbEvaluator(), from, target);
+                todAnim.setDuration(4000);
+                todAnim.addUpdateListener(a -> todVeil.setBackgroundColor((Integer) a.getAnimatedValue()));
+                todAnim.start();
+            }
+        }
+        boolean wet = fxOn && visible && TimeOfDay.raining(cond);
+        rain.setRain(wet, TimeOfDay.drops(cond));
+    }
+
     private View soundsRow() {
         LinearLayout row = (LinearLayout) settingsRow("Navigation sounds", soundsOn ? "On" : "Off", v -> { });
         final TextView value = (TextView) row.getChildAt(1);
@@ -1842,6 +2038,28 @@ public class MainActivity extends Activity {
             getSharedPreferences("launcher", MODE_PRIVATE).edit().putBoolean("nav_sounds", soundsOn).apply();
             value.setText(soundsOn ? "On" : "Off");
             if (soundsOn) Clicks.select();
+        });
+        return row;
+    }
+
+    /**
+     * The lean, the sheen, the parallax and the launch zoom, or fades only. It exists for two
+     * reasons that agree: the Stick is bound by a 4K panel, and some people would rather the
+     * screen sat still.
+     */
+    private View motionRow() {
+        LinearLayout row = (LinearLayout) settingsRow("Motion",
+                motionFull ? "Full" : "Reduced", v -> { });
+        final TextView value = (TextView) row.getChildAt(1);
+        row.setOnClickListener(v -> {
+            motionFull = !motionFull;
+            getSharedPreferences("launcher", MODE_PRIVATE).edit()
+                    .putBoolean("motion_full", motionFull).apply();
+            value.setText(motionFull ? "Full" : "Reduced");
+            if (!motionFull && wallFront != null) {   // put the photo back before it stops following
+                wallFront.setTranslationX(0f);
+                wallFront.setTranslationY(0f);
+            }
         });
         return row;
     }
@@ -2055,8 +2273,9 @@ public class MainActivity extends Activity {
     }
 
     private void setLine(TextView t, String s) {
-        t.setText(s);
-        t.setVisibility(s == null || s.isEmpty() ? View.GONE : View.VISIBLE);
+        boolean show = s != null && !s.isEmpty();
+        t.setVisibility(show ? View.VISIBLE : View.GONE);
+        if (show) softText(t, s, 1f);
     }
 
     /** Still used by the Home-key cover, which keeps its own compact copy of the panel. */
@@ -2080,7 +2299,7 @@ public class MainActivity extends Activity {
         // leaving a hole at its end (Inside and AC with no bins left the right third empty).
         haTileBox[i].setVisibility(has ? View.VISIBLE : View.GONE);
         if (!has) return;
-        haTileValue[i].setText(value);
+        softText(haTileValue[i], value, 1f);
         long age = ages == null ? 0 : ages.optLong(HA_KEYS[i], 0);
         boolean stale = Times.stale(age);
         haTileBox[i].setAlpha(stale ? HomeTheme.STALE : 1f);
@@ -2127,6 +2346,10 @@ public class MainActivity extends Activity {
      * value that has not updated in 15 minutes is dimmed exactly as the sheet dims its own tile.
      */
     private void applyStatus(JSONObject j, JSONObject ages) {
+        fxRise = j.optLong("sunrise_at", 0);
+        fxSet = j.optLong("sunset_at", 0);
+        fxCond = j.optString("condition", "");
+        applyWeatherFx();
         String temp = j.optString("temp", "");
         String cond = j.optString("condition", "");
         String inside = j.optString("inside", "");
@@ -2442,12 +2665,8 @@ public class MainActivity extends Activity {
             lift(v, has, HomeTheme.DOCK_FOCUS_SCALE);
             v.animate().translationZ(has ? dp(10) : 0).setDuration(HomeTheme.MS_FOCUS).start();
             // One sheen sweep on focus, not a permanent glow: it reads as light passing over glass.
-            if (has) {
-                int w = card.getWidth() > 0 ? card.getWidth() : dp(120);
-                sheen.setTranslationX(-w);
-                sheen.setAlpha(0.9f);
-                sheen.animate().translationX(w).alpha(0f)
-                        .setInterpolator(new DecelerateInterpolator(1.4f)).setDuration(520).start();
+            if (has && motion()) {
+                AppTile.sweep(sheen, card.getWidth() > 0 ? card.getWidth() : dp(120));
             } else {
                 sheen.animate().cancel();
                 sheen.setAlpha(0f);
@@ -2846,6 +3065,7 @@ public class MainActivity extends Activity {
         rollClock(Times.clockDigits(now, android.text.format.DateFormat.is24HourFormat(this), zone));
         if (greet != null) greet.setText(Typo.hello(Times.greeting(now, zone), familyName));
         if (dateLine != null) dateLine.setText(Times.dateLine(now, zone));
+        applyWeatherFx();   // the sun moves a little every minute
     }
 
     /**
@@ -3052,7 +3272,7 @@ public class MainActivity extends Activity {
         a.setDuration(2000);
         a.addUpdateListener(an -> {
             glassColor = (int) an.getAnimatedValue();
-            for (GradientDrawable gd : glasses) gd.setColor(glassColor);
+            for (GradientDrawable gd : glasses) HomeTheme.fillGlass(gd, glassColor);
             for (TextView c : chips)
                 if (!c.isFocused()) ((GradientDrawable) c.getBackground()).setColor(glassColor);
         });
@@ -3077,8 +3297,12 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> { if (haFrost != null) haFrost.setBlur(f); });
         }).start();
         wallFront.setAlpha(0f);
-        wallFront.setScaleX(1f);
-        wallFront.setScaleY(1f);
+        // 1.03, not 1: the parallax needs a few dp of slack to lean into, and the drift still ends
+        // at 1.09, so the photo moves as slowly as it always did.
+        wallFront.setScaleX(1.03f);
+        wallFront.setScaleY(1.03f);
+        wallFront.setTranslationX(0f);
+        wallFront.setTranslationY(0f);
         // The slow zoom moves the photo about 0.2px a second, so it steps once a second instead of
         // animating every frame: a per-frame animator redrew the whole screen 60 times a second at
         // idle (measured on the Cube) and left focus moves no GPU headroom. Stops with its photo.
@@ -3089,8 +3313,8 @@ public class MainActivity extends Activity {
                 if (kb != wallFront || isDestroyed()) return;
                 float t = Math.min(1f, (SystemClock.elapsedRealtime() - driftFrom)
                         / (float) (WALLPAPER_INTERVAL_MS + 4000));
-                kb.setScaleX(1f + 0.07f * t);
-                kb.setScaleY(1f + 0.07f * t);
+                kb.setScaleX(1.03f + 0.06f * t);
+                kb.setScaleY(1.03f + 0.06f * t);
                 if (t < 1f) handler.postDelayed(this, 1000);
             }
         });
@@ -3098,6 +3322,10 @@ public class MainActivity extends Activity {
             wallBack.setImageDrawable(null); // release the previous photo
         }).start();
         firstWallpaper = false;
+        // A new photo starts centred, and may lean to wherever the cursor is on its first frame.
+        lastFocusRegion = -1;
+        lastFocusAt = 0;
+        leanWallpaper(getCurrentFocus());
     }
 
     private boolean firstWallpaper = true;
@@ -3105,6 +3333,83 @@ public class MainActivity extends Activity {
     private void scheduleWallpaper(long delay) {
         handler.removeCallbacks(rotateWallpaper);
         handler.postDelayed(rotateWallpaper, Math.max(1000, delay));
+    }
+
+    /**
+     * The photo the Home-key cover was already showing becomes the launcher's first frame, instead
+     * of the launcher decoding the same file again while its black root shows through. The cover
+     * holds a full decode of it in this same process, so this costs one reference, not one bitmap.
+     */
+    private void seedWallFromCover() {
+        if (wallFront == null || wallpapers.length == 0) return;
+        Bitmap photo = HomeKeyService.coverBitmap();
+        int saved = getPreferences(MODE_PRIVATE).getInt("wallpaper", -1);
+        int idx = saved < 0 ? -1 : ((saved % wallpapers.length) + wallpapers.length) % wallpapers.length;
+        if (photo == null || idx < 0 || idx != HomeKeyService.coverBitmapIndex()) return;
+        // The front layer, not the back: the first rotation swaps the two, so the seeded photo
+        // becomes the layer the new one fades in over - instead of being replaced behind an empty
+        // view, which is how the first fade would otherwise cross a black frame.
+        wallFront.setImageBitmap(photo);
+        currentWall = photo;
+    }
+
+    /**
+     * The parallax: the photo moves a few dp against the cursor, so the glass and the type read as
+     * sitting in front of it rather than on it. Eight dp across and five down stay well inside the
+     * 3% the drift keeps spare, and only the one image view moves. The sheet, the settings page
+     * and a launch all own the screen while they are up, so the photo holds still.
+     */
+    private void leanWallpaper(View focus) {
+        if (wallFront == null || focus == null || !motion()) return;
+        if (haOpen || launchVeil != null
+                || (settingsPage != null && settingsPage.getVisibility() == View.VISIBLE)) return;
+        int w = wallFront.getWidth(), h = wallFront.getHeight();
+        if (w == 0 || h == 0) return;
+        // Once per arrival, not once per keypress: a row change, or the first move after a pause.
+        // Holding right along the dock is several tiles and one lean; letting go and pressing again
+        // is a second one, which is what makes it read as the photo answering the cursor.
+        long now = SystemClock.uptimeMillis();
+        int region = focusRegion(focus);
+        boolean moved = region != lastFocusRegion || now - lastFocusAt >= HomeTheme.LEAN_QUIET_MS;
+        lastFocusRegion = region;
+        lastFocusAt = now;
+        if (!moved) return;
+        int[] at = new int[2];
+        focus.getLocationInWindow(at);
+        float cx = (at[0] + focus.getWidth() / 2f) / w;      // 0 at the left edge, 1 at the right
+        int dx = Math.round(-(cx - 0.5f) * 2f * dp(8));
+        int dy = at[1] + focus.getHeight() / 2 > h * 0.6f ? -dp(5) : 0;   // a lower row pulls it up
+        // An ObjectAnimator, not view.animate(): that one animator also owns the photo's crossfade,
+        // and starting it here would cut the fade short every time the cursor moved.
+        ObjectAnimator a = ObjectAnimator.ofPropertyValuesHolder(wallFront,
+                PropertyValuesHolder.ofFloat(View.TRANSLATION_X, dx),
+                PropertyValuesHolder.ofFloat(View.TRANSLATION_Y, dy));
+        a.setDuration(HomeTheme.MS_TILT);
+        a.setInterpolator(HomeTheme.ease());
+        a.start();
+    }
+
+    /** The screen's rows, so a move within one can be told from a move between two. */
+    private int focusRegion(View v) {
+        if (dockCards.contains(v) || v == dockAppsSlot) return 1;
+        if (cwCards.contains(v)) return 2;
+        if (gridCards.contains(v)) return 3;
+        if (chips.contains(v)) return 4;
+        if (liveDeck != null && v == liveDeck.root) return 5;
+        if (plexDeck != null && v == plexDeck.root) return 6;
+        if (settingsRows.contains(v)) return 7;
+        if (v == statusBlock) return 8;
+        if (v == haPanel) return 9;
+        return 0;
+    }
+
+    /**
+     * Decorative motion: the lean, the sheen, the parallax and the launch zoom. Off leaves fades
+     * only - the focus cue stays, because it is how the screen is read, not how it is decorated.
+     * Android's own "remove animations" switch is honoured as well.
+     */
+    private boolean motion() {
+        return motionFull && ValueAnimator.areAnimatorsEnabled();
     }
 
     /** Average the banner's vivid pixels, then push saturation so the glow reads as a colour. */
@@ -3195,6 +3500,9 @@ public class MainActivity extends Activity {
 
     /** Last horizontal D-pad step, -1 left or +1 right: which way a newly focused tile leans. */
     private int lastStep;
+    /** When focus last moved, and which region it was in: the photo leans once per arrival. */
+    private long lastFocusAt;
+    private int lastFocusRegion = -1;
     /** When the remote was last pressed, and how long the cards wait after it before turning. */
     private long lastKeyAt;
     private static final long KEY_QUIET_MS = 1200;
@@ -3208,7 +3516,7 @@ public class MainActivity extends Activity {
                 .translationY(has ? -dp(HomeTheme.DOCK_FOCUS_LIFT) : 0)
                 .setInterpolator(has ? HomeTheme.settle() : HomeTheme.ease())
                 .setDuration(HomeTheme.MS_FOCUS).start();
-        if (has && lastStep != 0) {
+        if (has && lastStep != 0 && motion()) {
             v.setCameraDistance(8000 * getResources().getDisplayMetrics().density);
             ObjectAnimator t = ObjectAnimator.ofFloat(v, View.ROTATION_Y, -lastStep * HomeTheme.TILT, 0f);
             t.setDuration(HomeTheme.MS_TILT);
@@ -3217,6 +3525,19 @@ public class MainActivity extends Activity {
         } else if (!has) {
             v.setRotationY(0f);
         }
+    }
+
+    /** The dock's spring, for a view the framework will not animate inside a scroll view. */
+    private void springScale(View v, float to) {
+        ValueAnimator a = ValueAnimator.ofFloat(v.getScaleX(), to);
+        a.setDuration(HomeTheme.MS_FOCUS);
+        a.setInterpolator(to > 1f ? HomeTheme.settle() : HomeTheme.ease());
+        a.addUpdateListener(an -> {
+            float s = (float) an.getAnimatedValue();
+            v.setScaleX(s);
+            v.setScaleY(s);
+        });
+        a.start();
     }
 
     // ---------------------------------------------------------------- helpers
@@ -3281,19 +3602,6 @@ public class MainActivity extends Activity {
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent e) {
-        // Out of idle mode the first press only brings the home screen back, as on tvOS.
-        if (ambientOn) {
-            if (e.getAction() == KeyEvent.ACTION_DOWN) {
-                swallowUp = e.getKeyCode();
-                hideAmbient(true);
-            }
-            kickIdle();
-            return true;
-        }
-        if (e.getAction() == KeyEvent.ACTION_UP && e.getKeyCode() == swallowUp) {
-            swallowUp = -1;
-            return true;
-        }
         View before = getCurrentFocus();
         boolean handled = routeKey(e);
         if (soundsOn && e.getAction() == KeyEvent.ACTION_DOWN) {
@@ -3360,6 +3668,7 @@ public class MainActivity extends Activity {
      */
     private void zoomOpen(View from, App app) {
         clearVeil(false);
+        if (!motion()) return;   // reduced motion: the app arrives by a plain cut, as it always could
         if (from.getWidth() == 0) return;
         ViewGroup decor = (ViewGroup) getWindow().getDecorView();
         float density = getResources().getDisplayMetrics().density;
@@ -3405,134 +3714,6 @@ public class MainActivity extends Activity {
         final ViewGroup decor = (ViewGroup) getWindow().getDecorView();
         if (!fade) { decor.removeView(v); return; }
         v.animate().alpha(0f).setDuration(HomeTheme.MS_REVEAL).withEndAction(() -> decor.removeView(v)).start();
-    }
-
-    /** The deck whose current card has a still to fill the screen with: live first, then Plex. */
-    private Deck ambientDeck() {
-        for (Deck d : decks()) if (d.showing() && d.still(d.cur) != null) return d;
-        return null;
-    }
-
-    private void showAmbient() {
-        if (ambientOn || !visible || !hasWindowFocus() || haOpen || cwOpen || inputsPopup != null
-                || launchVeil != null || scroll.getScrollY() > 0
-                || (settingsPage != null && settingsPage.getVisibility() == View.VISIBLE)) return;
-        Deck d = ambientDeck();
-        if (d == null) return;
-        buildAmbient();
-        ambientSource = d;
-        ambientOn = true;
-        paintAmbient(d, false);
-        ambient.animate().cancel();
-        ambient.setVisibility(View.VISIBLE);
-        ambient.setAlpha(0f);
-        ambient.animate().alpha(1f).setDuration(900).setInterpolator(HomeTheme.ease()).withLayer().start();
-    }
-
-    private void hideAmbient(boolean fade) {
-        ambientOn = false;
-        ambientSource = null;
-        if (ambient == null) return;
-        ambient.animate().cancel();
-        if (!fade) {
-            ambient.setVisibility(View.GONE);
-            for (ImageView i : ambientArt) i.setImageDrawable(null);
-            return;
-        }
-        ambient.animate().alpha(0f).setDuration(HomeTheme.MS_REVEAL).withLayer().withEndAction(() -> {
-            if (ambientOn) return;
-            ambient.setVisibility(View.GONE);
-            for (ImageView i : ambientArt) i.setImageDrawable(null);
-        }).start();
-    }
-
-    /** The card as a full screen: its still, a floor of shade, and the card's own three lines. */
-    private void paintAmbient(Deck d, boolean fade) {
-        Bitmap img = d.still(d.cur);
-        if (img == null) return;   // a logo-only card keeps the picture already up
-        Feed.Item it = d.items.get(d.cur);
-        int back = 1 - ambientFront;
-        ImageView in = ambientArt[back], out = ambientArt[ambientFront];
-        in.setImageBitmap(img);
-        in.animate().cancel();
-        out.animate().cancel();
-        boolean live = it.live();
-        ambientKicker.setText(live ? "Live now" : "Now Showing on " + (it.app.isEmpty() ? "Plex" : it.app));
-        ((GradientDrawable) ambientDot.getBackground()).setColor(live ? 0xFFFF453A : 0xFFE5A00D);
-        ambientTitle.setText(it.title);
-        String meta = nowMeta(it);
-        ambientMeta.setText(meta);
-        ambientMeta.setVisibility(meta.isEmpty() ? View.GONE : View.VISIBLE);
-        // The card's copy is decoded small for the card; a full screen gets its own, fetched once
-        // and swapped in under the same picture if this item is still the one showing.
-        final String url = it.image;
-        final ImageView target = in;
-        if (url != null && !url.isEmpty()) new Thread(() -> {
-            final Bitmap big = Net.image(url, 4000, 4000, 1, AMBIENT_PIXELS);
-            if (big != null) runOnUiThread(() -> {
-                if (ambientOn && ambientArt[ambientFront] == target && d.items.size() > d.cur
-                        && url.equals(d.items.get(d.cur).image)) target.setImageBitmap(big);
-            });
-        }).start();
-        if (!fade) {
-            in.setAlpha(1f);
-            out.setAlpha(0f);
-        } else {
-            in.setAlpha(0f);
-            in.animate().alpha(1f).setDuration(1200).withLayer().start();
-            out.animate().alpha(0f).setDuration(1200).withLayer().start();
-            ambientWords.setAlpha(0f);
-            ambientWords.animate().alpha(1f).setStartDelay(300).setDuration(700).start();
-        }
-        ambientFront = back;
-    }
-
-    private void buildAmbient() {
-        if (ambient != null) return;
-        ambient = new FrameLayout(this);
-        ambient.setBackgroundColor(Color.BLACK);
-        ambient.setVisibility(View.GONE);
-        for (int i = 0; i < 2; i++) {
-            ImageView v = new ImageView(this);
-            v.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            v.setAlpha(0f);
-            ambientArt[i] = v;
-            ambient.addView(v, new FrameLayout.LayoutParams(-1, -1));
-        }
-        View floor = new View(this);
-        floor.setBackground(HomeTheme.vertical(new int[]{0x00000000, 0x66000000, 0xD9000000}));
-        ambient.addView(floor, new FrameLayout.LayoutParams(-1,
-                getResources().getDisplayMetrics().heightPixels * 3 / 5, Gravity.BOTTOM));
-        View side = new View(this);
-        side.setBackground(HomeTheme.leftWash());
-        ambient.addView(side, new FrameLayout.LayoutParams(-1, -1));
-
-        ambientWords = new LinearLayout(this);
-        ambientWords.setOrientation(LinearLayout.VERTICAL);
-        LinearLayout kick = new LinearLayout(this);
-        kick.setOrientation(LinearLayout.HORIZONTAL);
-        kick.setGravity(Gravity.CENTER_VERTICAL);
-        ambientDot = new View(this);
-        GradientDrawable dot = new GradientDrawable();
-        dot.setShape(GradientDrawable.OVAL);
-        ambientDot.setBackground(dot);
-        kick.addView(ambientDot, llp(dp(10), dp(10), 0, 0, dp(10), 0));
-        ambientKicker = text(Typo.CAPTION, "sans-serif-medium", HomeTheme.TEXT_90);
-        kick.addView(ambientKicker);
-        ambientWords.addView(kick);
-        ambientTitle = text(48, "sans-serif-light", Color.WHITE);
-        ambientTitle.setLetterSpacing(HomeTheme.TITLE_TRACKING);
-        ambientTitle.setMaxLines(2);
-        ambientTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        ambientTitle.setShadowLayer(dp(10), 0, dp(1), 0x99000000);
-        ambientWords.addView(ambientTitle, llp(-1, -2, 0, dp(6), 0, 0));
-        ambientMeta = text(Typo.CAPTION, "sans-serif", HomeTheme.TEXT_70);
-        ambientMeta.setSingleLine(true);
-        ambientMeta.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        ambientWords.addView(ambientMeta, llp(-1, -2, 0, dp(6), 0, 0));
-        ambient.addView(ambientWords, lp(-1, -2, Gravity.BOTTOM | Gravity.START,
-                dp(HomeTheme.SAFE), 0, dp(HomeTheme.SAFE * 4), dp(HomeTheme.DOCK_BOTTOM)));
-        ((ViewGroup) getWindow().getDecorView()).addView(ambient, new FrameLayout.LayoutParams(-1, -1));
     }
 
     /** 16:9 container. */

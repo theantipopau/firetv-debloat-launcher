@@ -27,6 +27,14 @@ Not affiliated with Amazon. Everything here is reversible; nothing is uninstalle
   screensaver); the painting's title and artist fade in briefly in the corner. Under the weather it shows the house's
   battery, solar output and load, then today's generation and the battery's runway when Home Assistant supplies them.
 - **Alert cards** over any app (`am broadcast ...`), for doorbell, bins, timers. Optional.
+  Test one without Home Assistant (the card appears at once; the picture joins it when it downloads):
+  ```
+  adb shell am broadcast -n com.mihir.tvhome/.AlertReceiver --es title "Doorbell" \
+    --es text "Someone is at the front door" --es kind doorbell --ei seconds 10 \
+    --es image http://<ha-ip>:8123/local/tv_doorbell.jpg
+  ```
+  No card at all means the overlay permission is missing (`adb shell appops set com.mihir.tvhome
+  SYSTEM_ALERT_WINDOW allow`); the launcher's log (`adb logcat -s TvHome`) says which step dropped it.
 - With **Home Assistant** (optional): info panel (weather, solar, battery, house power, bins, next event),
   "keep watching" cards from Plex, alerts, sleep timer. See [docs/HOME-ASSISTANT.md](docs/HOME-ASSISTANT.md).
 

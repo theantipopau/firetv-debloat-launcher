@@ -26,6 +26,7 @@ script:
       text: {description: "Second line", example: "Someone is at the front door"}
       kind: {description: "doorbell | motion | warn | info", example: "doorbell"}
       brand: {description: "google | tuya | empty (logo files are not bundled in the public build)", example: ""}
+      image: {description: "Optional snapshot URL shown under the card, e.g. http://<ha>:8123/local/tv_doorbell.jpg", example: ""}
       seconds: {description: "How long it stays", example: 10}
     variables:
       tvs:   # CHANGE: your Fire TV media_player entities (Android Debug Bridge integration)
@@ -33,6 +34,9 @@ script:
         - media_player.bedroom_fire_tv
       t: "{{ (title | default('Home')) | replace(\"'\", '’') }}"
       x: "{{ (text | default('')) | replace(\"'\", '’') }}"
+      # A URL sits inside single quotes in the shell command, so an apostrophe in it would end the
+      # string early; there is no valid URL with one, and stripping it keeps the command whole.
+      i: "{{ (image | default('')) | replace(\"'\", '') }}"
     sequence:
       - repeat:
           for_each: "{{ tvs }}"
@@ -49,6 +53,7 @@ script:
                       am broadcast -n com.mihir.tvhome/.AlertReceiver
                       --es title '{{ t }}' --es text '{{ x }}'
                       --es kind '{{ kind | default('info') }}' --es brand '{{ brand | default('') }}'
+                      --es image '{{ i }}'
                       --ei seconds {{ seconds | default(8) | int }}
 
   tv_sleep_timer:
@@ -191,3 +196,6 @@ automation:
           text: "Someone is at the front door"
           kind: doorbell
           seconds: 10
+          # Optional: any still Home Assistant can serve. The card shows without it and the picture
+          # joins a moment later, so a camera that is slow (or down) never delays the doorbell.
+          # image: "http://192.168.1.10:8123/local/tv_doorbell.jpg"   # CHANGE

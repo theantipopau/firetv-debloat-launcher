@@ -151,9 +151,14 @@ guide is 11 MB, so that matters. Point `EPG_URLS` at a local file to try a guide
 ## 5. Alerts over any app
 ```
 service: script.tv_alert
-data: {title: "Doorbell pushed", text: "Someone is at the front door", kind: doorbell, seconds: 10}
+data: {title: "Doorbell pushed", text: "Someone is at the front door", kind: doorbell, seconds: 10,
+       image: "http://192.168.1.10:8123/local/tv_doorbell.jpg"}
 ```
 `kind`: `doorbell` (red), `motion` (amber), `warn`, `info`. It shows on every Fire TV that is on, top right, with a countdown bar.
+`image` is optional: a still the TV downloads and draws under the words. The card itself appears the moment the
+script runs and the picture joins it a moment later, so a camera that is slow (or having a bad day) never delays
+the doorbell. Any snapshot Home Assistant can serve works - a camera's still written to `/config/www/`, or a
+still-image URL from an NVR - and leaving `image` out gives the text-only card.
 The launcher needs the "display over other apps" permission (the install script grants it:
 `adb shell appops set com.mihir.tvhome SYSTEM_ALERT_WINDOW allow`). Use it for doorbells, bins, finished washing, timers.
 Only the TV's shell (ADB, which is what the command above uses) and system apps can send a card: the receiver in

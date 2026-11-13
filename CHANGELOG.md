@@ -3,6 +3,84 @@
 All notable changes to the Fire TV Debloat Launcher. Versions match `versionName` in
 [`launcher/AndroidManifest.xml`](launcher/AndroidManifest.xml).
 
+## 1.7.1 — 2026-11-13
+
+### Added
+- **Time of day.** A soft wash over the wallpaper follows the sun: deep blue at night, warm orange
+  as dawn comes, a hint of gold in the last hour of daylight and pink-violet at sunset. It uses the
+  sunrise and sunset Home Assistant already sends (the next of each: if the sunrise comes first the
+  sun is down), so it needs no location. Colour changes take four seconds, so dusk arrives rather
+  than switches on. The Samsung dashboard does the same.
+- **Rain on screen.** While the weather is rainy, pouring or stormy, slanted streaks fall over the
+  wallpaper (a shower is 45, a downpour or storm 90). They draw only while the home screen is
+  showing. Rain on the Samsung is a small canvas scaled up.
+- Settings → Weather and time of day turns both off (Settings sheet on the Samsung).
+- Preview without waiting for the weather: `am start -n com.mihir.tvhome/.MainActivity --es preview
+  rain|pour|night|dawn|golden|dusk|clear`.
+
+## 1.7 — 2026-11-12
+
+The light pass: what the glass, the shadows and the transitions do, plus a doorbell card that shows up
+before its camera does.
+
+### Added
+- **Glass with a lit edge.** The dock pill, the Now cards and the Home-key cover's pill draw a gradient
+  now - a lighter top edge, the wallpaper-tinted body, a darker foot - instead of one flat 35% black. The
+  tint still eases with each new photo; only the light on it has a shape. The 44dp round chips stay flat,
+  where a gradient is invisible.
+- **Motion: Full / Reduced** in Settings, beside Navigation sounds. Reduced keeps the fades and the focus
+  cue and drops the lean, the sheen, the parallax and the launch zoom; the launcher also follows Android's
+  own "remove animations" switch, which it ignored until now.
+- **The photo leans with the cursor.** It moves up to 8dp against the focus, and 5dp when the cursor drops
+  below the fold, so the glass and the type sit in front of it rather than on it. It leans once per
+  arrival - on a row change, or on the first move after half a second's pause - so holding right along the
+  dock is one lean, not eight. The drift starts at 1.03 now, which is what leaves the photo room to move.
+- **A vignette on the screensaver**, drawn once as a cached ellipse: the paintings are brighter than the
+  photographs were, and the corners are where the credit used to fight them.
+- **Check for updates** in Settings. Fire OS offers no intent for that page and its activity names move
+  between builds, so the row asks the settings package what it declares and ranks the candidates by what
+  they name: system, software, firmware and device update pages first, then About, while anything calling
+  itself an app, channel or HUD update is rejected rather than opened. On the two Fire OS 7.7 builds here no
+  such page exists at all, so it opens My Fire TV - which lands on About with Check for Updates already
+  highlighted on the Stick, and on the About row on the Cube - with the settings grid as the last resort.
+  Every candidate it sees is logged under `TvHome` with its rank and whether it is exported, so a build
+  that does have an update page can be pinned from logcat without another release.
+
+### Changed
+- **Artwork fades in when it arrives**, on the resume tiles, instead of being assigned between two frames.
+  It was the most visible jolt left on the screen.
+- **Continue Watching springs.** Its tiles used to snap to 1.06 because a property animator on the holder
+  never rendered inside the scroll view; a ValueAnimator driving the scale does, so the row moves at
+  `MS_FOCUS` the way the dock does instead of cutting.
+- **Numbers fade where they stand** (90ms out, 160ms in) when a Home Assistant poll replaces them, and a
+  status line fades itself in the first time it has something to say.
+- **The dock's focus shadow takes the tile's colour** - 18% of it, filtered on the view so the shadow
+  bitmap stays one per size. A grey or near-black banner keeps the neutral shadow.
+- **One sheen per arrival,** gated at 450ms, instead of one on every tile in a held pass, which read as
+  shimmer rather than as light crossing glass.
+- **The Home handoff has no seam.** The launcher starts on the photo the cover had already decoded, in the
+  same process, instead of decoding the same file again behind a black root.
+- **Idle goes straight to the screensaver.** Since 1.5.4 a minute untouched filled the screen with whichever
+  card was showing - and on this home that is the Live now card, so an idle TV showed a channel and its
+  programme rather than the paintings. That step is gone: nothing takes the screen before the art saver,
+  which still starts after three minutes. The full-screen card face and the key that only dismissed it went
+  with it.
+
+### Fixed
+- **A doorbell card no longer waits for its camera.** The receiver fetched the snapshot before it drew the
+  card, with 2.5s and 3.5s timeouts in front of it; the words now go up immediately and the picture joins
+  the same card when it decodes, matched by a token so a late picture cannot land on a newer alert.
+- **`script.tv_alert` can send a snapshot at all.** It never passed `--es image`, though the receiver has
+  accepted one since 1.3, so a doorbell card from Home Assistant could not carry a picture. `image` is a
+  field now, and the docs and the example automation show how to point it at a still.
+- **`python launcher/build_win.py` writes where it says it does.** Its last copy was relative to the shell,
+  so running it from the repo root - as the README says - left a second APK beside the repo and left
+  `launcher/out/tvhome.apk` at whatever was there before, while still printing "copied to launcher/out/".
+- **Profile builds work from the repo root.** `build_win.py <profile>` copied the profile's res and assets
+  to shell-relative paths, so the copy landed in `E:\tv-home\build` while aapt2 looked for
+  `launcher\build\res_<profile>`; the build only worked from inside `launcher/`. Every path it assembles is
+  absolute now, and the per-TV APKs carry their own profile (device name, dock order, Home Assistant URL).
+
 ## 1.5.5 — 2026-11-09
 
 ### Added

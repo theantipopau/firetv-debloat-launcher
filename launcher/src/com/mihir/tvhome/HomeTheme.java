@@ -150,6 +150,16 @@ final class HomeTheme {
     static final int MS_REVEAL = 240;     // rows, sheets, panels and the dimming around them
     static final int MS_FADE = 400;       // crossfades: the Now cards and the entrance
     static final int STAGGER = 40;        // between the pieces of one entrance
+    /**
+     * A sweep is light crossing the glass, not a light show: inside this window a second one is
+     * dropped, so holding right along the dock sweeps once instead of firing on every tile.
+     */
+    static final int SHEEN_QUIET_MS = 450;
+    /**
+     * The photo leans once per arrival: on a row change, or on a move after this much quiet. A fast
+     * pass along the dock is several tiles and one lean, the same rule the sheen follows.
+     */
+    static final int LEAN_QUIET_MS = 550;
     /** Focus arrives leaning this many degrees the way the cursor travelled, then levels out. */
     static final float TILT = 4f;
     static final int MS_TILT = 320;
@@ -224,9 +234,42 @@ final class HomeTheme {
     static GradientDrawable glassPill(int radiusDp, float density) {
         GradientDrawable g = new GradientDrawable();
         g.setCornerRadius(radiusDp * density);
-        g.setColor(GLASS);
+        fillGlass(g, GLASS);
         g.setStroke(Math.max(1, Math.round(density)), GLASS_EDGE);
         return g;
+    }
+
+    /**
+     * A pane, not a fill: a lit upper edge, the tinted body and a shaded foot. A flat fill is what
+     * makes the dock read as painted on the photo; a pane has a highlight where the light lands.
+     * The tint keeps its own transparency, so a wallpaper that changes colour still moves every
+     * surface with one animator - only the light on them changes shape.
+     */
+    static void fillGlass(GradientDrawable g, int tint) {
+        int a = android.graphics.Color.alpha(tint);
+        int top = withAlpha(lighten(tint, 0.20f), Math.min(1f, (a + 22) / 255f));
+        g.setOrientation(GradientDrawable.Orientation.TOP_BOTTOM);
+        g.setColors(new int[]{top, tint, withAlpha(shade(tint, 0.70f), a / 255f)});
+    }
+
+    /** Toward white, keeping the alpha. */
+    static int lighten(int c, float f) {
+        return android.graphics.Color.argb(android.graphics.Color.alpha(c),
+                mix(android.graphics.Color.red(c), 255, f),
+                mix(android.graphics.Color.green(c), 255, f),
+                mix(android.graphics.Color.blue(c), 255, f));
+    }
+
+    /** Toward black, keeping the alpha. */
+    static int shade(int c, float f) {
+        return android.graphics.Color.argb(android.graphics.Color.alpha(c),
+                Math.round(android.graphics.Color.red(c) * f),
+                Math.round(android.graphics.Color.green(c) * f),
+                Math.round(android.graphics.Color.blue(c) * f));
+    }
+
+    private static int mix(int from, int to, float f) {
+        return Math.round(from + (to - from) * f);
     }
 
     static GradientDrawable vertical(int[] colors) {

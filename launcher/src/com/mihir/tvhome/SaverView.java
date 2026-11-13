@@ -4,7 +4,11 @@ import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.RadialGradient;
+import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.os.Handler;
@@ -59,6 +63,7 @@ public class SaverView extends FrameLayout {
         wall.setScaleType(ImageView.ScaleType.CENTER_CROP);
         wall.setAlpha(WALL_ALPHA);
         addView(wall, new LayoutParams(-1, -1));
+        addView(vignette(c), new LayoutParams(-1, -1));
 
         // The paintings are brighter than the photographs were. A soft floor under the type keeps
         // white legible on a wheatfield or a sunset without hiding the canvas above it.
@@ -166,6 +171,25 @@ public class SaverView extends FrameLayout {
 
     private int dp(float v) {
         return Math.round(v * getResources().getDisplayMetrics().density);
+    }
+
+    /**
+     * A vignette, drawn once and stretched: a square radial gradient becomes an ellipse on a 16:9
+     * screen, which is how a projected image falls off at its edges. The paintings are brighter
+     * than the photographs were, and the corners are where the credit and the frame fight.
+     */
+    private View vignette(Context c) {
+        int n = 384;
+        Bitmap bm = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888);
+        Paint p = new Paint();
+        p.setShader(new RadialGradient(n / 2f, n / 2f, n * 0.62f,
+                new int[]{0x00000000, 0x00000000, 0x66000000},
+                new float[]{0f, 0.55f, 1f}, Shader.TileMode.CLAMP));
+        new Canvas(bm).drawRect(0, 0, n, n, p);
+        ImageView v = new ImageView(c);
+        v.setScaleType(ImageView.ScaleType.FIT_XY);
+        v.setImageBitmap(bm);
+        return v;
     }
 
     private TextView label(float sp, Typeface face, int color) {
@@ -314,7 +338,8 @@ public class SaverView extends FrameLayout {
                         credit.setText(creditText);
                         credit.setVisibility(VISIBLE);
                         credit.setAlpha(0f);
-                        credit.animate().alpha(1f).setDuration(700).setStartDelay(300)
+                        credit.setTranslationY(dp(4));
+                        credit.animate().alpha(1f).translationY(0).setDuration(700).setStartDelay(300)
                                 .withLayer().start();
                         h.postDelayed(creditFade, 12_000);
                     }

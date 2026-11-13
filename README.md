@@ -5,7 +5,7 @@
 A clean, fast, ad-free home screen for **Amazon Fire TV**, plus a reversible debloat script. No ads, no sponsored rows, no
 account, no cloud. Works on its own; [Home Assistant](docs/HOME-ASSISTANT.md) is optional.
 
-Current release: **v1.5.5** — see the [changelog](CHANGELOG.md).
+Current release: **v1.7** — see the [changelog](CHANGELOG.md).
 
 ![Home screen](docs/img/home.jpg)
 
@@ -32,7 +32,10 @@ Other Fire OS 7 devices will probably work. Not tested on Fire OS 8 / Vega OS de
 - Hold OK on any app to move it, add it to the main row, hide it, open its info or uninstall it. No rebuild needed.
 - Settings and the network pill open Amazon's own full-screen pages. The pill is an icon at rest and shows the
   network's name and link rate on focus (Wi-Fi 720 Mbps, Ethernet 1 Gbps on a gigabit adapter). **Inputs** sits in
-  Settings on devices that report an HDMI passthrough input.
+  Settings on devices that report an HDMI passthrough input, and **Check for updates** opens Amazon's update
+  page: on Fire OS 7 that is My Fire TV, on About, with Check for Updates already selected. The row ranks
+  what the settings app declares (system/software/firmware/device update pages, then About) and logs every
+  candidate it sees under the `TvHome` log tag, so an update page can be pinned per device.
 - Screensaver (big clock over a drifting painting; its title and artist fade in briefly, and the house's battery,
   solar and load sit at a glance) instead of Amazon's ad-supported one.
 - Alert cards over whatever is playing: doorbell, bins, timers (`am broadcast`, or from Home Assistant). Only shell/ADB
