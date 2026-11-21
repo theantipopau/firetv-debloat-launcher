@@ -3834,7 +3834,25 @@ public class MainActivity extends Activity {
                 Clicks.move(k == KeyEvent.KEYCODE_DPAD_LEFT || k == KeyEvent.KEYCODE_DPAD_UP ? -1 : 1);
             }
         }
+        bumpAtEdge(e, before);
         return handled;
+    }
+
+    /**
+     * Pressing past the end of a row nudges the tile that way and back, as tvOS does, so the
+     * remote never seems to have done nothing. Once per press: a held key does not shake it.
+     */
+    private void bumpAtEdge(KeyEvent e, View before) {
+        int k = e.getKeyCode();
+        if (e.getAction() != KeyEvent.ACTION_DOWN || e.getRepeatCount() != 0 || before == null
+                || getCurrentFocus() != before || !motion()) return;
+        if (k != KeyEvent.KEYCODE_DPAD_LEFT && k != KeyEvent.KEYCODE_DPAD_RIGHT) return;
+        if (!(before.getTag() instanceof App) && before != dockAppsSlot && !cwCards.contains(before)) return;
+        float dx = (k == KeyEvent.KEYCODE_DPAD_LEFT ? -1 : 1) * dp(7);
+        ObjectAnimator b = ObjectAnimator.ofFloat(before, View.TRANSLATION_X, 0f, dx, -dx * 0.3f, 0f);
+        b.setDuration(260);
+        b.setInterpolator(HomeTheme.ease());
+        b.start();
     }
 
     private boolean routeKey(KeyEvent e) {
@@ -3874,6 +3892,17 @@ public class MainActivity extends Activity {
         }
         if (e.getKeyCode() == KeyEvent.KEYCODE_SETTINGS && e.getAction() == KeyEvent.ACTION_UP) {
             showSettings();
+            return true;
+        }
+        // The remote's menu button: the focused app's menu (the same as holding OK), or Settings
+        // anywhere else on Home.
+        if (e.getKeyCode() == KeyEvent.KEYCODE_MENU) {
+            if (e.getAction() == KeyEvent.ACTION_UP) {
+                View f = getCurrentFocus();
+                if (f != null && f.getTag() instanceof App) showAppMenu(f, (App) f.getTag());
+                else if (settingsPage == null || settingsPage.getVisibility() != View.VISIBLE) showSettings();
+                else hideSettings();
+            }
             return true;
         }
         return super.dispatchKeyEvent(e);

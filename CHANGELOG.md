@@ -3,6 +3,16 @@
 All notable changes to the Fire TV Debloat Launcher. Versions match `versionName` in
 [`launcher/AndroidManifest.xml`](launcher/AndroidManifest.xml).
 
+## 1.7.3 — unreleased
+
+### Added
+- **The house's power on Home.** The battery line reads "Battery 10%  ☀ 2.1 kW  ⌂ 3.1 kW", the load
+  the screensaver already showed. It dims when stale and hides at zero.
+- **Menu button.** The remote's ☰ button opens the focused app's menu (the same as holding OK), or
+  Settings anywhere else on Home.
+- **Edge bump.** Pressing past the end of a row nudges the tile that way and back, as tvOS does,
+  instead of nothing happening.
+
 ## 1.7.2 — 2026-11-13
 
 ### Added
