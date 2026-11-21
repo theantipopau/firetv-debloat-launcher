@@ -455,6 +455,9 @@ public class SaverView extends FrameLayout {
         if (hasHouse) {
             houseValue.setText(Times.kw(house) + " kW");
             houseItem.setAlpha(Times.stale(age(ages, "house")) ? HomeTheme.STALE : 1f);
+            // Amber while the house is pulling from the grid, as on Home.
+            boolean grid = Cards.onGrid(j.optString("grid", "")) && !Times.stale(age(ages, "grid"));
+            houseMark.setImageTintList(ColorStateList.valueOf(grid ? HomeTheme.BAT_ORANGE : HomeTheme.TEXT_70));
         }
 
         boolean any = hasBattery || producing || hasHouse;

@@ -267,6 +267,8 @@
     if (house !== null) {
       var h = pill("using", "Using " + one(house) + " kW");
       if (isOld(snap, "house")) { h.className += " stale"; }
+      // Amber while the house pulls over 0.1 kW from the grid, as on the Fire TV (Cards.onGrid).
+      else if (num(snap.grid) !== null && num(snap.grid) > 0.1 && !isOld(snap, "grid")) { h.className += " grid"; }
       made.push(h);
     }
 
@@ -1121,7 +1123,15 @@
     ["art/14.jpg", "Wheatfield with Crows \u00b7 Van Gogh"],
     ["art/16.jpg", "Nocturne in Blue and Silver \u00b7 Whistler"],
     ["art/18.jpg", "The Fighting Temeraire \u00b7 Turner"],
-    ["art/20.jpg", "The Hay Wain \u00b7 Constable"]
+    ["art/20.jpg", "The Hay Wain \u00b7 Constable"],
+    ["art/25.jpg", "Starry Night over the Rh\u00f4ne \u00b7 Van Gogh"],
+    ["art/26.jpg", "Impression, Sunrise \u00b7 Monet"],
+    ["art/27.jpg", "The Great Wave off Kanagawa \u00b7 Hokusai"],
+    ["art/28.jpg", "Rain, Steam and Speed \u00b7 Turner"],
+    ["art/29.jpg", "The Oxbow \u00b7 Thomas Cole"],
+    ["art/30.jpg", "Among the Sierra Nevada \u00b7 Bierstadt"],
+    ["art/31.jpg", "Moonrise by the Sea \u00b7 Friedrich"],
+    ["art/32.jpg", "Water Lily Pond \u00b7 Monet"]
   ];
   var ambMode = 0, ambFlip = 0, ambPaint = 0, idleCardT = null, idleGalleryT = null, galleryT = null;
 
@@ -1187,12 +1197,25 @@
     }, PAINT_EVERY);
     ambMode = 2;
     $("ambient").className = "ambient on";
+    rainOver(true);
+  }
+
+  /* While the gallery shows, the rain falls over the painting and under the words, as on the
+     Fire TV's screensaver: the one rain layer moves into the overlay, and back after. */
+  function rainOver(on) {
+    var r = $("rain"), amb = $("ambient");
+    if (on && r.parentNode !== amb) {
+      amb.insertBefore(r, amb.querySelector(".amb-scrim").nextSibling);
+    } else if (!on && r.parentNode === amb) {
+      $("stage").insertBefore(r, $("tod").nextSibling);
+    }
   }
 
   function hideAmbient() {
     ambMode = 0;
     clearInterval(galleryT);
     $("ambient").className = "ambient";
+    rainOver(false);
   }
 
   function kickIdle() {

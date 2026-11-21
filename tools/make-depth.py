@@ -113,4 +113,5 @@ def preview(rows, folder):
     sheet.save(os.path.join(folder, "depth-preview.png"))
 
 
-main()
+if __name__ == "__main__":
+    main()

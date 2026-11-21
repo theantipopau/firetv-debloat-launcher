@@ -105,7 +105,7 @@ public class MainActivity extends Activity {
     /** The depth clock's land, and the photo layer it was cut from; see {@link #syncDepth}. */
     private ImageView depth, depthPhoto;
     /** The photo pixels make-depth.py's masks cover: its REGION's top-left corner. */
-    private static final int DEPTH_X = 80, DEPTH_Y = 60;
+    static final int DEPTH_X = 80, DEPTH_Y = 60;
     private final Matrix depthM = new Matrix(), depthLast = new Matrix();
     private final int[] depthAt = new int[2], depthRoot = new int[2];
     private final android.graphics.Rect depthClip = new android.graphics.Rect();
@@ -155,6 +155,8 @@ public class MainActivity extends Activity {
     private boolean haShown;
     /** The photo on screen right now, so the cover borrows it instead of decoding (and showing) an older one. */
     static volatile Bitmap currentWall;
+    /** The depth clock's land cut from currentWall, or null: the Home-key cover draws it too. */
+    static volatile Bitmap currentLand;
     /** True while this window is in front: the Home key then needs no cover to hide Amazon's home. */
     static volatile boolean visible;
     private int lastFocusedId = View.NO_ID;
@@ -2458,6 +2460,11 @@ public class MainActivity extends Activity {
             if (hasHouse) {
                 statusHouse.setText(Times.kw(house) + " kW");
                 statusHouseGroup.setAlpha(Times.stale(age(ages, "house")) ? HomeTheme.STALE : 1f);
+                // Amber while the house is pulling from the grid; white while sun and battery cover it.
+                int c = Cards.onGrid(j.optString("grid", "")) && !Times.stale(age(ages, "grid"))
+                        ? HomeTheme.BAT_ORANGE : HomeTheme.TEXT_70;
+                statusHouse.setTextColor(c == HomeTheme.BAT_ORANGE ? c : HomeTheme.TEXT_90);
+                ((ImageView) statusHouseGroup.getChildAt(0)).setImageTintList(android.content.res.ColorStateList.valueOf(c));
             }
             // The small house after the battery says it is powering the house; with the load on
             // the line that would be a second house, and the orange mark already says it.
@@ -3409,6 +3416,7 @@ public class MainActivity extends Activity {
         if (depth == null) return;
         depthPhoto = fg == null ? null : photo;
         depth.setImageBitmap(fg);
+        currentLand = fg;
         depthLast.reset();
     }
 
