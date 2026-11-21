@@ -3,7 +3,7 @@
 All notable changes to the Fire TV Debloat Launcher. Versions match `versionName` in
 [`launcher/AndroidManifest.xml`](launcher/AndroidManifest.xml).
 
-## 1.7.3 — unreleased
+## 1.7.3 — 2026-11-21
 
 ### Added
 - **The house's power on Home.** The battery line reads "Battery 10%  ☀ 2.1 kW  ⌂ 3.1 kW", the load
