@@ -5,6 +5,7 @@ public final class CardsTest {
     private static int checks;
 
     public static void main(String[] args) {
+        gridDraw();
         artworkOrder();
         binsWording();
         weatherWording();
@@ -134,6 +135,14 @@ public final class CardsTest {
 
     private static void eq(String what, String want, String got) {
         check(what + " (" + got + " == " + want + ")", want.equals(got));
+    }
+
+    private static void gridDraw() {
+        eq("importing 1.4 kW", true, Cards.onGrid("1.4"));
+        eq("standby trickle", false, Cards.onGrid("0.008"));
+        eq("exactly the threshold", false, Cards.onGrid("0.1"));
+        eq("blank", false, Cards.onGrid(""));
+        eq("unavailable", false, Cards.onGrid("unavailable"));
     }
 
     private static void eq(String what, boolean want, boolean got) {
