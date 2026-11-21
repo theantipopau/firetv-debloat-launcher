@@ -128,7 +128,8 @@ public class MainActivity extends Activity {
             statusBins, statusHint;
     private LinearLayout statusBlock, statusLineBox;
     private View statusWeatherRow, statusBatteryRow, statusAcRow, statusBinsRow;
-    private LinearLayout statusSolarGroup;
+    private LinearLayout statusSolarGroup, statusHouseGroup;
+    private TextView statusHouse;
     private ImageView statusBatteryIcon;
     private View topActions;
     private View actionApps, actionSettings;
@@ -721,20 +722,12 @@ public class MainActivity extends Activity {
         // Producing solar joins the battery's own line: the two numbers belong together, and the
         // block has no room for a fifth row. Hidden at night, so the line is just the battery.
         statusSolar = lineText();
-        statusSolarGroup = new LinearLayout(this);
-        statusSolarGroup.setOrientation(LinearLayout.HORIZONTAL);
-        statusSolarGroup.setGravity(Gravity.CENTER_VERTICAL);
-        statusSolarGroup.setVisibility(View.GONE);
-        ImageView solarMark = new ImageView(this);
-        solarMark.setImageResource(R.drawable.ic_solar);   // the sheet's Solar tile mark
-        solarMark.setImageTintList(android.content.res.ColorStateList.valueOf(0xFFFFD60A));   // sun yellow
-        LinearLayout.LayoutParams smp = new LinearLayout.LayoutParams(
-                dp(HomeTheme.LINE_ICON), dp(HomeTheme.LINE_ICON));
-        smp.leftMargin = dp(14);
-        smp.rightMargin = dp(HomeTheme.LINE_ICON_GAP);
-        statusSolarGroup.addView(solarMark, smp);
-        statusSolarGroup.addView(statusSolar, new LinearLayout.LayoutParams(-2, -2));
+        statusSolarGroup = energyGroup(R.drawable.ic_solar, 0xFFFFD60A, statusSolar);   // sun yellow
         ((LinearLayout) statusBatteryRow).addView(statusSolarGroup, new LinearLayout.LayoutParams(-2, -2));
+        // Then what the house is drawing, as the screensaver shows it: "⌂ 3.1 kW".
+        statusHouse = lineText();
+        statusHouseGroup = energyGroup(R.drawable.ic_house, HomeTheme.TEXT_70, statusHouse);
+        ((LinearLayout) statusBatteryRow).addView(statusHouseGroup, new LinearLayout.LayoutParams(-2, -2));
         statusAc = lineText();
         statusAcRow = statusLine(R.drawable.ic_ac, statusAc);
         statusBins = lineText();
@@ -2459,7 +2452,17 @@ public class MainActivity extends Activity {
             statusBatteryIcon.setImageResource(state == Batteries.CHARGING && !stale
                     ? R.drawable.ic_battery_charging : R.drawable.ic_battery);
             tintBatteryIcon(stale ? Batteries.GREY : Batteries.color(state));
-            statusBatteryFlow.setVisibility(state == Batteries.DISCHARGING && !stale ? View.VISIBLE : View.GONE);
+            String house = j.optString("house", "");
+            boolean hasHouse = !house.isEmpty() && number(house, 0) > 0.01;
+            statusHouseGroup.setVisibility(hasHouse ? View.VISIBLE : View.GONE);
+            if (hasHouse) {
+                statusHouse.setText(Times.kw(house) + " kW");
+                statusHouseGroup.setAlpha(Times.stale(age(ages, "house")) ? HomeTheme.STALE : 1f);
+            }
+            // The small house after the battery says it is powering the house; with the load on
+            // the line that would be a second house, and the orange mark already says it.
+            statusBatteryFlow.setVisibility(state == Batteries.DISCHARGING && !stale && !hasHouse
+                    ? View.VISIBLE : View.GONE);
             // "Battery 66% ↑  ☀ 5.3 kW" while the roof is producing; the sun mark is the same
             // one the sheet's Solar tile uses. At night the whole segment is gone, not a "0 kW".
             String solar = j.optString("solar", "");
@@ -3455,6 +3458,23 @@ public class MainActivity extends Activity {
         }
     }
 
+    /** A mark and a value that sit on the battery line: the roof's output, the house's load. */
+    private LinearLayout energyGroup(int icon, int tint, TextView value) {
+        LinearLayout g = new LinearLayout(this);
+        g.setOrientation(LinearLayout.HORIZONTAL);
+        g.setGravity(Gravity.CENTER_VERTICAL);
+        g.setVisibility(View.GONE);
+        ImageView mark = new ImageView(this);
+        mark.setImageResource(icon);
+        mark.setImageTintList(android.content.res.ColorStateList.valueOf(tint));
+        LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(dp(HomeTheme.LINE_ICON), dp(HomeTheme.LINE_ICON));
+        mp.leftMargin = dp(14);
+        mp.rightMargin = dp(HomeTheme.LINE_ICON_GAP);
+        g.addView(mark, mp);
+        g.addView(value, new LinearLayout.LayoutParams(-2, -2));
+        return g;
+    }
+
     /** The wash views are only for a photo that has not had its washes painted in yet. */
     private void washViews(boolean on) {
         leftWash.setVisibility(on ? View.VISIBLE : View.GONE);
@@ -3814,7 +3834,25 @@ public class MainActivity extends Activity {
                 Clicks.move(k == KeyEvent.KEYCODE_DPAD_LEFT || k == KeyEvent.KEYCODE_DPAD_UP ? -1 : 1);
             }
         }
+        bumpAtEdge(e, before);
         return handled;
+    }
+
+    /**
+     * Pressing past the end of a row nudges the tile that way and back, as tvOS does, so the
+     * remote never seems to have done nothing. Once per press: a held key does not shake it.
+     */
+    private void bumpAtEdge(KeyEvent e, View before) {
+        int k = e.getKeyCode();
+        if (e.getAction() != KeyEvent.ACTION_DOWN || e.getRepeatCount() != 0 || before == null
+                || getCurrentFocus() != before || !motion()) return;
+        if (k != KeyEvent.KEYCODE_DPAD_LEFT && k != KeyEvent.KEYCODE_DPAD_RIGHT) return;
+        if (!(before.getTag() instanceof App) && before != dockAppsSlot && !cwCards.contains(before)) return;
+        float dx = (k == KeyEvent.KEYCODE_DPAD_LEFT ? -1 : 1) * dp(7);
+        ObjectAnimator b = ObjectAnimator.ofFloat(before, View.TRANSLATION_X, 0f, dx, -dx * 0.3f, 0f);
+        b.setDuration(260);
+        b.setInterpolator(HomeTheme.ease());
+        b.start();
     }
 
     private boolean routeKey(KeyEvent e) {
@@ -3854,6 +3892,17 @@ public class MainActivity extends Activity {
         }
         if (e.getKeyCode() == KeyEvent.KEYCODE_SETTINGS && e.getAction() == KeyEvent.ACTION_UP) {
             showSettings();
+            return true;
+        }
+        // The remote's menu button: the focused app's menu (the same as holding OK), or Settings
+        // anywhere else on Home.
+        if (e.getKeyCode() == KeyEvent.KEYCODE_MENU) {
+            if (e.getAction() == KeyEvent.ACTION_UP) {
+                View f = getCurrentFocus();
+                if (f != null && f.getTag() instanceof App) showAppMenu(f, (App) f.getTag());
+                else if (settingsPage == null || settingsPage.getVisibility() != View.VISIBLE) showSettings();
+                else hideSettings();
+            }
             return true;
         }
         return super.dispatchKeyEvent(e);
