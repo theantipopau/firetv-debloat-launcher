@@ -2,8 +2,8 @@
 
 The collection is split by surface:
 
-- `launcher/assets/wallpapers/` — 20 landscape photographs for the home screen's slow slideshow.
-- `launcher/assets/art/` — 4 public-domain paintings for the screensaver.
+- `launcher/assets/wallpapers/` — 22 landscape photographs for the home screen's slow slideshow.
+- `launcher/assets/art/` — 12 public-domain paintings for the screensaver.
 
 Photos and artworks from Wikimedia Commons, used under their free licences (featured pictures;
 paintings are public domain). Space imagery is deliberately not included.
@@ -32,6 +32,8 @@ Deri, CC BY-SA 4.0. https://commons.wikimedia.org/wiki/File%3ABreathtaking_beaut
 - `22.jpg` Dülmen, Umland -- 2014 -- 7056: Dietmar Rabich, CC BY-SA 4.0. https://commons.wikimedia.org/wiki/File:D%C3%BClmen,_Umland_--_2014_--_7056.jpg
 - `23.jpg` Karula vaade: Amadvr, CC BY-SA 3.0 ee. https://commons.wikimedia.org/wiki/File:Karula_vaade.jpg
 - `24.jpg` Mount Shasta, Lake Siskiyou, SW view: Radomianin, CC BY-SA 4.0. https://commons.wikimedia.org/wiki/File:Mount_Shasta,_Lake_Siskiyou,_SW_view.jpg
+- `33.jpg` Panixersee (Lag da Pigniu) boven Andiast. 26-09-2025. (d.j.b.) 14: Dominicus Johannes Bergsma., CC BY-SA 4.0. https://commons.wikimedia.org/wiki/File:Panixersee_(Lag_da_Pigniu)_boven_Andiast._26-09-2025._(d.j.b.)_14.jpg
+- `34.jpg` Vaade Suure Munamäe vaatetornist 2013 02: Vaido Otsar, CC BY-SA 3.0. https://commons.wikimedia.org/wiki/File:Vaade_Suure_Munam%C3%A4e_vaatetornist_2013_02.jpg
 
 ## Screensaver — paintings (`launcher/assets/art/`)
 
@@ -39,3 +41,11 @@ Deri, CC BY-SA 4.0. https://commons.wikimedia.org/wiki/File%3ABreathtaking_beaut
 - `16.jpg` Whistler - Nocturne Blue and Silver--Bognor (1871-1876): James McNeill Whistler, Public domain. https://commons.wikimedia.org/wiki/File:Whistler_-_Nocturne_Blue_and_Silver--Bognor_(1871-1876).jpg
 - `18.jpg` The Fighting Temeraire, JMW Turner, National Gallery: J. M. W. Turner, Public domain. https://commons.wikimedia.org/wiki/File:The_Fighting_Temeraire,_JMW_Turner,_National_Gallery.jpg
 - `20.jpg` John-constable-the-hay-wain: John Constable, CC0. https://commons.wikimedia.org/wiki/File:John-constable-the-hay-wain.jpg
+- `25.jpg` Vincent van Gogh - Starry Night - Google Art Project (Starry Night over the Rhône): Vincent van Gogh, Public domain. https://commons.wikimedia.org/wiki/File:Vincent_van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg
+- `26.jpg` Monet - Impression, Sunrise: Claude Monet, Public domain. https://commons.wikimedia.org/wiki/File:Monet_-_Impression,_Sunrise.jpg
+- `27.jpg` The Great Wave off Kanagawa: Katsushika Hokusai, Public domain. https://commons.wikimedia.org/wiki/File:The_Great_Wave_off_Kanagawa.jpg
+- `28.jpg` Turner - Rain, Steam and Speed - National Gallery file: J. M. W. Turner, Public domain. https://commons.wikimedia.org/wiki/File:Turner_-_Rain,_Steam_and_Speed_-_National_Gallery_file.jpg
+- `29.jpg` Cole Thomas The Oxbow (The Connecticut River near Northampton 1836): Thomas Cole, Public domain. https://commons.wikimedia.org/wiki/File:Cole_Thomas_The_Oxbow_(The_Connecticut_River_near_Northampton_1836).jpg
+- `30.jpg` Albert Bierstadt - Among the Sierra Nevada, California - Google Art Project: Albert Bierstadt, Public domain. https://commons.wikimedia.org/wiki/File:Albert_Bierstadt_-_Among_the_Sierra_Nevada,_California_-_Google_Art_Project.jpg
+- `31.jpg` Caspar David Friedrich - Mondaufgang am Meer - Google Art Project: Caspar David Friedrich, Public domain. https://commons.wikimedia.org/wiki/File:Caspar_David_Friedrich_-_Mondaufgang_am_Meer_-_Google_Art_Project.jpg
+- `32.jpg` Water-lily Pond by Claude Monet, 1917-1919, Art Institute of Chicago: Claude Monet, Public domain. https://commons.wikimedia.org/wiki/File:Water-lily_Pond_by_Claude_Monet,_1917-1919,_Art_Institute_of_Chicago.JPG

@@ -198,6 +198,7 @@ html, body {
 .pill svg.g { width: 18px; height: 18px; margin-right: 9px; }
 .pill.solar svg { color: rgba(255,255,255,.9); }
 .pill.using svg { color: rgba(255,255,255,.6); }
+.pill.using.grid svg { color: #ff9f0a; }
 
 /* Quiet sensors and a missed read dim, but stay readable on a bright wallpaper. */
 .pill.stale { opacity: .55; }
@@ -359,8 +360,26 @@ html, body {
   cursor: pointer;
   opacity: .94;
   /* Spring in: a touch of overshoot that settles, so the lift reads as physical. */
-  transition: transform .22s var(--spring), background .16s var(--ease), box-shadow .16s var(--ease), opacity .16s var(--ease);
+  transition: transform .22s var(--spring), background-color .16s var(--ease), opacity .16s var(--ease);
+  will-change: transform;
 }
+
+/* The focus shadow is its own layer that only fades: a box-shadow that transitions, or a sheen
+   that slides along the background, repaints the tile every frame, and this TV paints in software
+   (both took a move along the dock to 200 ms frames). */
+.tile::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; right: 0; bottom: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.32) inset, 0 16px 28px rgba(0,0,0,.42);
+  opacity: 0;
+  transition: opacity .16s var(--ease);
+  pointer-events: none;
+}
+.tile:focus::before,
+.tile:hover::before,
+.tile.focused::before { opacity: 1; }
 
 .tile .mark {
   display: flex;
@@ -379,7 +398,7 @@ html, body {
 .tile .mark svg.g-prime   { width: 44px; height: auto; }
 
 /* Focus is depth, the way tvOS does it: the tile rises onto a light plate,
-   casts a shadow, a sheen crosses it once and its name appears underneath.
+   casts a shadow and its name appears underneath.
    No white glow: a shadow reads on a bright wallpaper, a glow does not. */
 .tile:focus,
 .tile:hover,
@@ -388,16 +407,7 @@ html, body {
   transform: translateY(-6px) scale(1.12);
   opacity: 1;
   background-color: rgba(255,255,255,.16);
-  background-image: linear-gradient(105deg, rgba(255,255,255,0) 38%, rgba(255,255,255,.26) 50%, rgba(255,255,255,0) 62%);
-  background-size: 260% 100%;
-  background-repeat: no-repeat;
-  box-shadow: 0 0 0 1px rgba(255,255,255,.32) inset, 0 16px 28px rgba(0,0,0,.42);
-  -webkit-animation: sheen .6s ease-out 1 both;
-  animation: sheen .6s ease-out 1 both;
 }
-
-@-webkit-keyframes sheen { from { background-position: 130% 0; } to { background-position: -30% 0; } }
-@keyframes sheen { from { background-position: 130% 0; } to { background-position: -30% 0; } }
 
 /* Sideways arrival: the tile leans the way the cursor travelled and levels out. */
 @-webkit-keyframes leanR {
@@ -421,9 +431,9 @@ html, body {
   100% { transform: perspective(600px) translateY(-6px) scale(1.12) rotateY(0); }
 }
 
-/* The sheen rides on background-position, so the lean only animates the transform. */
-.tile.focused.lean-r { -webkit-animation: sheen .6s ease-out 1 both, leanR .34s var(--ease) both; animation: sheen .6s ease-out 1 both, leanR .34s var(--ease) both; }
-.tile.focused.lean-l { -webkit-animation: sheen .6s ease-out 1 both, leanL .34s var(--ease) both; animation: sheen .6s ease-out 1 both, leanL .34s var(--ease) both; }
+/* The lean animates only the transform, which the compositor moves without repainting. */
+.tile.focused.lean-r { -webkit-animation: leanR .34s var(--ease) both; animation: leanR .34s var(--ease) both; }
+.tile.focused.lean-l { -webkit-animation: leanL .34s var(--ease) both; animation: leanL .34s var(--ease) both; }
 
 .tile .name {
   position: absolute;
@@ -518,7 +528,8 @@ html, body {
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: transform .22s var(--spring), box-shadow .16s var(--ease), border-color .16s var(--ease);
+  /* The shadow switches rather than transitions: a big blurred shadow repainted every frame. */
+  transition: transform .22s var(--spring), border-color .16s var(--ease);
 }
 
 .deck:first-child { margin-left: 0; }

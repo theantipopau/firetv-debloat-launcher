@@ -23,7 +23,7 @@ ROOT = os.path.join(os.path.dirname(__file__), "..", "launcher", "assets")
 REGION = (80, 60, 480, 260)
 # The digits, in photo pixels, at the middle of the slow zoom: what "covered" is measured against.
 DIGITS = (166, 136, 392, 205)
-MIN_COVER, MAX_COVER = 0.04, 0.40
+MIN_COVER, MAX_COVER = 0.04, 0.20   # 27-33% hid half the digits on the TV
 STEP = 26          # colour distance that ends the sky
 LAND = 12          # rows the land must hold for: a thin cloud wisp is back to sky by then
 ONLY = sys.argv[sys.argv.index("--only") + 1].split(",") if "--only" in sys.argv else None
@@ -113,4 +113,5 @@ def preview(rows, folder):
     sheet.save(os.path.join(folder, "depth-preview.png"))
 
 
-main()
+if __name__ == "__main__":
+    main()

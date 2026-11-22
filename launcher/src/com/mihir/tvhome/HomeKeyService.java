@@ -76,6 +76,39 @@ public class HomeKeyService extends AccessibilityService {
      * the two screens. Same process, same main thread: no synchronisation needed.
      */
     static Bitmap coverBitmap() { return coverWall; }
+    private TextView coverClock;
+
+    /**
+     * The depth clock on the cover: the launcher's land, laid over the cover's own photo and clipped
+     * to the clock's digits, so the trees are already in front of the time when Home appears.
+     */
+    private void addLand(FrameLayout f, ImageView photo, Bitmap land) {
+        final ImageView v = new ImageView(this);
+        v.setScaleType(ImageView.ScaleType.MATRIX);
+        v.setImageBitmap(land);
+        f.addView(v, new FrameLayout.LayoutParams(-1, -1));
+        final TextView clk = coverClock;
+        v.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
+            @Override public boolean onPreDraw() {
+                v.getViewTreeObserver().removeOnPreDrawListener(this);
+                if (clk == null || !(photo.getDrawable() instanceof android.graphics.drawable.BitmapDrawable)) {
+                    v.setVisibility(View.GONE);
+                    return true;
+                }
+                android.graphics.drawable.BitmapDrawable pd = (android.graphics.drawable.BitmapDrawable) photo.getDrawable();
+                float k = pd.getIntrinsicWidth() / (float) pd.getBitmap().getWidth();
+                android.graphics.Matrix m = new android.graphics.Matrix(photo.getImageMatrix());
+                m.preTranslate(MainActivity.DEPTH_X * k, MainActivity.DEPTH_Y * k);
+                v.setImageMatrix(m);
+                int[] a = new int[2], b = new int[2];
+                clk.getLocationInWindow(a);
+                f.getLocationInWindow(b);
+                int x = a[0] - b[0], y = a[1] - b[1];
+                v.setClipBounds(new android.graphics.Rect(x, y + MainActivity.landTop(clk), x + clk.getWidth(), y + clk.getBaseline() + px(getResources().getDisplayMetrics().density, 1)));
+                return true;
+            }
+        });
+    }
     static int coverBitmapIndex() { return coverWallIndex; }
     private static boolean coverDecoding;
     /** The dock the cover draws when the launcher's own list is not in memory yet. */
@@ -276,6 +309,8 @@ public class HomeKeyService extends AccessibilityService {
             }
 
             addStatus(f, d);
+            if (photo != null && photo == MainActivity.currentWall && MainActivity.currentLand != null)
+                addLand(f, (ImageView) f.getChildAt(0), MainActivity.currentLand);
             addDock(f, d);
             addSpinner(f, d);
 
@@ -329,6 +364,7 @@ public class HomeKeyService extends AccessibilityService {
         clk.setLetterSpacing(HomeTheme.CLOCK_TRACKING);
         clk.setShadowLayer(px(d, 8), 0, px(d, 1), 0x80000000);
         block.addView(clk);
+        coverClock = clk;
 
         // The date hangs under the clock in the same spot the launcher puts it.
         TextView day = new TextView(this);
@@ -343,7 +379,19 @@ public class HomeKeyService extends AccessibilityService {
         dp2.topMargin = px(d, HomeTheme.DATE_TOP);
         block.addView(day, dp2);
 
+        // The launcher's own lines as it last drew them, so nothing changes when it takes over;
+        // grey bars only before the launcher has ever been left.
+        Bitmap lines = MainActivity.linesShot;
+        if (lines != null) {
+            ImageView iv = new ImageView(this);
+            iv.setScaleType(ImageView.ScaleType.FIT_XY);
+            iv.setImageBitmap(lines);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(lines.getWidth(), lines.getHeight());
+            lp.topMargin = px(d, HomeTheme.CLOCK_GAP);
+            block.addView(iv, lp);
+        }
         LinearLayout bars = new LinearLayout(this);
+        if (lines != null) bars.setVisibility(View.GONE);
         bars.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams box = new LinearLayout.LayoutParams(-1, -2);
         box.topMargin = px(d, HomeTheme.CLOCK_GAP + 8);

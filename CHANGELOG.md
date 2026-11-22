@@ -3,6 +3,30 @@
 All notable changes to the Fire TV Debloat Launcher. Versions match `versionName` in
 [`launcher/AndroidManifest.xml`](launcher/AndroidManifest.xml).
 
+## 1.7.4 — 2026-11-22
+
+### Added
+- **Grid draw in amber.** The house figure (Home, screensaver and the Samsung) turns amber while
+  the house pulls more than 0.1 kW from the grid; white while sun and battery cover it. Home
+  Assistant's TV snapshot now sends `grid`.
+- **Two more photos** (Panixersee, and the view from Suur Munamägi), found by running
+  make-depth's skyline test over Wikimedia Commons featured landscapes.
+- **The depth clock on the Home-key cover**, so the trees are already in front of the time when
+  Home appears.
+- **The Home-key cover shows the real lines** under the clock (weather, battery, solar, house)
+  as the launcher last drew them, instead of grey bars, so nothing jumps when Home takes over.
+- **Samsung screensaver:** all twelve paintings, and the rain falls over them while it rains.
+
+### Changed
+- **Samsung focus is lighter.** The tile's shadow is its own layer that only fades, and the sheen
+  that slid along the tile is gone: both repainted the tile every frame on a TV that paints in
+  software. The Now Showing cards switch their shadow instead of animating it.
+- The credits list the eight paintings added in 1.7.2.
+
+### Fixed
+- The depth clock no longer hides half the time: make-depth's limit drops from 40% to 20% of the
+  digits, which keeps the ridge and the treeline in front of the digits' feet only.
+
 ## 1.7.3 — 2026-11-21
 
 ### Added

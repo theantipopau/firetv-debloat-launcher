@@ -162,6 +162,18 @@ final class Cards {
      * ("Full in 8 h 8 m" while charging, "Empty in 5 h" while draining) keeps its own words
      * instead of gaining a second "left".
      */
+    /**
+     * The house is drawing from the grid: over 0.1 kW of import, so the inverter's few watts of
+     * standby trickle never turn the figure amber. Blank or unreadable is not on the grid.
+     */
+    static boolean onGrid(String gridKw) {
+        try {
+            return Double.parseDouble(gridKw.trim()) > 0.1;
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
     static String solarLine(String todayKwh, String left) {
         String today = todayKwh == null ? "" : todayKwh.trim();
         String span = left == null ? "" : left.trim();
