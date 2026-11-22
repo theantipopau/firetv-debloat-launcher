@@ -3,7 +3,7 @@
 All notable changes to the Fire TV Debloat Launcher. Versions match `versionName` in
 [`launcher/AndroidManifest.xml`](launcher/AndroidManifest.xml).
 
-## 1.7.4 — unreleased
+## 1.7.4 — 2026-11-22
 
 ### Added
 - **Grid draw in amber.** The house figure (Home, screensaver and the Samsung) turns amber while
