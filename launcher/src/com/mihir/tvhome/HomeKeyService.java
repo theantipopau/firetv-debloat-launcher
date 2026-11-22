@@ -104,7 +104,7 @@ public class HomeKeyService extends AccessibilityService {
                 clk.getLocationInWindow(a);
                 f.getLocationInWindow(b);
                 int x = a[0] - b[0], y = a[1] - b[1];
-                v.setClipBounds(new android.graphics.Rect(x, y, x + clk.getWidth(), y + clk.getBaseline() + px(getResources().getDisplayMetrics().density, 1)));
+                v.setClipBounds(new android.graphics.Rect(x, y + MainActivity.landTop(clk), x + clk.getWidth(), y + clk.getBaseline() + px(getResources().getDisplayMetrics().density, 1)));
                 return true;
             }
         });
@@ -379,7 +379,19 @@ public class HomeKeyService extends AccessibilityService {
         dp2.topMargin = px(d, HomeTheme.DATE_TOP);
         block.addView(day, dp2);
 
+        // The launcher's own lines as it last drew them, so nothing changes when it takes over;
+        // grey bars only before the launcher has ever been left.
+        Bitmap lines = MainActivity.linesShot;
+        if (lines != null) {
+            ImageView iv = new ImageView(this);
+            iv.setScaleType(ImageView.ScaleType.FIT_XY);
+            iv.setImageBitmap(lines);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(lines.getWidth(), lines.getHeight());
+            lp.topMargin = px(d, HomeTheme.CLOCK_GAP);
+            block.addView(iv, lp);
+        }
         LinearLayout bars = new LinearLayout(this);
+        if (lines != null) bars.setVisibility(View.GONE);
         bars.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams box = new LinearLayout.LayoutParams(-1, -2);
         box.topMargin = px(d, HomeTheme.CLOCK_GAP + 8);

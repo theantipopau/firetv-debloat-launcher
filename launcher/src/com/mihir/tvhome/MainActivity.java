@@ -157,6 +157,8 @@ public class MainActivity extends Activity {
     static volatile Bitmap currentWall;
     /** The depth clock's land cut from currentWall, or null: the Home-key cover draws it too. */
     static volatile Bitmap currentLand;
+    /** The lines under the clock as last drawn, for the Home-key cover; null until the first stop. */
+    static volatile Bitmap linesShot;
     /** True while this window is in front: the Home key then needs no cover to hide Amazon's home. */
     static volatile boolean visible;
     private int lastFocusedId = View.NO_ID;
@@ -319,6 +321,14 @@ public class MainActivity extends Activity {
     protected void onStop() {
         super.onStop();
         clearVeil(false);   // the app is on screen now; coming back must not find the veil
+        // The Home-key cover shows these exact lines instead of grey bars. onStop, not onPause, so
+        // the few ms of software drawing land after the app has opened, not during its launch.
+        int w = statusLineBox == null ? 0 : statusLineBox.getWidth(), h = statusLineBox == null ? 0 : statusLineBox.getHeight();
+        if (w > 0 && h > 0) {
+            Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+            statusLineBox.draw(new Canvas(b));
+            linesShot = b;
+        }
     }
 
     @Override
@@ -3425,6 +3435,16 @@ public class MainActivity extends Activity {
      * parallax and crossfade) and gives it the time-of-day veil the photo has under it. Hidden
      * while the page is scrolled or the block is focused, when the photo under the clock changes.
      */
+    /**
+     * How far down the clock the land may start: it covers the digits' bottom 30% at most, so the
+     * time always reads. A photo whose land rises higher shows a level edge on the digits there.
+     */
+    static int landTop(TextView clock) {
+        android.graphics.Rect r = new android.graphics.Rect();
+        clock.getPaint().getTextBounds("0", 0, 1, r);
+        return clock.getBaseline() - Math.round(r.height() * 0.3f);
+    }
+
     private void syncDepth() {
         ImageView photo = depthPhoto;
         boolean show = photo != null && scroll.getScrollY() == 0 && !statusBlock.isFocused()
@@ -3436,10 +3456,10 @@ public class MainActivity extends Activity {
         clock.getLocationInWindow(depthAt);
         // Down to the digits' baseline (they have no descenders): the box below it reaches the date.
         int cx = depthAt[0] - depthRoot[0], cy = depthAt[1] - depthRoot[1];
-        int ch = clock.getBaseline() + dp(1);
-        if (depthClip.left != cx || depthClip.top != cy || depthClip.width() != clock.getWidth()
-                || depthClip.height() != ch) {
-            depthClip.set(cx, cy, cx + clock.getWidth(), cy + ch);
+        int top = landTop(clock), ch = clock.getBaseline() + dp(1);
+        if (depthClip.left != cx || depthClip.top != cy + top || depthClip.width() != clock.getWidth()
+                || depthClip.bottom != cy + ch) {
+            depthClip.set(cx, cy + top, cx + clock.getWidth(), cy + ch);
             depth.setClipBounds(depthClip);
         }
         depthM.set(photo.getImageMatrix());
